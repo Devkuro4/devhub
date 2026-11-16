@@ -1,0 +1,179 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Dev Hub Design System v1.0. Every value below comes from
+   dev-hub-tokens-and-components.css. Components keep reading the same
+   variable names; only the values changed. Anything the system does not
+   define is marked "NOT IN SYSTEM" for review. */
+
+/* Self-host licensed Satoshi files and declare @font-face here. */
+@theme {
+  /* Tailwind neutral scales mapped to system neutrals only */
+  --color-slate-50: #F5F5F5; --color-slate-100: #F5F5F5; --color-slate-200: #E4E4E7;
+  --color-slate-300: #A1A1AA; --color-slate-400: #A1A1AA; --color-slate-500: #71717A;
+  --color-slate-600: #52525B; --color-slate-700: #27272A; --color-slate-800: #1C1C1C;
+  --color-slate-900: #141414; --color-slate-950: #0B0B0B;
+  --color-gray-50: #F5F5F5; --color-gray-100: #F5F5F5; --color-gray-200: #E4E4E7;
+  --color-gray-300: #A1A1AA; --color-gray-400: #A1A1AA; --color-gray-500: #71717A;
+  --color-gray-600: #52525B; --color-gray-700: #27272A; --color-gray-800: #1C1C1C;
+  --color-gray-900: #141414;
+}
+
+:root {
+  --font-display: "Satoshi", "Avenir Next", "Segoe UI", sans-serif;
+  --font-sans: "Satoshi", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --focus-ring: 0 0 0 3px rgb(59 130 246 / 32%);
+
+  /* Light theme (system [data-theme="light"]) */
+  --canvas-bg: #F5F5F5;
+  --surface-bg: #FFFFFF;
+  --surface-elevated: #FFFFFF;
+  --surface-subtle: #F5F5F5;
+  --border-hairline: #E4E4E7;
+  --border-strong: #D4D4D8; /* invented: zinc-300, one step above the system border */
+  --ink-primary: #09090B;
+  --ink-secondary: #52525B;
+  --ink-muted: #71717A;
+  --contour: transparent;
+  --shadow-offset: #2563EB;
+  --on-spark: #FFFFFF;
+  --panel-deep: #050505;
+
+  --accent-50: #DBEAFE;
+  --accent-100: #DBEAFE;
+  --accent-500: #2563EB;
+  --accent-600: #2563EB;
+  --accent-700: #1D4ED8;
+  --spark: #2563EB;
+  --spark-ink: #1E3A5F;
+
+  /* Status: system defines green-500 / amber-500 / red-500 and the dark
+     badge inks. Light-mode inks and borders are NOT IN SYSTEM (derived). */
+  --success-bg: rgb(34 197 94 / 13%); --success-border: rgb(34 197 94 / 13%); --success-ink: #22C55E;
+  --warning-bg: rgb(245 158 11 / 13%); --warning-border: rgb(245 158 11 / 13%); --warning-ink: #F59E0B;
+  --danger-bg: rgb(239 68 68 / 13%); --danger-border: rgb(239 68 68 / 13%); --danger-ink: #EF4444;
+}
+
+/* Dark is the system default and the app default */
+.dark {
+  --canvas-bg: #080808;
+  --surface-bg: #0B0B0B;
+  --surface-elevated: #141414;
+  --surface-subtle: #1C1C1C;
+  --border-hairline: #27272A;
+  --border-strong: #3F3F46; /* invented: zinc-700, one step above the system border */
+  --ink-primary: #FFFFFF;
+  --ink-secondary: #A1A1AA;
+  --ink-muted: #71717A;
+  --shadow-offset: #3B82F6;
+
+  --accent-50: color-mix(in srgb, #1E3A5F 55%, transparent);
+  --accent-100: color-mix(in srgb, #1E3A5F 55%, transparent);
+  --accent-500: #3B82F6;
+  --accent-600: #3B82F6;
+  --accent-700: #2563EB;
+  --spark: #3B82F6;
+  --spark-ink: #BFDBFE;
+
+  --success-ink: #86EFAC;
+  --warning-ink: #FCD34D;
+}
+/* Light-mode status inks: invented, darker steps of the system hues for AA contrast */
+:root:not(.dark) { --success-ink: #15803D; --warning-ink: #B45309; --danger-ink: #B91C1C; }
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--canvas-bg);
+  color: var(--ink-primary);
+  -webkit-font-smoothing: antialiased;
+}
+.hub-root {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  background-color: var(--canvas-bg);
+  color: var(--ink-primary);
+}
+
+/* Atmosphere: system .ds-atmosphere, hero/workspace surfaces only */
+.studio-canvas {
+  background-color: var(--canvas-bg);
+  background-image: radial-gradient(ellipse at 82% 8%, rgb(37 99 235 / 15%), transparent 34%);
+}
+.studio-sidebar { background-color: var(--surface-bg); border-color: var(--border-hairline); }
+
+/* Glossy black panel: system .ds-panel */
+.studio-card {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 5%), transparent 38%),
+    linear-gradient(155deg, color-mix(in srgb, var(--surface-elevated) 92%, white 3%), var(--surface-elevated));
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  transition: border-color 200ms cubic-bezier(.2,.8,.2,1), transform 200ms cubic-bezier(.2,.8,.2,1);
+}
+.studio-card-interactive:hover {
+  border-color: color-mix(in srgb, var(--accent-600) 55%, var(--border-hairline));
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 0 0 1px color-mix(in srgb, var(--accent-600) 35%, transparent), 0 12px 32px rgb(37 99 235 / 12%);
+}
+.studio-subtle { background-color: var(--surface-subtle); }
+
+.hub-root h1, .hub-root h2, .hub-root h3, .hub-root .font-display {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.hub-root h1 { font-size: 24px; }
+
+.hub-root code, .hub-root pre, .hub-root .font-mono { font-family: var(--font-mono); font-size: 13px; }
+.hub-root pre {
+  background: var(--panel-deep);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+}
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.hub-root button, .hub-root a { -webkit-tap-highlight-color: transparent; }
+.hub-root :focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.hub-root ::selection { background: var(--accent-600); color: #FFFFFF; }
+
+/* Primary buttons: blue outline on black (system .ds-button--outline) */
+.hub-root button.bg-\[var\(--accent-600\)\]:not(:disabled) {
+  background: transparent;
+  color: var(--accent-600);
+  border: 1px solid var(--accent-600);
+  border-radius: var(--radius-md);
+  transition: background-color 150ms cubic-bezier(.2,.8,.2,1);
+}
+.hub-root button.bg-\[var\(--accent-600\)\]:not(:disabled):hover { background: var(--accent-50); }
+.hub-root button:disabled { opacity: .48; cursor: not-allowed; }
+
+/* Fields: system .ds-input look, low specificity so component classes still win */
+:where(.hub-root) input:where(:not([type=checkbox],[type=radio],[type=range])),
+:where(.hub-root) textarea, :where(.hub-root) select {
+  color: var(--ink-primary); background: var(--canvas-bg);
+  border: 1px solid var(--border-hairline); border-radius: var(--radius-md);
+}
+:where(.hub-root) input:focus, :where(.hub-root) textarea:focus, :where(.hub-root) select:focus {
+  outline: none; border-color: var(--accent-600); box-shadow: var(--focus-ring);
+}
+/* Admin console: same blue, marked by an outlined sidebar edge (invented) */
+.admin-theme .studio-sidebar { border-right-color: var(--accent-600); }
+/* Dark scrollbars */
+.dark * { scrollbar-color: #27272A transparent; }
+/* Filled blue tints become blue-outlined chips */
+.hub-root span.bg-\[var\(--accent-50\)\], .hub-root span.bg-\[var\(--accent-100\)\] { border: 1px solid color-mix(in srgb, var(--accent-600) 55%, transparent); }
+
+/* Active nav: blue outline */
+.nav-active { border: 1px solid var(--accent-600); border-radius: var(--radius-md); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-root *, .studio-sidebar * { animation: none !important; transition: none !important; }
+}

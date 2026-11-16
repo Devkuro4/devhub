@@ -1,0 +1,1128 @@
+# DEV HUB — MASTER PLATFORM IMPROVEMENT & DEVELOPMENT PROMPT
+
+## PROJECT VISION
+
+You are working on Dev Hub, a developer learning and community platform designed to help beginners and growing developers become skilled, confident and independent developers.
+
+Dev Hub is more than a course tracker. It is a guided learning environment where members can learn through courses they already use, practise what they learn, submit their code, receive AI feedback, take quizzes, complete personalized projects and grow alongside a community of other developers.
+
+The platform should help members move from:
+
+**Learning → Practising → Understanding → Building → Collaborating → Becoming Independent.**
+
+The experience must be extremely easy to understand and navigate. Even someone who has never used a developer learning platform should be able to understand what to do without needing someone to explain it.
+
+IMPORTANT:
+- This is an existing project. First inspect the current codebase, framework, architecture, database, authentication, existing features and design.
+- Do not unnecessarily rebuild the application from scratch.
+- Preserve working features and existing data.
+- Improve existing implementations where possible.
+- Do not remove functional features simply because you want to introduce a different design.
+- Make changes in a structured way and ensure all features actually work.
+- Do not build fake buttons, placeholder functionality or interfaces that look functional but do nothing.
+
+---
+
+# 1. THE OVERALL USER EXPERIENCE
+
+Dev Hub should feel like a personal learning environment.
+
+Every member should be able to:
+
+1. Choose what they want to learn.
+2. Get a suitable learning roadmap.
+3. Add the course or learning resource they are using.
+4. Receive a structured learning plan.
+5. Follow daily learning targets.
+6. Submit the code they write.
+7. Receive AI-powered code reviews.
+8. Take quizzes based on what they have learned.
+9. Receive personalized weekly projects.
+10. Track their actual development.
+11. Ask the AI mentor for help.
+12. Connect and build with other members.
+
+The platform should always make the next step obvious.
+
+Do not overwhelm members with every feature at once. Introduce features when they become relevant.
+
+# 2. FIRST-TIME MEMBER ONBOARDING
+
+When a member logs in for the first time, do not send them directly to an empty dashboard.
+
+Guide them through a simple onboarding experience.
+
+Use one question per screen, with a visible progress indicator and a back button.
+
+### Step 1: Welcome
+
+Heading: "Let's build your developer journey."
+
+Supporting text: "We'll help you create a learning plan that fits your goals."
+
+Button: "Get Started"
+
+### Step 2: What do you want to learn?
+
+Allow members to select or enter their preferred field.
+
+Suggested options:
+- Frontend Development
+- Backend Development
+- Full-Stack Development
+- Mobile Development
+- AI Engineering
+- Machine Learning
+- Data Science
+- Cybersecurity
+- Cloud Computing
+- DevOps
+- Blockchain Development
+- UI/UX Design
+- Other
+
+Allow custom entries.
+
+### Step 3: What is your current level?
+
+- Complete beginner
+- Beginner
+- Intermediate
+- Advanced
+
+Explain each option in simple language.
+
+### Step 4: What do you already know?
+
+Allow members to describe their existing skills, programming languages and experience.
+
+### Step 5: What is your goal?
+
+Examples:
+- Get a job in tech.
+- Become a freelancer.
+- Build my own products.
+- Become a better developer.
+- Explore a new field.
+
+### Step 6: How much time can you learn?
+
+Allow members to select their available study time per day or week.
+
+### Step 7: Create their learning roadmap
+
+Use their answers to find or generate a suitable roadmap.
+
+After onboarding, save their answers to their profile so the platform does not repeatedly ask the same questions.
+
+---
+
+# 3. ROADMAP INTEGRATION
+
+Integrate Dev Hub with roadmap.sh through an appropriate authorized integration or legitimate roadmap data source.
+
+The purpose is to help members understand what they need to learn in their chosen field.
+
+### When a roadmap exists:
+
+- Find the relevant roadmap.
+- Show its name and description.
+- Explain what the member will learn.
+- Show its main stages.
+- Provide a link to the original roadmap.
+- Ask whether they want to use it.
+
+Allow them to:
+- Accept the roadmap.
+- Explore another roadmap.
+- Customize their learning path.
+- Request an AI-generated alternative.
+
+### When a roadmap does not exist:
+
+Show a clear message:
+
+"We couldn't find a roadmap for this field yet. That's okay! We can help you create a learning path."
+
+Give them the option to generate a roadmap using AI.
+
+The AI-generated roadmap must be based on real industry skills, logical prerequisites and practical development knowledge.
+
+Do not invent random technologies or present an unrelated roadmap as an official roadmap.sh result.
+
+### Roadmap customization
+
+Members should be able to:
+- Mark topics they already know.
+- Add or remove topics.
+- Rearrange their learning path.
+- Skip topics they can demonstrate they understand.
+- Add their own learning resources.
+- Update their goals.
+
+Do not display an overwhelming wall of technologies. Organize the roadmap into clear stages and reveal the next relevant topics progressively.
+
+---
+
+# 4. MY LEARNING — THE CORE FEATURE
+
+This is one of the most important parts of Dev Hub.
+
+Members will often already be learning from external resources.
+
+They might use:
+- Udemy courses.
+- YouTube courses and playlists.
+- Downloaded courses.
+- PDFs and personal notes.
+- Official documentation.
+- Online tutorials.
+- Other educational resources.
+
+**Members should NOT be required to upload their entire downloaded courses or course materials to Dev Hub.**
+
+Dev Hub is not a course-hosting platform.
+
+Instead, members should tell the platform what course or learning resource they are using.
+
+### Adding a course
+
+Allow members to:
+
+- Enter the course name.
+- Select the programming language or field.
+- Paste a course or playlist URL, where available.
+- Select the topics they are currently studying.
+- Enter their current lesson or module.
+- Add a short description of their course.
+- Add their own learning resources or reference links.
+
+For downloaded courses, members should be able to enter the course name and manually add the modules or topics they are following.
+
+The platform should also support a custom learning path for members who use multiple resources.
+
+### Understanding external courses
+
+The AI can use accessible course information, publicly available descriptions, links, and member-provided topic information to help structure learning.
+
+For YouTube resources, use accessible video information and transcripts or captions where available.
+
+Never pretend to have watched or analyzed a video or course that the system cannot access.
+
+If the AI needs more information, ask the member to provide the topic, lesson title or a short explanation of what they studied.
+
+### Learning plan
+
+Once a member adds their course, Dev Hub should organize their learning around:
+
+- Learning stages.
+- Modules.
+- Topics.
+- Daily learning targets.
+- Practice exercises.
+- Quizzes.
+- Weekly projects.
+
+The AI should compare their learning resource against their selected roadmap and identify important topics they might be missing.
+
+The member should be able to follow their existing course without being forced to abandon it.
+
+---
+
+# 5. THE DAILY LEARNING SYSTEM
+
+This is the signature learning workflow of Dev Hub.
+
+Every learning day should follow a simple structure:
+
+**LEARN → PRACTISE → SUBMIT → GET REVIEWED → TAKE QUIZ**
+
+### Step 1: Learn
+
+Show the member what they should study that day.
+
+Include:
+- Topic name.
+- Learning objective.
+- Recommended course lesson or resource.
+- What they should understand by the end.
+- Estimated study time.
+
+Use simple language.
+
+### Step 2: Practise
+
+Give the member a practical exercise based on the topic.
+
+The exercise should match their current level.
+
+Do not give a complete solution immediately.
+
+Encourage them to attempt the exercise independently.
+
+### Step 3: Submit code
+
+At the end of each coding learning session, members should submit the code they wrote.
+
+Support:
+- Individual code files.
+- Multiple code files.
+- ZIP files containing code projects.
+- Pasted code.
+- GitHub repository links.
+- GitHub commit links.
+
+Support common programming languages such as Python, JavaScript, TypeScript, HTML, CSS, Java, C, C++, PHP and others.
+
+Do not require members to upload course videos, entire course folders or large downloaded course materials.
+
+### Submission details
+
+Automatically associate submissions with:
+- Member.
+- Date.
+- Learning topic.
+- Course.
+- Learning day.
+- Programming language.
+- Exercise or assignment.
+
+Do not ask members to repeatedly enter information the platform already knows.
+
+Allow members to include a short explanation of what they built or how they approached the exercise.
+
+For theory-based learning days where no code is expected, allow members to submit written explanations or notes instead.
+
+### Submission history
+
+Keep a history of:
+- Previous submissions.
+- Submitted files.
+- Submission dates.
+- AI feedback.
+- Resubmissions.
+- Improvements between versions.
+
+Never overwrite previous submissions without preserving their history.
+
+---
+
+# 6. AI CODE REVIEW SYSTEM
+
+This is a major feature and must be implemented properly.
+
+When a member submits code, the AI should review it based on what that member was expected to learn.
+
+The AI must receive relevant context:
+
+- Member's programming language.
+- Current learning stage.
+- Course and topic.
+- Daily learning objective.
+- Exercise requirements.
+- Expected concepts.
+- Previous relevant feedback.
+- Submitted code.
+
+### What the AI should evaluate
+
+1. Does the code work?
+2. Does it meet the exercise requirements?
+3. Did the member use the concepts correctly?
+4. Is the code understandable and readable for their current level?
+5. Are there errors or unnecessary complications?
+6. Does the member demonstrate understanding of the topic?
+
+The AI should not judge a beginner's code using advanced professional standards.
+
+### Feedback format
+
+Use a clear and friendly feedback structure:
+
+**What you did well**
+
+Explain the parts they got right.
+
+**What needs improvement**
+
+Identify errors and explain why they matter.
+
+**Understanding check**
+
+Ask one or two questions about their implementation.
+
+**Suggestions**
+
+Give hints or explain how to improve.
+
+**Your next step**
+
+Recommend whether they should continue, revise or practise more.
+
+### Teaching behaviour
+
+The AI should:
+- Explain mistakes in plain language.
+- Avoid immediately rewriting the member's entire code.
+- Give hints before full solutions.
+- Encourage the member to explain their reasoning.
+- Recognize when a concept has not been understood.
+- Avoid falsely claiming code works without actually testing it.
+
+Where technically possible, use a safe execution or testing environment for supported languages. Never execute submitted code directly on the application server.
+
+If the code cannot be executed, clearly distinguish static code analysis from verified execution.
+
+### Understanding checks
+
+After reviewing code, the AI should sometimes ask questions such as:
+
+"Why did you use a function here?"
+
+"What would happen if this condition was false?"
+
+"Can you explain what this line does?"
+
+Use the answers as additional evidence of understanding.
+
+---
+
+# 7. AI-GENERATED QUIZZES
+
+Every learning topic should have a quiz.
+
+The AI should generate questions based on the member's actual learning topic and expected knowledge.
+
+Support:
+- Multiple-choice questions.
+- True or false.
+- Short answers.
+- Code-reading questions.
+- Find-the-error questions.
+- Practical problem-solving questions.
+- Scenario-based questions.
+
+### Quiz behaviour
+
+- Generate questions appropriate to the member's level.
+- Avoid repeating the same questions unnecessarily.
+- Explain incorrect answers.
+- Show the correct answer after the member attempts it.
+- Identify concepts they struggle with.
+- Recommend revision where necessary.
+
+Quizzes should test understanding, not just memorization.
+
+Also support:
+- Topic quizzes.
+- Module quizzes.
+- Weekly revision quizzes.
+- Stage assessments.
+
+Do not automatically mark a member as having mastered a skill just because they scored well on a quiz.
+
+Use code submissions, explanations, exercises and project results as additional evidence.
+
+---
+
+# 8. PERSONALIZED WEEKLY PROJECTS
+
+At the end of each learning week, Dev Hub should generate an individual project for each member.
+
+This should be one of the platform's most valuable features.
+
+Projects must be based on:
+
+- Programming language.
+- Current learning level.
+- Topics covered during the week.
+- Previous code submissions.
+- Quiz performance.
+- Skills demonstrated.
+- Areas that need improvement.
+
+### Examples
+
+A member learning Python functions could receive a simple calculator project.
+
+A member learning JavaScript DOM manipulation could receive an interactive task list.
+
+A member learning HTML and CSS could receive a personal portfolio webpage.
+
+A member learning Python dictionaries and lists could receive a student record manager.
+
+Members at different stages should not automatically receive the same project.
+
+### Project instructions
+
+Every project should include:
+
+1. Project title.
+2. Short description.
+3. What the project should do.
+4. Project requirements.
+5. Concepts they should use.
+6. Optional hints.
+7. Suggested milestones.
+8. Deadline.
+9. Submission instructions.
+
+### Project submission
+
+Allow members to submit:
+- Code files.
+- ZIP files.
+- GitHub repository links.
+- Screenshots.
+- Demo links.
+- Short explanations.
+
+### AI project review
+
+Evaluate the project against its actual requirements.
+
+Check:
+- Functionality.
+- Correctness.
+- Use of expected concepts.
+- Problem-solving.
+- Code organization.
+- Understanding.
+- Completion of requirements.
+
+Give feedback and recommend improvements.
+
+Do not provide complete project solutions before the member attempts the work.
+
+### Project levels
+
+As members improve, introduce:
+
+- Guided beginner projects.
+- Independent projects.
+- More realistic projects.
+- Group projects.
+- Portfolio-worthy projects.
+
+The goal is to gradually reduce assistance and build independence.
+
+---
+
+# 9. AI MENTOR
+
+Create a personal AI mentor that members can access throughout the platform.
+
+The AI mentor should understand the member's:
+- Field.
+- Roadmap.
+- Current course.
+- Learning stage.
+- Previous topics.
+- Code submissions.
+- Quiz results.
+- Projects.
+- Areas of difficulty.
+
+### What members can ask it to do
+
+- Explain a concept.
+- Give an example.
+- Help debug code.
+- Give me a hint.
+- Quiz me.
+- Give me an exercise.
+- Explain my code.
+- Help me understand an error.
+- Recommend what to learn next.
+
+### Teaching style
+
+The AI must teach according to the member's level.
+
+For beginners:
+- Use simple explanations.
+- Break problems into small steps.
+- Give examples.
+- Avoid unnecessary technical language.
+
+For intermediate members:
+- Give fewer direct answers.
+- Encourage problem-solving.
+- Introduce more independent exercises.
+
+For advanced members:
+- Encourage independent research.
+- Give challenging tasks.
+- Review architecture and technical decisions.
+- Focus on professional development.
+
+The AI should help members become independent rather than making them dependent on it.
+
+---
+
+# 10. ADAPTIVE LEARNING AND PROGRESS TRACKING
+
+Progress must reflect what members can actually demonstrate.
+
+Do not increase progress percentages just because someone opened a lesson or watched a video.
+
+Use meaningful learning statuses:
+
+- Not Started.
+- In Progress.
+- Practised.
+- Demonstrated.
+- Needs Revision.
+
+Track:
+- Roadmap progress.
+- Topics studied.
+- Code submissions.
+- Quizzes completed.
+- Skills demonstrated.
+- Projects completed.
+- Areas requiring improvement.
+- Learning consistency.
+
+### Adaptive learning
+
+If a member struggles with a topic:
+- Recommend another explanation.
+- Give additional exercises.
+- Generate revision questions.
+- Suggest relevant learning resources.
+
+If a member demonstrates strong understanding:
+- Recommend the next topic.
+- Increase exercise difficulty gradually.
+- Introduce independent projects.
+
+### Weekly learning report
+
+Generate a simple weekly report showing:
+
+- What they learned.
+- What they built.
+- What they understood well.
+- What they struggled with.
+- Their strongest areas.
+- Their next learning goals.
+
+Use encouraging language, not judgmental messages.
+
+---
+
+# 11. COMMUNITY
+
+Dev Hub is also a community of people learning and building together.
+
+It should not feel like a corporate social network.
+
+The community should encourage members to:
+- Ask questions.
+- Share progress.
+- Help one another.
+- Share useful resources.
+- Participate in challenges.
+- Work on projects.
+- Learn from mistakes.
+- Celebrate improvements.
+
+### Community sections
+
+Create simple, clearly named sections:
+
+**Discussions**
+Members can ask technical questions, discuss concepts and share ideas.
+
+**Announcements**
+Important updates from community administrators.
+
+**Learning Resources**
+Members can share useful courses, tutorials, documentation and learning materials.
+
+**Challenges**
+Weekly coding challenges and community activities.
+
+**Events**
+Workshops, coding sessions, debugging sessions, quizzes and community meetings.
+
+**Project Showcase**
+Members can display projects they have built.
+
+**Members**
+A simple member directory showing their interests, fields and projects.
+
+### Discussions
+
+Support:
+- Posts.
+- Replies.
+- Code snippets.
+- Attachments.
+- Helpful answers.
+- Saving discussions.
+
+### Challenges
+
+Allow administrators to create coding challenges with:
+- Description.
+- Requirements.
+- Difficulty.
+- Deadline.
+- Submission instructions.
+
+### Events
+
+Support event announcements, registration and reminders.
+
+Keep the community friendly, welcoming and useful.
+
+Avoid unnecessary features that create endless scrolling or unhealthy competition.
+
+---
+
+# 12. PROJECTS AREA
+
+Create a dedicated Projects section.
+
+Organize it into:
+
+- My Projects.
+- Group Projects.
+- Project Showcase.
+
+Members should be able to see project descriptions, requirements, milestones, progress, submissions and feedback.
+
+Support collaboration as the community grows.
+
+Introduce Git and GitHub learning progressively, including:
+- Repositories.
+- Commits.
+- Branches.
+- Pull requests.
+- Collaboration.
+- Code reviews.
+
+---
+
+# 13. ADMINISTRATION
+
+Keep administration simple because Dev Hub is currently a growing community.
+
+Initial roles:
+
+- Admin.
+- Member.
+
+Additional roles such as moderators, learning coordinators and field leads can be introduced when necessary.
+
+### Admin dashboard
+
+Administrators should be able to:
+
+- View and manage members.
+- Publish announcements.
+- Manage discussions.
+- Create challenges.
+- Schedule events.
+- Manage community projects.
+- View basic learning participation.
+- Manage AI settings.
+- Configure learning activities.
+
+Do not build unnecessary enterprise management systems, complicated department structures or excessive analytics.
+
+Protect private member information. Administrators should not automatically have access to private AI conversations or personal notes.
+
+---
+
+# 14. AI API CONFIGURATION
+
+Dev Hub must support an external AI provider through a secure backend integration.
+
+An administrator should be able to configure the AI provider and API key.
+
+### AI settings
+
+Create an Admin Settings area where authorized administrators can:
+
+- Select the supported AI provider.
+- Enter or update the API key.
+- Test the connection.
+- View connection status.
+- Configure the model where supported.
+- Set usage limits.
+- Monitor API usage and estimated costs.
+- View error logs.
+
+### Security requirements
+
+- Never expose API keys in frontend code.
+- Never store secret keys in browser local storage.
+- Store credentials securely using backend environment variables or a suitable secrets manager.
+- Ensure only authorized administrators can configure AI credentials.
+- Do not send private member information to the AI provider unless necessary for the requested feature.
+- Use server-side validation and access controls.
+- Handle rate limits, provider errors, timeouts and failed requests gracefully.
+
+### AI architecture
+
+Build the AI integration so that different features can use consistent, reusable services.
+
+Separate the AI functionality into logical operations:
+
+- Roadmap generation.
+- Learning plan generation.
+- Daily exercise generation.
+- Code review.
+- Quiz generation.
+- Quiz evaluation.
+- Weekly project generation.
+- Project review.
+- AI mentoring.
+- Weekly progress summaries.
+
+Do not put all AI logic into one enormous prompt or one frontend component.
+
+Each operation should receive the correct member context and return structured, validated results.
+
+---
+
+# 15. UI/UX DESIGN DIRECTION
+
+The current UI/UX needs significant improvement.
+
+The desired direction is a combination of:
+
+**Apple.com + freeCodeCamp.**
+
+Do not copy either website directly. Use them as design references.
+
+### Apple-inspired qualities
+
+- Beautiful spacing.
+- Strong visual hierarchy.
+- Clean typography.
+- Minimal visual clutter.
+- High-quality interactions.
+- Polished layouts.
+- Thoughtful use of colour.
+- Consistent design details.
+
+### freeCodeCamp-inspired qualities
+
+- Clear learning paths.
+- Understandable course structures.
+- Practical learning interfaces.
+- Visible progress.
+- Simple navigation.
+- Strong focus on learning rather than decoration.
+
+### Overall design personality
+
+Dev Hub should feel:
+- Modern.
+- Professional.
+- Friendly.
+- Welcoming.
+- Simple.
+- Well-organized.
+- Trustworthy.
+
+It must not look childish, overly futuristic, overly gamified or like a generic AI-generated dashboard.
+
+### Typography
+
+Choose a readable, modern font system with a clear hierarchy.
+
+Avoid using oversized headings everywhere.
+
+Use consistent:
+- Page titles.
+- Section headings.
+- Body text.
+- Labels.
+- Buttons.
+- Supporting text.
+
+### Colours
+
+Use a restrained colour palette.
+
+Maintain good contrast and accessibility.
+
+Use colour to communicate meaning, not simply for decoration.
+
+### Layout
+
+- Generous but balanced spacing.
+- Consistent alignment.
+- Clear sections.
+- Subtle borders.
+- Consistent corner radii.
+- Minimal unnecessary shadows.
+- Carefully designed empty states.
+- Clear loading and error states.
+
+### Animations
+
+Use subtle animations only where they improve the experience.
+
+Avoid excessive motion, distracting transitions and heavy visual effects.
+
+Prioritize speed and smooth performance.
+
+### Responsive design
+
+The platform must work beautifully on:
+- Desktop.
+- Laptop.
+- Tablet.
+- Mobile.
+
+Mobile must be designed intentionally, not simply squeezed into a desktop layout.
+
+Use simple mobile navigation and make important actions easy to reach.
+
+---
+
+# 16. WEBSITE NAVIGATION
+
+Keep the main navigation simple.
+
+Use these main sections:
+
+1. Home.
+2. My Learning.
+3. My Roadmap.
+4. Community.
+5. Projects.
+6. AI Mentor.
+
+Profile and Settings should be accessible separately.
+
+Do not make every small feature its own navigation item.
+
+For example:
+- Lessons, quizzes, notes and code submissions belong under My Learning.
+- Roadmap stages and skills belong under My Roadmap.
+- Challenges and project submissions belong under Projects.
+- Discussions, events and resources belong under Community.
+
+Every section must have a clear purpose.
+
+---
+
+# 17. HOME DASHBOARD
+
+The dashboard should answer one important question:
+
+**"What should I do next?"**
+
+For returning members, show:
+
+- A friendly welcome.
+- Current learning focus.
+- Continue learning button.
+- Today's learning target.
+- Pending code submission.
+- Pending quiz.
+- Project deadlines.
+- Recent feedback.
+- Upcoming community activities.
+- A simple progress overview.
+
+For new members, show a guided welcome and their next onboarding step.
+
+Do not show empty statistics or meaningless charts.
+
+Do not overload the dashboard with cards.
+
+---
+
+# 18. WORDING AND CONTENT DESIGN
+
+This requirement is extremely important.
+
+Every part of Dev Hub must be understandable to someone completely new to development.
+
+Use plain, friendly and direct language.
+
+Avoid unnecessary technical or corporate terminology.
+
+Examples:
+
+Instead of "Learning Analytics", use "Your Progress".
+
+Instead of "Curriculum Architecture", use "Your Learning Plan".
+
+Instead of "Knowledge Assessment", use "Test Your Understanding".
+
+Instead of "Submission Evaluation", use "Code Review".
+
+Instead of "Skill Acquisition", use "Skills You're Learning".
+
+Instead of "Resource Repository", use "Learning Resources".
+
+Instead of "Learning Trajectory", use "Your Roadmap".
+
+Use short sentences.
+
+Make buttons describe exactly what happens when clicked.
+
+Examples:
+- Start Learning.
+- Continue Learning.
+- Add a Course.
+- Submit My Code.
+- Take Quiz.
+- View Feedback.
+- Start Project.
+- Ask AI Mentor.
+
+Empty states should explain what the member can do next.
+
+Error messages should explain what happened and how to fix it.
+
+Avoid giant paragraphs, confusing labels and unnecessary instructions.
+
+**Golden rule: If a beginner has to ask what a button or section means, simplify it.**
+
+---
+
+# 19. DATA MANAGEMENT AND SECURITY
+
+Build the platform with proper relationships between members, learning plans, courses, topics, submissions, quizzes, projects and feedback.
+
+Ensure:
+- Members can only access their own private learning records.
+- Community content follows appropriate permissions.
+- Admin functions are protected.
+- Submitted files are validated.
+- File size and type limits are enforced.
+- File storage is secure.
+- Uploaded code is never executed unsafely.
+- API credentials are protected.
+- Data is not lost when members refresh or log out.
+- Previous submissions and learning history are preserved.
+
+Use appropriate database relationships and avoid unnecessary duplicate records.
+
+Provide proper loading, error and success states for every important action.
+
+---
+
+# 20. IMPLEMENTATION PRIORITIES
+
+Do not attempt to implement everything as disconnected features.
+
+Build a coherent system in stages.
+
+### Phase 1 — Foundation and design
+
+- Inspect the existing application.
+- Improve the design system.
+- Fix navigation.
+- Improve onboarding.
+- Improve the dashboard.
+- Ensure mobile responsiveness.
+
+### Phase 2 — Learning foundation
+
+- Course registration.
+- Roadmap integration.
+- Learning plan generation.
+- Daily learning targets.
+- Course and topic management.
+
+### Phase 3 — AI learning engine
+
+- Secure AI API integration.
+- Daily exercise generation.
+- Code submission.
+- AI code reviews.
+- Topic quizzes.
+- Adaptive learning recommendations.
+
+### Phase 4 — Projects
+
+- Weekly personalized project generation.
+- Project instructions.
+- Project submissions.
+- AI project reviews.
+- Project history.
+
+### Phase 5 — Community
+
+- Discussions.
+- Announcements.
+- Resources.
+- Challenges.
+- Events.
+- Member directory.
+- Project showcase.
+
+### Phase 6 — Progress and administration
+
+- Learning reports.
+- Skill tracking.
+- Admin dashboard.
+- AI configuration.
+- Usage monitoring.
+- Further refinements.
+
+These phases are implementation priorities, not separate disconnected products. Features should integrate properly.
+
+---
+
+# 21. FINAL QUALITY REQUIREMENTS
+
+Before considering the work complete, test the actual user journey.
+
+Test as a new member:
+
+1. Register and log in.
+2. Complete onboarding.
+3. Select a field.
+4. Find or generate a roadmap.
+5. Add an existing course.
+6. Receive a learning plan.
+7. Complete a daily learning target.
+8. Submit code.
+9. Receive an AI code review.
+10. Complete a quiz.
+11. Receive personalized feedback.
+12. Receive a weekly project.
+13. Submit the project.
+14. View learning progress.
+15. Interact with the community.
+
+Also test as an administrator:
+
+1. Log in.
+2. Manage members.
+3. Publish announcements.
+4. Create challenges.
+5. Manage events.
+6. Configure the AI provider.
+7. Test the AI connection.
+8. Monitor usage.
+
+Fix broken flows, missing data, permission problems, responsive layout issues and errors.
+
+Do not claim a feature is complete until it has been implemented and tested.
+
+---
+
+# THE MOST IMPORTANT PRINCIPLE
+
+Dev Hub should not simply help people finish courses.
+
+It should help them become developers who can think, solve problems, write code, understand what they build, work with others and eventually build things independently.
+
+Every design decision, feature and AI interaction should support that goal.
+
+Make the platform feel so clear and intuitive that a complete beginner can log in, understand where they are, know what to do next and confidently continue their journey.
+
+**DEV HUB — Learn Together. Build Together. Grow Together.**

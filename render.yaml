@@ -1,0 +1,21 @@
+# One-click setup for Render (https://render.com). Dev Hub is a single Node service:
+# it serves the website AND the AI endpoints, so it needs a real server (not static hosting).
+services:
+  - type: web
+    name: devhub
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS   # your Vercel site address, e.g. https://yourhub.vercel.app (no trailing slash)
+        sync: false
