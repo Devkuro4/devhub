@@ -467,7 +467,7 @@ export const ProductTour: React.FC<{
         position: 'fixed',
         left: 12,
         right: 12,
-        bottom: 12,
+        bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
         zIndex: 62,
       };
     }
@@ -598,7 +598,7 @@ export const ProductTour: React.FC<{
         aria-label={`Product tour: ${step.title}`}
         style={popoverStyle}
         onClick={(e) => e.stopPropagation()}
-        className={`rounded-2xl border ${borderClass} bg-[var(--surface-elevated)] shadow-[var(--shadow-lg)] p-5 space-y-4 max-h-[82vh] overflow-y-auto`}
+        className={`rounded-2xl border ${borderClass} bg-[var(--surface-elevated)] shadow-[var(--shadow-lg)] p-5 space-y-4 max-h-[82dvh] overflow-y-auto`}
       >
         {/* Top bar: progress & close/resume */}
         <div className="flex items-center justify-between gap-2">

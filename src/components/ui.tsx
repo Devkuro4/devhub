@@ -52,12 +52,12 @@ export const PageHeader = ({
   action?: React.ReactNode;
 }) => {
   return (
-    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 pb-2">
-      <div className="space-y-4 max-w-2xl">
+    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-5 pb-1 sm:pb-2">
+      <div className="space-y-2.5 sm:space-y-4 max-w-2xl min-w-0">
         <h1 className="font-display text-[var(--ink-primary)]">{title}</h1>
         <p className="text-base leading-relaxed max-w-[62ch] text-[var(--ink-secondary)]">{description}</p>
       </div>
-      {action && <div className="flex flex-wrap items-center gap-3 shrink-0">{action}</div>}
+      {action && <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 sm:shrink-0">{action}</div>}
     </header>
   );
 };
@@ -71,10 +71,19 @@ export const SectionTabs = <T extends string>({
   active: T;
   onChange: (id: T) => void;
 }) => {
+  const tabListRef = React.useRef<HTMLDivElement>(null);
+  // Only when the active tab changes, and only sideways inside the tab row (never moves the page)
+  useEffect(() => {
+    const list = tabListRef.current;
+    const el = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!list || !el || list.scrollWidth <= list.clientWidth) return;
+    list.scrollTo({ left: el.offsetLeft - (list.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
+  }, [active]);
   return (
     <div
       role="tablist"
-      className="flex items-center gap-1 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)]"
+      ref={tabListRef}
+      className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)] snap-x overscroll-x-contain"
     >
       {tabs.map((tab) => {
         const isActive = tab.id === active;
@@ -85,7 +94,7 @@ export const SectionTabs = <T extends string>({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            className={`relative px-4 py-3 text-[0.9375rem] font-medium whitespace-nowrap shrink-0 cursor-pointer min-h-[48px] flex items-center gap-2 transition-colors ${
+            className={`relative px-3.5 sm:px-4 py-3 text-[0.9375rem] font-medium whitespace-nowrap shrink-0 snap-start cursor-pointer min-h-[48px] flex items-center gap-2 transition-colors ${
               isActive
                 ? 'text-[var(--ink-primary)] font-semibold'
                 : 'text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
@@ -119,11 +128,16 @@ export const Modal = ({
   const dark = useContext(DarkCtx);
   useEffect(() => {
     if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -137,7 +151,7 @@ export const Modal = ({
       onClick={onClose}
     >
       <div
-        className={`studio-card w-full max-w-xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto space-y-5 shadow-[var(--shadow-lg)] ${
+        className={`studio-card w-full max-w-xl p-6 sm:p-8 max-h-[90dvh] overflow-y-auto overscroll-contain space-y-5 shadow-[var(--shadow-lg)] ${
           'text-[var(--ink-primary)]'
         }`}
         onClick={(e) => e.stopPropagation()}

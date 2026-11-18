@@ -845,6 +845,16 @@ export default function App() {
     }
   }, [user, hydrated, milestoneSummary]);
 
+  // Lock page scroll behind the mobile menu and let Escape close it
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+  }, [mobileMenuOpen]);
+
   const mainNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, match: ['dashboard'], group: 'Workspace' },
     { id: 'today', label: 'My Learning', icon: BookOpen, match: ['today', 'courses', 'submissions', 'quizzes', 'progress'], group: 'Workspace' },
@@ -1123,8 +1133,8 @@ export default function App() {
     <MotionConfig reducedMotion="user">
     <DarkCtx.Provider value={darkMode}>
     <StudyChatProvider user={user} profile={profile}>
-      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-screen app-backdrop lg:p-6 ${textPrimary}`}>
-        <div className="app-frame min-h-screen lg:min-h-[calc(100vh-3rem)] flex flex-col lg:flex-row">
+      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-dvh app-backdrop lg:p-6 ${textPrimary}`}>
+        <div className="app-frame min-h-dvh lg:min-h-[calc(100vh-3rem)] flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop sidebar */}
           <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-6 lg:self-start lg:h-[calc(100vh-3rem)] border-r studio-sidebar rounded-l-[28px]">
@@ -1277,7 +1287,7 @@ export default function App() {
           </aside>
 
           {/* Mobile Top Header */}
-          <header className={`lg:hidden sticky top-0 z-30 h-16 px-4 flex items-center justify-between border-b ${borderClass} ${'bg-[var(--surface-bg)]/95'} backdrop-blur`}>
+          <header className={`mobile-header lg:hidden sticky top-0 z-30 px-3 sm:px-4 flex items-center justify-between gap-2 border-b ${borderClass} ${'bg-[var(--surface-bg)]/95'} backdrop-blur`}>
             <button
               type="button"
               onClick={() => {
@@ -1289,10 +1299,11 @@ export default function App() {
               <LogoMark size={32} />
               <span className="font-display text-lg font-semibold">Dev Hub</span>
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <span
                 aria-live="polite"
-                className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
+                aria-label={syncStatus === 'offline' ? 'Offline' : syncStatus === 'error' ? 'Sync failed, retry' : syncStatus === 'saving' ? 'Saving' : 'Saved'}
+                className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap px-1 ${
                   syncStatus === 'offline' || syncStatus === 'error'
                     ? 'text-[var(--warning-ink)]'
                     : textSecondary
@@ -1300,19 +1311,19 @@ export default function App() {
               >
                 {syncStatus === 'offline' ? (
                   <>
-                    <WifiOff className="w-3.5 h-3.5" /> Offline
+                    <WifiOff className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Offline</span>
                   </>
                 ) : syncStatus === 'error' ? (
                   <>
-                    <AlertCircle className="w-3.5 h-3.5" /> Retry
+                    <AlertCircle className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Retry</span>
                   </>
                 ) : syncStatus === 'saving' ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> <span className="hidden sm:inline">Saving</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> Saved
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> <span className="hidden sm:inline">Saved</span>
                   </>
                 )}
               </span>
@@ -1331,7 +1342,8 @@ export default function App() {
               </button>
               <button
                 type="button"
-                aria-label="Open menu"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                aria-expanded={mobileMenuOpen}
                 onClick={() => setMobileMenuOpen((v) => !v)}
                 className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
@@ -1342,7 +1354,7 @@ export default function App() {
 
           {/* Mobile Drawer */}
           {mobileMenuOpen && (
-            <div className="lg:hidden fixed inset-0 top-14 z-20 p-4 space-y-3 overflow-y-auto studio-canvas">
+            <div className="mobile-drawer lg:hidden fixed inset-x-0 bottom-0 z-20 px-4 pt-4 space-y-2.5 overflow-y-auto overscroll-contain studio-canvas">
               {(role === 'admin' ? adminNav : mainNav).map((item) => {
                 const Icon = item.icon;
                 const active = item.match.includes(activeTab);
@@ -1355,7 +1367,7 @@ export default function App() {
                       setActiveTab(item.id);
                       setMobileMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium cursor-pointer min-h-[44px] ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium cursor-pointer min-h-[52px] ${
                       active ? 'bg-[var(--accent-600)] text-white' : `${cardClass} ${textPrimary}`
                     }`}
                   >
@@ -1371,7 +1383,7 @@ export default function App() {
                   setActiveTab('profile');
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium min-h-[44px] ${cardClass} ${textPrimary} cursor-pointer`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
               >
                 <Settings className="w-4 h-4" /> Profile & Settings
               </button>
@@ -1384,7 +1396,7 @@ export default function App() {
                     setActiveTab(nextRole === 'admin' ? 'admin-dashboard' : 'dashboard');
                     setMobileMenuOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium min-h-[44px] ${cardClass} ${textPrimary} cursor-pointer`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
                 >
                   <Shield className="w-4 h-4 text-[var(--accent-600)]" />
                   <span>{role === 'admin' ? 'Switch to Member View' : 'Open Admin Console'}</span>
@@ -1393,7 +1405,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={signOut}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium min-h-[44px] ${cardClass} text-[var(--danger-ink)] cursor-pointer`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} text-[var(--danger-ink)] cursor-pointer`}
               >
                 <LogOut className="w-4 h-4" /> Sign out
               </button>
@@ -1425,13 +1437,13 @@ export default function App() {
               </header>
             )}
 
-            <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "pb-20 lg:pb-0" : "pb-24 lg:pb-16"}`}>
+            <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "main-pad-mobile lg:pb-0" : "main-pad-mobile lg:pb-16"}`}>
               <motion.div
                 key={showOnboardingWizard ? 'onboarding' : activeTab}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className={onDashboardHome ? 'w-full' : 'max-w-6xl mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12 space-y-10'}
+                className={onDashboardHome ? 'w-full' : 'max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 py-6 sm:py-12 space-y-8 sm:space-y-10'}
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard
@@ -1663,9 +1675,9 @@ export default function App() {
             </main>
           </div>
 
-          {/* Compact Mobile Bottom Nav */}
-          <nav aria-label="Mobile navigation" className={`lg:hidden fixed bottom-0 inset-x-0 z-30 h-[68px] border-t ${borderClass} ${'bg-[var(--surface-bg)]/95'} backdrop-blur grid grid-cols-6`}>
-            {mainNav.map((item) => {
+          {/* Compact Mobile Bottom Nav: 4 primary tabs + More (opens the full menu) */}
+          <nav aria-label="Mobile navigation" className={`mobile-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-30 border-t ${borderClass} bg-[var(--surface-bg)]/95 backdrop-blur grid grid-cols-5`}>
+            {mainNav.slice(0, 4).map((item) => {
               const Icon = item.icon;
               const active = item.match.includes(activeTab);
               return (
@@ -1678,15 +1690,26 @@ export default function App() {
                     setMobileMenuOpen(false);
                   }}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex flex-col items-center justify-center gap-1 min-h-[48px] text-xs font-medium cursor-pointer ${
-                    active ? 'text-[var(--accent-700)] font-semibold' : textSecondary
+                  className={`flex flex-col items-center justify-center gap-1 min-h-[56px] text-xs font-medium cursor-pointer ${
+                    active && !mobileMenuOpen ? 'text-[var(--accent-700)] font-semibold' : textSecondary
                   }`}
                 >
                   <Icon className="w-5 h-5 shrink-0" />
-                  <span className="truncate max-w-[58px]">{item.label.replace('My ', '')}</span>
+                  <span className="truncate max-w-[64px]">{item.label.replace('My ', '')}</span>
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              aria-expanded={mobileMenuOpen}
+              className={`flex flex-col items-center justify-center gap-1 min-h-[56px] text-xs font-medium cursor-pointer ${
+                mobileMenuOpen || mainNav.slice(4).some((i) => i.match.includes(activeTab)) ? 'text-[var(--accent-700)] font-semibold' : textSecondary
+              }`}
+            >
+              <Menu className="w-5 h-5 shrink-0" />
+              <span>More</span>
+            </button>
           </nav>
 
           {/* Toast Feedback */}
@@ -1695,7 +1718,7 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               role="status"
-              className="fixed bottom-24 lg:bottom-8 right-4 sm:right-8 z-40 max-w-[calc(100vw-2rem)] px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
+              className="toast-mobile fixed lg:bottom-8 inset-x-4 sm:inset-x-auto sm:right-8 z-40 sm:max-w-sm px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
             >
               {toastMessage}
             </motion.div>

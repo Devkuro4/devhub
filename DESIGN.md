@@ -53,3 +53,9 @@ Black, white and one blue. Blue marks what you can act on and what is progress: 
 - Weekly leaderboard resets itself every Monday (rows from older weeks count as 0).
 - Competing is optional: "Show me on leaderboards" removes the member's row; XP, streak and badges stay.
 - Storage: `xpLedger` is private per member (`member_state`); `leaderboard` is a shared key in `shared_state`. No SQL change needed.
+
+## Community and Study Chat
+- Chat messages group by sender (5 min), get day separators, linkified URLs and a Copy button on code. The list only auto-scrolls when you are at the bottom or you sent the message; otherwise a "N new messages" pill appears.
+- Composer: Enter sends on desktop, Shift+Enter adds a line; on touch devices Enter adds a line and the Send button sends. Drafts are kept per room. Limits: 2000 characters per message, 3000 per code snippet (same as the server).
+- Server (`server/chatServer.ts`): typing events, 6 messages per 10 s per connection, ping/pong cleanup of dead connections. History is still in memory only (cleared on restart).
+- Discussions: search, sort (Newest / Most helpful / Unanswered), one "Helpful" per person (stored in this browser), long posts collapse with Read more, Enter submits replies.

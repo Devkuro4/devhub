@@ -311,7 +311,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
             </div>
             <dl className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {COMMUNITY.map((c) => (
-                <div key={c.title} className="soft-card p-6">
+                <div key={c.title} className="soft-card p-5 sm:p-6">
                   <dt className="font-display text-lg font-semibold">{c.title}</dt>
                   <dd className="mt-2 text-base leading-relaxed text-[var(--ink-secondary)]">{c.text}</dd>
                 </div>

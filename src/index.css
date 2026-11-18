@@ -126,6 +126,8 @@
 }
 
 html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   font-family: var(--font-sans);
   background-color: var(--canvas-bg);
   color: var(--ink-primary);
@@ -268,4 +270,73 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .hub-root *, .studio-sidebar * { animation: none !important; transition: none !important; }
   .trail-line { stroke-dashoffset: 0; } .trail-dot { opacity: 1; }
+}
+
+/* ---------- Mobile polish (no visual redesign; spacing, safe areas, touch) ---------- */
+:root {
+  --mobile-header-h: 4rem;
+  --mobile-nav-h: 4rem;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html, body { overflow-x: clip; }
+@media (max-width: 1023px) { html, body { overscroll-behavior-y: none; } }
+.hub-root { overflow-wrap: break-word; }
+.hub-root :is(pre, table, code) { overflow-wrap: normal; }
+.hub-root img, .hub-root video, .hub-root svg { max-width: 100%; }
+.hub-root :is(button, a, [role=button], summary) { touch-action: manipulation; }
+.hub-root pre { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.mobile-header {
+  height: calc(var(--mobile-header-h) + var(--safe-top));
+  padding-top: var(--safe-top);
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}
+.mobile-drawer {
+  top: calc(var(--mobile-header-h) + var(--safe-top));
+  bottom: calc(var(--mobile-nav-h) + var(--safe-bottom));
+  padding-bottom: 1.5rem;
+}
+.mobile-bottom-nav {
+  height: calc(var(--mobile-nav-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+}
+.main-pad-mobile { padding-bottom: calc(var(--mobile-nav-h) + var(--safe-bottom) + 1.5rem); }
+.toast-mobile { bottom: calc(var(--mobile-nav-h) + var(--safe-bottom) + 0.75rem); }
+@media (min-width: 1024px) {
+  .toast-mobile { bottom: 2rem; }
+  .main-pad-mobile { padding-bottom: 0; }
+}
+
+/* Floating chat bubble sits above the bottom nav, never on top of it */
+.chat-widget-pos { bottom: calc(var(--mobile-nav-h) + var(--safe-bottom) + 0.75rem); right: max(1rem, env(safe-area-inset-right, 0px)); }
+@media (min-width: 1024px) { .chat-widget-pos { bottom: 1.5rem; right: 1.5rem; } }
+
+/* Modals and drawers use the visible viewport, not the tall one behind browser bars */
+@media (max-width: 639px) {
+  .hub-root [class*="max-h-[90vh]"] { max-height: 88dvh; }
+  .hub-root [class*="max-h-[70vh]"] { max-height: 60dvh; }
+}
+
+/* Phones: calmer density. Same look, more breathing room, no tiny tap targets. */
+@media (max-width: 639px) {
+  .hub-root { font-size: 16px; }
+  .studio-card, .soft-card { border-radius: 14px; }
+  :where(.hub-root) h1 { font-size: 1.625rem; }
+  :where(.hub-root) h2 { font-size: 1.25rem; }
+  :where(.hub-root) h3 { font-size: 1.125rem; }
+  /* every button-like control reaches a comfortable touch size */
+  .hub-root button:not([class*="min-h-"]):not([class*="w-2"]):not([class*="w-3"]):not([class*="w-4"]) { min-height: 40px; }
+  /* long rows of chips/tabs scroll sideways instead of wrapping into a pile */
+  .hub-root [role=tablist] { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .hub-root [role=tablist]::-webkit-scrollbar { display: none; }
+  .hub-root [role=tablist] > * { flex-shrink: 0; }
+  /* wide tables scroll inside their own box */
+  .hub-root .table-scroll, .hub-root div:has(> table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+@media (hover: none) {
+  .studio-card-interactive:hover, .soft-card-interactive:hover { box-shadow: 0 2px 16px rgb(10 10 10 / 6%); }
 }

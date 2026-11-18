@@ -43,7 +43,7 @@ export const HomeLevelCard = ({
 }) => {
   const { level } = summary;
   return (
-    <section className="soft-card p-6 space-y-4" aria-label="Your level">
+    <section className="soft-card p-5 sm:p-6 space-y-4" aria-label="Your level">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
           <p className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Level {level.index + 1}</p>
@@ -198,7 +198,7 @@ export const CompeteSection = ({
               <p className={`text-xs ${textSecondary}`}>Competition should help you grow. These match your level, and harder ones unlock as your results improve.</p>
             </section>
           )}
-          <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-7 py-8 sm:px-10 sm:py-10">
+          <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-7 sm:px-10 sm:py-10">
             <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
             <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
             <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />

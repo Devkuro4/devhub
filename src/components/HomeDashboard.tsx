@@ -307,8 +307,8 @@ export const HomeDashboard = ({
       {/* ------------------------------------------------------------ MAIN */}
       <div data-tour="home-workspace" className="p-4 sm:p-8 xl:p-10 space-y-8 sm:space-y-9 min-w-0">
         {/* Search */}
-        <div className="flex items-center gap-4">
-          <label className="relative flex-1">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <label className="relative flex-1 min-w-0">
             <span className="sr-only">Search your courses</span>
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-muted)]" aria-hidden="true" />
             <input
@@ -333,7 +333,7 @@ export const HomeDashboard = ({
         </div>
 
         {/* Banner */}
-        <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-7 py-8 sm:px-10 sm:py-10">
+        <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-7 sm:px-10 sm:py-10">
           <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
           <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
           <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
@@ -439,7 +439,7 @@ export const HomeDashboard = ({
           </div>
 
           {visibleCourses.length === 0 ? (
-            <div className="soft-card p-8 text-center space-y-3">
+            <div className="soft-card p-6 sm:p-8 text-center space-y-3">
               <p className={`text-sm ${textSecondary}`}>
                 {courses.length === 0 ? 'No courses linked yet.' : 'No courses match your search.'}
               </p>
@@ -448,13 +448,13 @@ export const HomeDashboard = ({
               )}
             </div>
           ) : (
-            <div ref={rail} className="flex gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-1 px-1 py-2">
+            <div ref={rail} className="flex gap-4 sm:gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory overscroll-x-contain scroll-px-1 -mx-1 px-1 py-2">
               {visibleCourses.map((c, i) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => onNavigate('courses')}
-                  className="soft-card soft-card-interactive snap-start shrink-0 w-[270px] p-2.5 text-left"
+                  className="soft-card soft-card-interactive snap-start shrink-0 w-[min(270px,78vw)] p-2.5 text-left"
                 >
                   <span className={`h-36 rounded-xl flex flex-col items-center justify-center gap-2 ${THUMBS[i % THUMBS.length]}`}>
                     <Code2 className="w-7 h-7" aria-hidden="true" />
@@ -537,7 +537,7 @@ export const HomeDashboard = ({
             <HomeLevelCard summary={gamification} onOpen={() => onNavigate('compete')} textPrimary={textPrimary} textSecondary={textSecondary} />
             <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
           </div>
-          <section className="soft-card p-6">
+          <section className="soft-card p-5 sm:p-6">
             <DashboardMilestoneStrip summary={milestones} borderClass={borderClass} subtleBgClass={subtleBgClass} textPrimary={textPrimary} textSecondary={textSecondary} onOpenProfile={() => onNavigate('profile')} />
           </section>
         </div>

@@ -24,7 +24,13 @@ interface ClientInfo {
   userName: string;
   userField: string;
   roomId: string;
+  sentAt: number[];
+  lastTypingAt: number;
+  alive: boolean;
 }
+
+const RATE_LIMIT_COUNT = 6;
+const RATE_LIMIT_WINDOW_MS = 10_000;
 
 const DEFAULT_ROOMS: StudyChatRoom[] = [
   { id: 'general', name: 'General Study Hall', topic: 'Daily check-ins, study accountability & beginner Q&A' },
@@ -63,9 +69,10 @@ function getRoomPresence(roomId: string): { userId: string; userName: string; us
   return list;
 }
 
-function broadcastToRoom(roomId: string, payload: unknown) {
+function broadcastToRoom(roomId: string, payload: unknown, except?: ClientInfo) {
   const encoded = JSON.stringify(payload);
   for (const c of clients) {
+    if (c === except) continue;
     if (c.roomId === roomId && c.ws.readyState === WebSocket.OPEN) {
       c.ws.send(encoded);
     }
@@ -73,7 +80,24 @@ function broadcastToRoom(roomId: string, payload: unknown) {
 }
 
 export function setupChatServer(httpServer: HttpServer) {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
+
+  // Drop dead connections (common on mobile networks) so "online" counts stay honest
+  const heartbeat = setInterval(() => {
+    for (const c of clients) {
+      if (!c.alive) {
+        c.ws.terminate();
+        continue;
+      }
+      c.alive = false;
+      try {
+        c.ws.ping();
+      } catch {
+        /* closed */
+      }
+    }
+  }, 30_000);
+  wss.on('close', () => clearInterval(heartbeat));
 
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = (() => {
@@ -100,8 +124,14 @@ export function setupChatServer(httpServer: HttpServer) {
       userName: 'Member',
       userField: '',
       roomId: 'general',
+      sentAt: [],
+      lastTypingAt: 0,
+      alive: true,
     };
     clients.add(client);
+    ws.on('pong', () => {
+      client.alive = true;
+    });
 
     // Send available rooms + initial room history
     ws.send(
@@ -143,7 +173,25 @@ export function setupChatServer(httpServer: HttpServer) {
           broadcastToRoom(prevRoom, { type: 'chat:presence', roomId: prevRoom, presence: getRoomPresence(prevRoom) });
         }
         broadcastToRoom(nextRoom, { type: 'chat:presence', roomId: nextRoom, presence: getRoomPresence(nextRoom) });
+      } else if (msg.type === 'chat:typing') {
+        const now = Date.now();
+        if (now - client.lastTypingAt < 1500) return;
+        client.lastTypingAt = now;
+        broadcastToRoom(
+          client.roomId,
+          { type: 'chat:typing', roomId: client.roomId, userId: client.userId, userName: client.userName },
+          client
+        );
       } else if (msg.type === 'chat:send') {
+        // Light spam protection: a few messages per short window
+        const now = Date.now();
+        client.sentAt = client.sentAt.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+        if (client.sentAt.length >= RATE_LIMIT_COUNT) {
+          ws.send(JSON.stringify({ type: 'chat:error', code: 'rate_limited', message: 'Slow down a little — you can send again in a few seconds.' }));
+          return;
+        }
+        client.sentAt.push(now);
+
         const roomId = typeof msg.roomId === 'string' && roomHistory.has(msg.roomId) ? msg.roomId : client.roomId;
         const text = String(msg.text || '').trim().slice(0, 2000);
         const codeSnippet = typeof msg.codeSnippet === 'string' ? msg.codeSnippet.trim().slice(0, 3000) : '';

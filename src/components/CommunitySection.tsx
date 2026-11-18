@@ -26,7 +26,7 @@ import {
 import { Badge, EmptyState, Modal, PageHeader, SectionTabs } from './ui';
 import { getUrlError } from '../lib/url';
 import { requestGroundedSearch, type GroundedSource } from '../lib/aiClient';
-import { StudyGroupChatPanel } from './StudyGroupChat';
+import { StudyGroupChatPanel, useStudyGroupChat } from './StudyGroupChat';
 import type {
   CommunityEvent,
   CommunityPost,
@@ -42,6 +42,27 @@ export type CommunitySubTab =
   | 'events'
   | 'challenges'
   | 'pairing-help';
+
+/** Long posts collapse to a few lines so the feed stays easy to scan */
+const PostBody = ({ text, className }: { text: string; className: string }) => {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 320 || text.split('\n').length > 5;
+  return (
+    <div>
+      <p className={`${className} whitespace-pre-wrap break-words ${long && !open ? 'line-clamp-4' : ''}`}>{text}</p>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="mt-1 min-h-[32px] text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+        >
+          {open ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const CommunitySection = ({
   subTab,
@@ -125,6 +146,25 @@ export const CommunitySection = ({
   const [postLink, setPostLink] = useState(savedPostDraft?.postLink || '');
   const [showPostExtras, setShowPostExtras] = useState(Boolean(savedPostDraft?.postCode || savedPostDraft?.postLink));
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [postSearch, setPostSearch] = useState('');
+  const [postSort, setPostSort] = useState<'new' | 'helpful' | 'unanswered'>('new');
+  const { unreadCount: chatUnread } = useStudyGroupChat();
+
+  // "Helpful" is one per person and can be taken back
+  const likedKey = `devhub_liked_${user.id || 'local'}`;
+  const [likedPostIds, setLikedPostIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(likedKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(likedKey, JSON.stringify(likedPostIds));
+    } catch {}
+  }, [likedKey, likedPostIds]);
 
   // Announcements composer (admin)
   const [annTitle, setAnnTitle] = useState('');
@@ -281,6 +321,12 @@ export const CommunitySection = ({
           : p
       )
     );
+  };
+
+  const toggleLikePost = (postId: string) => {
+    const liked = likedPostIds.includes(postId);
+    setLikedPostIds(liked ? likedPostIds.filter((id) => id !== postId) : [...likedPostIds, postId]);
+    setPosts(posts.map((p) => (p.id === postId ? { ...p, likes: Math.max(0, p.likes + (liked ? -1 : 1)) } : p)));
   };
 
   const toggleSavePost = (postId: string) => {
@@ -503,18 +549,32 @@ export const CommunitySection = ({
 
   const communityTabs: { id: CommunitySubTab; label: string; badge?: number }[] = [
     { id: 'community-home', label: 'Community Home' },
-    { id: 'study-chat', label: 'Study Chat' },
+    { id: 'study-chat', label: 'Study Chat', badge: chatUnread },
     { id: 'community', label: 'Discussions', badge: posts.length },
     { id: 'events', label: 'Events', badge: presentations.length },
     { id: 'resources', label: 'Resources', badge: resources.length },
     { id: 'pairing-help', label: 'Peer Help' },
   ];
 
-  const discussionPosts = posts.filter((p) => {
-    if (postFilter === 'Saved') return savedPostIds.includes(p.id);
-    if (postFilter === 'All') return true;
-    return p.category === postFilter;
-  });
+  const inCategory = (p: CommunityPost, cat: string) => {
+    if (cat === 'Saved') return savedPostIds.includes(p.id);
+    if (cat === 'All') return true;
+    return p.category === cat;
+  };
+  const postQuery = postSearch.trim().toLowerCase();
+  const discussionPosts = (() => {
+    const list = posts
+      .filter((p) => inCategory(p, postFilter))
+      .filter(
+        (p) =>
+          !postQuery ||
+          p.title.toLowerCase().includes(postQuery) ||
+          p.content.toLowerCase().includes(postQuery) ||
+          p.author.toLowerCase().includes(postQuery)
+      )
+      .filter((p) => postSort !== 'unanswered' || p.comments.length === 0);
+    return postSort === 'helpful' ? [...list].sort((a, b) => b.likes - a.likes) : list;
+  })();
 
   const announcementsList = posts.filter((p) => p.category === 'Announcement' || p.pinned);
 
@@ -603,7 +663,18 @@ export const CommunitySection = ({
                 <h2 className={`text-xl ${textPrimary}`}>Recent discussions</h2>
                 <button type="button" onClick={() => setSubTab('community')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Join in</button>
               </div>
-              <ul className="space-y-4">
+              {posts.length === 0 && (
+                <EmptyState
+                  title="No discussions yet"
+                  description="Be the first to ask a question or share a small win."
+                  actionLabel="Start a Discussion"
+                  onAction={() => {
+                    setSubTab('community');
+                    setShowPostModal(true);
+                  }}
+                />
+              )}
+              <ul className="space-y-3 sm:space-y-4">
                 {posts.slice(0, 5).map((p) => (
                   <li key={p.id}>
                     <button type="button" onClick={() => setSubTab('community')} className={`${cardClass} studio-card-interactive w-full text-left p-4 flex gap-4 items-start cursor-pointer`}>
@@ -626,7 +697,7 @@ export const CommunitySection = ({
             {/* Rail: things with a date or a task attached */}
             <aside className="lg:col-span-4 space-y-4 min-w-0">
               {presentations[0] && (
-                <section className={`${cardClass} p-6 space-y-3`}>
+                <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
                   <div className={`flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-600)]`}><Calendar className="w-3.5 h-3.5" /> Next session · {presentations[0].dateTime}</div>
                   <h3 className={`text-lg ${textPrimary}`}>{presentations[0].title}</h3>
                   <p className={`text-sm line-clamp-3 ${textSecondary}`}>{presentations[0].description}</p>
@@ -634,7 +705,7 @@ export const CommunitySection = ({
                 </section>
               )}
               {challenges[0] && (
-                <section className={`${cardClass} p-6 space-y-3`}>
+                <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-[var(--accent-600)] inline-flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> Weekly challenge</span>
                     <span className={textSecondary}>{challenges[0].difficulty}</span>
@@ -644,7 +715,7 @@ export const CommunitySection = ({
                   <button type="button" onClick={() => setSubTab('challenges')} className={btnSecondary}>Try it</button>
                 </section>
               )}
-              <section className={`${cardClass} p-6 space-y-4 bg-[var(--accent-50)]`}>
+              <section className={`${cardClass} p-5 sm:p-6 space-y-4 bg-[var(--accent-50)]`}>
                 <div>
                   <h3 className={`text-lg ${textPrimary}`}>Peer help & study chat</h3>
                   <p className={`text-sm ${textSecondary}`}>{openHelpList.length} open question{openHelpList.length === 1 ? '' : 's'} · {teamRoster.length} members</p>
@@ -662,28 +733,66 @@ export const CommunitySection = ({
       {/* 1. DISCUSSIONS */}
       {subTab === 'community' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <nav aria-label="Discussion categories" className="lg:col-span-3 lg:sticky lg:top-6 flex lg:flex-col gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          <nav aria-label="Discussion categories" className="lg:col-span-3 lg:sticky lg:top-6 flex lg:flex-col gap-2 lg:gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 lg:mx-0 lg:px-0">
             {['All', 'Question', 'Small Win', 'Mistake & Lesson', 'Explain a Concept', 'Study Session Idea', 'Saved'].map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setPostFilter(cat)}
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap shrink-0 text-left border-l-4 transition-colors ${
+                aria-pressed={postFilter === cat}
+                className={`px-3.5 min-h-[40px] rounded-full lg:rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap shrink-0 text-left border lg:border-0 lg:border-l-4 transition-colors flex items-center justify-between gap-3 ${
                   postFilter === cat
                     ? 'bg-[var(--accent-50)] border-[var(--spark)] text-[var(--ink-primary)] font-semibold'
-                    : `border-transparent hover:bg-[var(--surface-subtle)] ${textSecondary}`
+                    : `border-[var(--border-hairline)] lg:border-transparent hover:bg-[var(--surface-subtle)] ${textSecondary}`
                 }`}
               >
-                {cat === 'Saved' ? `Saved (${savedPostIds.length})` : cat}
+                <span>{cat}</span>
+                <span className={`text-xs tabular-nums ${postFilter === cat ? 'text-[var(--accent-700)]' : textSecondary}`}>
+                  {posts.filter((p) => inCategory(p, cat)).length}
+                </span>
               </button>
             ))}
           </nav>
 
           <div className="lg:col-span-9 space-y-4 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+              <label className="relative flex-1 min-w-0">
+                <span className="sr-only">Search discussions</span>
+                <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${textSecondary}`} aria-hidden="true" />
+                <input
+                  type="search"
+                  value={postSearch}
+                  onChange={(e) => setPostSearch(e.target.value)}
+                  placeholder="Search discussions"
+                  className={`${commInput} !pl-10 min-h-11`}
+                />
+              </label>
+              <div role="group" aria-label="Sort discussions" className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 sm:mx-0 sm:px-0">
+                {([['new', 'Newest'], ['helpful', 'Most helpful'], ['unanswered', 'Unanswered']] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={postSort === id}
+                    onClick={() => setPostSort(id)}
+                    className={`shrink-0 px-3.5 min-h-[40px] rounded-full text-sm font-medium cursor-pointer border transition-colors ${
+                      postSort === id
+                        ? 'bg-[var(--accent-50)] border-[var(--spark)] text-[var(--ink-primary)] font-semibold'
+                        : `border-[var(--border-hairline)] hover:bg-[var(--surface-subtle)] ${textSecondary}`
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {discussionPosts.length === 0 ? (
               <EmptyState
-                title="No discussions here yet"
-                description="Start a friendly question, celebrate a small win, or share something you figured out today."
+                title={postQuery || postSort === 'unanswered' ? 'Nothing matches yet' : 'No discussions here yet'}
+                description={
+                  postQuery || postSort === 'unanswered'
+                    ? 'Try a different word, or clear the filters to see everything.'
+                    : 'Start a friendly question, celebrate a small win, or share something you figured out today.'
+                }
                 actionLabel="Start a Discussion"
                 onAction={() => setShowPostModal(true)}
               />
@@ -691,7 +800,7 @@ export const CommunitySection = ({
               discussionPosts.map((post) => {
                 const isSaved = savedPostIds.includes(post.id);
                 return (
-                  <div key={post.id} className={`${cardClass} p-6 space-y-3.5`}>
+                  <div key={post.id} className={`${cardClass} p-5 sm:p-6 space-y-3.5`}>
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex flex-wrap items-center gap-2">
                         {post.pinned && <Pin className="w-3.5 h-3.5 text-[var(--accent-600)]" />}
@@ -702,7 +811,8 @@ export const CommunitySection = ({
                       <button
                         type="button"
                         onClick={() => toggleSavePost(post.id)}
-                        className={`inline-flex items-center gap-1 text-xs cursor-pointer ${
+                        aria-pressed={isSaved}
+                        className={`inline-flex items-center gap-1 min-h-[36px] px-1 -mr-1 text-xs cursor-pointer ${
                           isSaved ? 'text-[var(--accent-600)] font-semibold' : textSecondary
                         }`}
                       >
@@ -711,7 +821,7 @@ export const CommunitySection = ({
                     </div>
 
                     <h2 className={`text-xl ${textPrimary}`}>{post.title}</h2>
-                    <p className={`text-sm leading-relaxed ${textSecondary}`}>{post.content}</p>
+                    <PostBody text={post.content} className={`text-sm leading-relaxed ${textSecondary}`} />
 
                     {post.codeSnippet && (
                       <pre className={`p-3.5 rounded-lg border ${borderClass} ${subtleBgClass} font-mono text-xs overflow-x-auto ${textPrimary}`}>
@@ -733,13 +843,16 @@ export const CommunitySection = ({
                     <div className={`pt-2 flex items-center gap-5 text-xs ${textSecondary}`}>
                       <button
                         type="button"
-                        onClick={() => setPosts(posts.map((p) => (p.id === post.id ? { ...p, likes: p.likes + 1 } : p)))}
-                        className="inline-flex items-center gap-1.5 hover:text-[var(--accent-600)] cursor-pointer tabular-nums"
+                        onClick={() => toggleLikePost(post.id)}
+                        aria-pressed={likedPostIds.includes(post.id)}
+                        className={`inline-flex items-center gap-1.5 min-h-[36px] cursor-pointer tabular-nums ${
+                          likedPostIds.includes(post.id) ? 'text-[var(--accent-600)] font-semibold' : 'hover:text-[var(--accent-600)]'
+                        }`}
                       >
                         <ThumbsUp className="w-3.5 h-3.5" /> Helpful ({post.likes})
                       </button>
                       <span className="inline-flex items-center gap-1.5 tabular-nums">
-                        <MessageSquare className="w-3.5 h-3.5" /> {post.comments.length} replies
+                        <MessageSquare className="w-3.5 h-3.5" /> {post.comments.length} {post.comments.length === 1 ? 'reply' : 'replies'}
                       </span>
                     </div>
 
@@ -751,19 +864,19 @@ export const CommunitySection = ({
                     </summary>
                     <div className="space-y-3 mt-3">
 
-                      {post.comments.map((c) => (
-                        <div key={c.id} className={`py-2 px-3 rounded-lg ${subtleBgClass} flex items-start justify-between gap-3`}>
-                          <div className="space-y-0.5 text-xs">
+                      {[...post.comments].sort((a, b) => Number(!!b.isHelpful) - Number(!!a.isHelpful)).map((c) => (
+                        <div key={c.id} className={`py-2.5 px-3 rounded-lg ${subtleBgClass} flex items-start justify-between gap-3`}>
+                          <div className="space-y-0.5 text-xs min-w-0">
                             <div className="flex items-center gap-2">
                               <strong className={textPrimary}>{c.author}</strong>
                               {c.isHelpful && <Badge variant="success">Helpful answer</Badge>}
                             </div>
-                            <p className={textSecondary}>{c.text}</p>
+                            <p className={`${textSecondary} whitespace-pre-wrap break-words`}>{c.text}</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => toggleHelpfulComment(post.id, c.id)}
-                            className={`text-xs font-medium shrink-0 cursor-pointer ${
+                            className={`text-xs font-medium shrink-0 min-h-[36px] cursor-pointer ${
                               c.isHelpful ? 'text-[var(--success-ink)]' : 'text-[var(--accent-600)] hover:underline'
                             }`}
                           >
@@ -772,17 +885,26 @@ export const CommunitySection = ({
                         </div>
                       ))}
 
-                      <div className="flex gap-2 pt-1">
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleAddReply(post.id);
+                        }}
+                        className="flex flex-col sm:flex-row gap-2 pt-1"
+                      >
+                        <label htmlFor={`reply-${post.id}`} className="sr-only">Write a reply</label>
                         <input
+                          id={`reply-${post.id}`}
                           value={replyDrafts[post.id] || ''}
                           onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                          maxLength={1000}
                           placeholder="Write a helpful reply..."
-                          className={inputClass}
+                          className={`${inputClass} flex-1 min-w-0`}
                         />
-                        <button type="button" onClick={() => handleAddReply(post.id)} className={btnSecondary}>
+                        <button type="submit" disabled={!(replyDrafts[post.id] || '').trim()} className={btnSecondary}>
                           Reply
                         </button>
-                      </div>
+                      </form>
                     </div>
                     </details>
                   </div>
@@ -1278,7 +1400,13 @@ export const CommunitySection = ({
             {(() => {
               const resolvedList = helpRequests.filter((h) => h.status === 'Resolved');
               const renderReply = (h: any, label: string) => (
-                <div className="flex flex-col sm:flex-row gap-2">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleHelpReply(h.id);
+                  }}
+                  className="flex flex-col sm:flex-row gap-2"
+                >
                   <label htmlFor={`help-reply-${h.id}`} className="sr-only">{label}</label>
                   <input
                     id={`help-reply-${h.id}`}
@@ -1287,10 +1415,10 @@ export const CommunitySection = ({
                     placeholder={label}
                     className={`${commInput} min-h-11`}
                   />
-                  <button type="button" onClick={() => handleHelpReply(h.id)} className={commSecondary}>
+                  <button type="submit" disabled={!(helpReplyDrafts[h.id] || '').trim()} className={commSecondary}>
                     Send answer
                   </button>
-                </div>
+                </form>
               );
               const renderResponses = (h: any) =>
                 (h.responses || []).length > 0 && (
