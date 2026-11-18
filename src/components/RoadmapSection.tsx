@@ -434,7 +434,7 @@ export const RoadmapSection = ({
                 <>
                   <span>·</span>
                   <a href={selectedRoadmap.officialUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--accent-600)] hover:underline inline-flex items-center gap-1">
-                    roadmap.sh <ExternalLink className="w-3 h-3" />
+                    Synced with roadmap.sh <ExternalLink className="w-3 h-3" />
                   </a>
                 </>
               )}
@@ -491,7 +491,7 @@ export const RoadmapSection = ({
         </form>
 
         {/* Stage-by-Stage Accordion */}
-        <div className="relative space-y-5 pl-10 before:content-[''] before:absolute before:left-[13px] before:top-4 before:bottom-4 before:w-[3px] before:bg-[var(--border-hairline)]">
+        <div className="relative space-y-5 pl-8 sm:pl-10 before:content-[''] before:absolute before:left-[11px] sm:before:left-[13px] before:top-4 before:bottom-4 before:w-[3px] before:bg-[var(--border-hairline)]">
           {stages.map((stage, sIdx) => {
             const isOpen = expandedStages[String(sIdx)] ?? sIdx === currentStageIndex;
             const stageDone = stage.topics.filter((t) => getStatus(t.id) === 'Demonstrated').length;
@@ -500,7 +500,7 @@ export const RoadmapSection = ({
             return (
               <div key={stage.id} className="relative">
                 <span
-                  className={`absolute -left-10 top-3.5 w-[28px] h-[28px] rounded-full text-xs font-semibold tabular-nums flex items-center justify-center border-2 z-10 ${
+                  className={`absolute -left-8 sm:-left-10 top-3.5 w-[24px] h-[24px] sm:w-[28px] sm:h-[28px] rounded-full text-xs font-semibold tabular-nums flex items-center justify-center border-2 z-10 ${
                     stageDone === stage.topics.length && stage.topics.length > 0
                       ? 'bg-[var(--success-ink)] border-[var(--success-ink)] text-white'
                       : isCurrentStage

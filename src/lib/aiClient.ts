@@ -55,11 +55,49 @@ export async function lookupOfficialRoadmap(field: string) {
   return res.json();
 }
 
+export interface CourseUrlInspection {
+  accessible: boolean;
+  platform?: string;
+  title?: string;
+  author?: string;
+  videoId?: string;
+  playlistId?: string;
+  isPlaylist?: boolean;
+  embedUrl?: string;
+  structureHint?: string;
+  note: string;
+}
+
 export async function inspectCourseUrl(url: string) {
-  return postJson<{ accessible: boolean; platform?: string; title?: string; author?: string; note: string }>(
-    '/api/course-metadata',
-    { url }
-  );
+  return postJson<CourseUrlInspection>('/api/course-metadata', { url });
+}
+
+export async function fetchChatRooms() {
+  const res = await fetch(`${API_BASE}/api/chat/rooms`);
+  if (!res.ok) throw new Error('Could not load study chat rooms.');
+  return res.json();
+}
+
+export async function fetchChatHistory(roomId: string) {
+  const res = await fetch(`${API_BASE}/api/chat/history?roomId=${encodeURIComponent(roomId)}`);
+  if (!res.ok) throw new Error('Could not load study chat history.');
+  return res.json();
+}
+
+export function getChatWsUrl(): string {
+  if (API_BASE) {
+    try {
+      const parsed = new URL(API_BASE);
+      parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      parsed.pathname = '/ws/chat';
+      return parsed.toString();
+    } catch {
+      /* fallback below */
+    }
+  }
+  const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+  return `${proto}//${host}/ws/chat`;
 }
 
 export async function requestAiRoadmap(
@@ -318,6 +356,12 @@ export interface MaterialExtraction {
   kind: string;
   text: string;
   outline: string[];
+  structuredItems?: {
+    title: string;
+    kind: 'module' | 'reading' | 'exercise' | 'project' | 'lesson';
+    group?: string;
+  }[];
+  skippedVideoCount?: number;
   note: string;
 }
 

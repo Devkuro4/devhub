@@ -26,6 +26,7 @@ import {
 import { Badge, EmptyState, Modal, PageHeader, SectionTabs } from './ui';
 import { getUrlError } from '../lib/url';
 import { requestGroundedSearch, type GroundedSource } from '../lib/aiClient';
+import { StudyGroupChatPanel } from './StudyGroupChat';
 import type {
   CommunityEvent,
   CommunityPost,
@@ -34,6 +35,7 @@ import type {
 
 export type CommunitySubTab =
   | 'community-home'
+  | 'study-chat'
   | 'community'
   | 'announcements'
   | 'resources'
@@ -501,12 +503,11 @@ export const CommunitySection = ({
 
   const communityTabs: { id: CommunitySubTab; label: string; badge?: number }[] = [
     { id: 'community-home', label: 'Community Home' },
+    { id: 'study-chat', label: 'Study Chat' },
     { id: 'community', label: 'Discussions', badge: posts.length },
-    { id: 'announcements', label: 'Announcements' },
-    { id: 'resources', label: 'Resources', badge: resources.length },
     { id: 'events', label: 'Events', badge: presentations.length },
-    { id: 'challenges', label: 'Challenges', badge: challenges.length },
-    { id: 'pairing-help', label: 'Members & Help Desk' },
+    { id: 'resources', label: 'Resources', badge: resources.length },
+    { id: 'pairing-help', label: 'Peer Help' },
   ];
 
   const discussionPosts = posts.filter((p) => {
@@ -562,15 +563,23 @@ export const CommunitySection = ({
       </button>
     ) : undefined;
 
+  const activeNavTab: CommunitySubTab =
+    subTab === 'announcements' || subTab === 'challenges' ? 'community-home' : subTab;
+
   return (
-    <div className="space-y-6">
+    <div data-tour="community-section" className="space-y-6">
       <PageHeader
         title="Community"
-        description="Learn together with friendly beginners and peers—ask basic questions, share helpful guides, join study sessions, or try weekly challenges."
+        description="Learn together with friendly beginners and peers—chat live in study rooms, ask questions, share helpful guides, or join sessions."
         action={headerAction}
       />
 
-      <SectionTabs tabs={communityTabs} active={subTab} onChange={setSubTab} />
+      <SectionTabs tabs={communityTabs} active={activeNavTab} onChange={setSubTab} />
+
+      {/* 0A. LIVE STUDY GROUP CHAT */}
+      {subTab === 'study-chat' && (
+        <StudyGroupChatPanel styles={styles} currentUserId={user.id || user.email || 'me'} />
+      )}
 
       {/* 0. COMMUNITY HOME OVERVIEW */}
       {subTab === 'community-home' && (
@@ -637,10 +646,13 @@ export const CommunitySection = ({
               )}
               <section className={`${cardClass} p-6 space-y-4 bg-[var(--accent-50)]`}>
                 <div>
-                  <h3 className={`text-lg ${textPrimary}`}>Peer help</h3>
+                  <h3 className={`text-lg ${textPrimary}`}>Peer help & study chat</h3>
                   <p className={`text-sm ${textSecondary}`}>{openHelpList.length} open question{openHelpList.length === 1 ? '' : 's'} · {teamRoster.length} members</p>
                 </div>
-                <button type="button" onClick={() => setSubTab('pairing-help')} className={btnPrimary}>Ask or help</button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setSubTab('pairing-help')} className={btnPrimary}>Ask or help</button>
+                  <button type="button" onClick={() => setSubTab('study-chat')} className={btnSecondary}>Live study chat</button>
+                </div>
               </section>
             </aside>
           </div>

@@ -14,6 +14,7 @@ export interface RoadmapStage {
 export interface RoadmapLookupResult {
   found: boolean;
   source: 'roadmap.sh' | 'none';
+  liveSynced?: boolean;
   id: string;
   slug: string;
   title: string;
@@ -27,23 +28,47 @@ export interface RoadmapLookupResult {
 const ROADMAP_SLUGS: Record<string, string> = {
   'frontend development': 'frontend',
   frontend: 'frontend',
+  'web development': 'frontend',
   'backend development': 'backend',
   backend: 'backend',
   'full-stack development': 'full-stack',
   'full stack development': 'full-stack',
   fullstack: 'full-stack',
+  'full stack': 'full-stack',
   'mobile development': 'react-native',
   mobile: 'react-native',
+  'react native': 'react-native',
   'ai engineering': 'ai-engineer',
+  'ai engineer': 'ai-engineer',
+  'artificial intelligence': 'ai-engineer',
   'ai & machine learning': 'ai-engineer',
   'machine learning': 'ai-data-scientist',
   'data science': 'data-analyst',
+  'data analyst': 'data-analyst',
   cybersecurity: 'cyber-security',
+  'cyber security': 'cyber-security',
   'cloud computing': 'aws',
+  aws: 'aws',
   devops: 'devops',
   'devops & cloud': 'devops',
   'blockchain development': 'blockchain',
+  blockchain: 'blockchain',
   'ui/ux design': 'ux-design',
+  'ux design': 'ux-design',
+  python: 'python',
+  react: 'react',
+  typescript: 'typescript',
+  javascript: 'javascript',
+  'node.js': 'nodejs',
+  nodejs: 'nodejs',
+  sql: 'sql',
+  docker: 'docker',
+  kubernetes: 'kubernetes',
+  java: 'java',
+  golang: 'golang',
+  go: 'golang',
+  rust: 'rust',
+  'system design': 'system-design',
 };
 
 const VERIFIED_ROADMAPS: Record<string, Omit<RoadmapLookupResult, 'found' | 'source'>> = {
@@ -225,6 +250,41 @@ const VERIFIED_ROADMAPS: Record<string, Omit<RoadmapLookupResult, 'found' | 'sou
       },
     ],
   },
+  python: {
+    id: 'rm-python',
+    slug: 'python',
+    title: 'Python Developer',
+    field: 'Python',
+    officialUrl: 'https://roadmap.sh/python',
+    summary: 'Learn Python fundamentals, data structures, modules, testing, and building web or automation projects.',
+    whatYouWillLearn: [
+      'Python syntax, functions, lists, and dictionaries',
+      'Modules, virtual environments, and package management',
+      'Object-oriented Python, error handling, and automated testing',
+    ],
+    stages: [
+      {
+        id: 'py-s1',
+        title: 'Stage 1: Python Core',
+        description: 'Master readable syntax and foundational problem solving.',
+        topics: [
+          { id: 'py-1', name: 'Learn the Basics', summary: 'Variables, loops, conditionals, functions, and clean string formatting.' },
+          { id: 'py-2', name: 'Data Structures (Lists, Dicts, Sets)', summary: 'Choosing the right collection and iterating cleanly.' },
+          { id: 'py-3', name: 'Modules & Virtual Environments', summary: 'Organizing files and isolating dependencies with venv and pip.' },
+        ],
+      },
+      {
+        id: 'py-s2',
+        title: 'Stage 2: Files, APIs & Testing',
+        description: 'Connect Python scripts to real files, HTTP APIs, and tests.',
+        topics: [
+          { id: 'py-4', name: 'Error Handling & File I/O', summary: 'Reading JSON/CSV files safely and catching exceptions clearly.' },
+          { id: 'py-5', name: 'Object-Oriented Programming & Dataclasses', summary: 'Modeling domain objects cleanly.' },
+          { id: 'py-6', name: 'Testing with pytest & Frameworks', summary: 'Writing repeatable tests and exploring FastAPI / Flask / Django.' },
+        ],
+      },
+    ],
+  },
   'react-native': {
     id: 'rm-mobile',
     slug: 'react-native',
@@ -376,19 +436,154 @@ const VERIFIED_ROADMAPS: Record<string, Omit<RoadmapLookupResult, 'found' | 'sou
   },
 };
 
+const LIVE_CACHE = new Map<string, { expiresAt: number; result: RoadmapLookupResult }>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
 export function resolveRoadmapSlug(fieldOrSlug: string): string | null {
   const key = fieldOrSlug.trim().toLowerCase();
+  if (!key) return null;
   if (VERIFIED_ROADMAPS[key]) return key;
   if (ROADMAP_SLUGS[key]) return ROADMAP_SLUGS[key];
   for (const [label, slug] of Object.entries(ROADMAP_SLUGS)) {
     if (key.includes(label) || label.includes(key)) return slug;
   }
+  if (/^[a-z0-9-]{2,40}$/.test(key)) return key;
   return null;
+}
+
+function parseRoadmapShJson(slug: string, json: any, fallbackField: string): RoadmapLookupResult | null {
+  const nodes: any[] = Array.isArray(json?.nodes) ? json.nodes : [];
+  const edges: any[] = Array.isArray(json?.edges) ? json.edges : [];
+  if (!nodes.length) return null;
+
+  const rawTitle =
+    typeof json?.title === 'string'
+      ? json.title
+      : json?.title?.page || json?.title?.card || fallbackField;
+  const rawDesc =
+    typeof json?.description === 'string' && json.description.trim()
+      ? json.description.replace(/@currentYear@/g, String(new Date().getFullYear()))
+      : `Official roadmap.sh progression for ${rawTitle}.`;
+
+  const nodeById = new Map<string, any>();
+  for (const n of nodes) {
+    if (n?.id) nodeById.set(String(n.id), n);
+  }
+
+  // Map topic -> connected subtopics via edges
+  const subtopicsByTopic = new Map<string, string[]>();
+  for (const edge of edges) {
+    const src = nodeById.get(String(edge?.source || ''));
+    const tgt = nodeById.get(String(edge?.target || ''));
+    if (!src || !tgt) continue;
+    const srcLabel = String(tgt?.data?.label || '').trim();
+    if ((src.type === 'topic' || src.type === 'todo') && tgt.type === 'subtopic' && srcLabel) {
+      const list = subtopicsByTopic.get(src.id) || [];
+      if (!list.includes(srcLabel)) list.push(srcLabel);
+      subtopicsByTopic.set(src.id, list);
+    } else if ((tgt.type === 'topic' || tgt.type === 'todo') && src.type === 'subtopic') {
+      const lbl = String(src?.data?.label || '').trim();
+      if (lbl) {
+        const list = subtopicsByTopic.get(tgt.id) || [];
+        if (!list.includes(lbl)) list.push(lbl);
+        subtopicsByTopic.set(tgt.id, list);
+      }
+    }
+  }
+
+  const topicNodes = nodes
+    .filter((n) => (n?.type === 'topic' || n?.type === 'todo') && String(n?.data?.label || '').trim())
+    .sort((a, b) => (Number(a?.position?.y) || 0) - (Number(b?.position?.y) || 0));
+
+  if (topicNodes.length === 0) return null;
+
+  const seenNames = new Set<string>();
+  const cleanTopics: { y: number; topic: RoadmapStageTopic }[] = [];
+  for (const node of topicNodes) {
+    const label = String(node.data.label).replace(/\s+/g, ' ').trim();
+    if (!label || label.length > 90) continue;
+    const key = label.toLowerCase();
+    if (seenNames.has(key)) continue;
+    seenNames.add(key);
+
+    const subs = subtopicsByTopic.get(node.id) || [];
+    const summary = subs.length
+      ? `Includes: ${subs.slice(0, 5).join(', ')}${subs.length > 5 ? ` (+${subs.length - 5} more)` : ''}.`
+      : 'Core milestone from the official roadmap.sh path.';
+
+    cleanTopics.push({
+      y: Number(node?.position?.y) || 0,
+      topic: {
+        id: `rmsh-${slug}-${node.id}`,
+        name: label,
+        summary,
+      },
+    });
+  }
+
+  if (cleanTopics.length === 0) return null;
+
+  // Build balanced progressive stages (3-5 stages of ~4-7 topics each)
+  const labelNodes = nodes
+    .filter((n) => n?.type === 'label' && String(n?.data?.label || '').trim())
+    .sort((a, b) => (Number(a?.position?.y) || 0) - (Number(b?.position?.y) || 0))
+    .map((n) => ({
+      y: Number(n?.position?.y) || 0,
+      title: String(n.data.label).replace(/\s+/g, ' ').trim(),
+    }));
+
+  const stages: RoadmapStage[] = [];
+  const total = cleanTopics.length;
+  const targetStageCount = total <= 6 ? 2 : total <= 14 ? 3 : 4;
+  const chunkSize = Math.ceil(total / targetStageCount);
+
+  for (let i = 0; i < total; i += chunkSize) {
+    const slice = cleanTopics.slice(i, i + chunkSize);
+    const stageNum = stages.length + 1;
+    const minY = slice[0].y;
+    const maxY = slice[slice.length - 1].y;
+    const matchingLabel = labelNodes.find((l) => l.y >= minY - 120 && l.y <= maxY + 40);
+    const defaultStageNames = [
+      'Core Foundations',
+      'Essential Skills & Tooling',
+      'Practical Application',
+      'Architecture & Specialization',
+    ];
+    const stageName = matchingLabel?.title || defaultStageNames[stageNum - 1] || `Phase ${stageNum}`;
+    stages.push({
+      id: `${slug}-stage-${stageNum}`,
+      title: `Stage ${stageNum}: ${stageName}`,
+      description:
+        stageNum === 1
+          ? 'Start with these core building blocks in order.'
+          : stageNum === targetStageCount
+            ? 'Deepen your skills and prepare for production projects.'
+            : 'Build momentum with the next layer of practical tools.',
+      topics: slice.map((x) => x.topic),
+    });
+  }
+
+  const base = VERIFIED_ROADMAPS[slug];
+  return {
+    found: true,
+    source: 'roadmap.sh',
+    liveSynced: true,
+    id: base?.id || `rm-${slug}`,
+    slug,
+    title: String(rawTitle),
+    field: base?.field || fallbackField || String(rawTitle),
+    officialUrl: `https://roadmap.sh/${slug}`,
+    summary: String(rawDesc),
+    whatYouWillLearn:
+      base?.whatYouWillLearn ||
+      stages.map((s) => `${s.title.replace(/^Stage \d+:\s*/, '')}: ${s.topics.slice(0, 3).map((t) => t.name).join(', ')}`),
+    stages,
+  };
 }
 
 export async function lookupRoadmapSh(fieldOrSlug: string): Promise<RoadmapLookupResult> {
   const slug = resolveRoadmapSlug(fieldOrSlug);
-  if (!slug || !VERIFIED_ROADMAPS[slug]) {
+  if (!slug) {
     return {
       found: false,
       source: 'none',
@@ -403,12 +598,16 @@ export async function lookupRoadmapSh(fieldOrSlug: string): Promise<RoadmapLooku
     };
   }
 
+  const cached = LIVE_CACHE.get(slug);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.result;
+  }
+
   const base = VERIFIED_ROADMAPS[slug];
 
-  // Try fetching live roadmap.sh JSON metadata when network permits, otherwise keep verified structure
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(`https://roadmap.sh/api/v1-official-roadmap/${slug}`, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
@@ -416,37 +615,50 @@ export async function lookupRoadmapSh(fieldOrSlug: string): Promise<RoadmapLooku
     clearTimeout(timer);
     if (res.ok) {
       const json: any = await res.json();
-      const rawTitle =
-        typeof json?.title === 'string'
-          ? json.title
-          : json?.title?.page || json?.title?.card || base.title;
-      const rawDesc =
-        typeof json?.description === 'string' && json.description.trim()
-          ? json.description.replace(/@currentYear@/g, String(new Date().getFullYear()))
-          : base.summary;
-      return {
-        found: true,
-        source: 'roadmap.sh',
-        ...base,
-        title: String(rawTitle),
-        summary: String(rawDesc),
-      };
+      const parsed = parseRoadmapShJson(slug, json, base?.field || fieldOrSlug);
+      if (parsed) {
+        LIVE_CACHE.set(slug, { expiresAt: Date.now() + CACHE_TTL_MS, result: parsed });
+        return parsed;
+      }
     }
   } catch {
     // Gracefully keep verified roadmap.sh catalog entry
   }
 
+  if (base) {
+    return {
+      found: true,
+      source: 'roadmap.sh',
+      liveSynced: false,
+      ...base,
+    };
+  }
+
   return {
-    found: true,
-    source: 'roadmap.sh',
-    ...base,
+    found: false,
+    source: 'none',
+    id: '',
+    slug: '',
+    title: fieldOrSlug,
+    field: fieldOrSlug,
+    officialUrl: 'https://roadmap.sh',
+    summary: '',
+    whatYouWillLearn: [],
+    stages: [],
   };
 }
 
 export function listOfficialRoadmaps(): RoadmapLookupResult[] {
-  return Object.values(VERIFIED_ROADMAPS).map((r) => ({
-    found: true,
-    source: 'roadmap.sh',
-    ...r,
-  }));
+  return Object.values(VERIFIED_ROADMAPS).map((r) => {
+    const cached = LIVE_CACHE.get(r.slug);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.result;
+    }
+    return {
+      found: true,
+      source: 'roadmap.sh',
+      liveSynced: false,
+      ...r,
+    };
+  });
 }

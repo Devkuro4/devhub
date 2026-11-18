@@ -26,6 +26,7 @@ import { Badge, EmptyState, Modal, PageHeader, ProgressBar, SectionTabs } from '
 import { getUrlError } from '../lib/url';
 import {
   evaluateShortQuizAnswer,
+  extractCourseMaterial,
   inspectCourseUrl,
   requestAiQuiz,
   requestCodeReview,
@@ -369,6 +370,17 @@ export const LearningSection = ({
   const [urlInspectBusy, setUrlInspectBusy] = useState(false);
   const [urlInspectNote, setUrlInspectNote] = useState('');
   const [planBusyId, setPlanBusyId] = useState<string | null>(null);
+  const [showEmbedForId, setShowEmbedForId] = useState<Record<string, boolean>>({});
+  const [courseUploadBusy, setCourseUploadBusy] = useState(false);
+  const [courseUploadNote, setCourseUploadNote] = useState('');
+  const [courseSourcesDraft, setCourseSourcesDraft] = useState<string[]>(['YouTube']);
+  const [courseMetaDraft, setCourseMetaDraft] = useState<{
+    embedUrl?: string;
+    videoId?: string;
+    playlistId?: string;
+    isPlaylist?: boolean;
+    note?: string;
+  }>({});
   const [newCourseForm, setNewCourseForm] = useState({
     title: '',
     platform: 'YouTube',
@@ -393,11 +405,21 @@ export const LearningSection = ({
     try {
       const info = await inspectCourseUrl(newCourseForm.url.trim());
       setUrlInspectNote(info.note || '');
-      if (info.accessible && info.title && !newCourseForm.title.trim()) {
+      setCourseMetaDraft({
+        embedUrl: info.embedUrl,
+        videoId: info.videoId,
+        playlistId: info.playlistId,
+        isPlaylist: info.isPlaylist,
+        note: info.note,
+      });
+      if (info.platform && !courseSourcesDraft.includes(info.platform)) {
+        setCourseSourcesDraft((prev) => Array.from(new Set([info.platform!, ...prev])));
+      }
+      if (info.accessible || info.title) {
         setNewCourseForm((prev) => ({
           ...prev,
-          title: info.title || prev.title,
-          instructor: info.author || prev.instructor,
+          title: !prev.title.trim() && info.title ? info.title : prev.title,
+          instructor: !prev.instructor.trim() && info.author ? info.author : prev.instructor,
           platform: info.platform || prev.platform,
         }));
       }
@@ -406,6 +428,37 @@ export const LearningSection = ({
     } finally {
       setUrlInspectBusy(false);
     }
+  };
+
+  const handleCourseMaterialUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setCourseUploadBusy(true);
+    setCourseUploadNote('');
+    const notes: string[] = [];
+    for (const f of Array.from(files)) {
+      if (/\.(mp4|mkv|mov|avi|webm|m4v|flv|wmv|mp3|wav|m4a|aac|flac|ogg)$/i.test(f.name)) {
+        notes.push(`${f.name}: Skipped video/audio file — Dev Hub never uploads or processes video files.`);
+        continue;
+      }
+      try {
+        const res = await extractCourseMaterial(f, user.id);
+        notes.push(`${f.name}: ${res.note}`);
+        if (res.readable && res.outline.length > 0) {
+          setNewCourseForm((prev) => ({
+            ...prev,
+            title: prev.title.trim() ? prev.title : f.name.replace(/\.[^.]+$/, ''),
+            modulesText: res.outline.join('\n'),
+          }));
+        }
+        if (!courseSourcesDraft.includes('Downloaded Course')) {
+          setCourseSourcesDraft((prev) => Array.from(new Set([...prev, 'Downloaded Course'])));
+        }
+      } catch (err: any) {
+        notes.push(`${f.name}: ${err?.message || 'Could not inspect this file automatically.'}`);
+      }
+    }
+    setCourseUploadNote(notes.join(' '));
+    setCourseUploadBusy(false);
   };
 
   const handleRegisterCourse = (e: React.FormEvent) => {
@@ -417,13 +470,14 @@ export const LearningSection = ({
       .filter(Boolean)
       .map((title, i) => ({ id: `mod-${Date.now()}-${i}`, title, completed: false }));
 
+    const primaryPlatform =
+      newCourseForm.platform === 'Other' && newCourseForm.customPlatform.trim()
+        ? newCourseForm.customPlatform.trim()
+        : newCourseForm.platform;
     const created: CourseItem = {
       id: `course-${Date.now()}`,
       title: newCourseForm.title.trim(),
-      platform:
-        newCourseForm.platform === 'Other' && newCourseForm.customPlatform.trim()
-          ? newCourseForm.customPlatform.trim()
-          : newCourseForm.platform,
+      platform: primaryPlatform,
       url: newCourseForm.url.trim(),
       instructor: newCourseForm.instructor.trim() || 'Self-Paced',
       field: newCourseForm.field,
@@ -437,12 +491,21 @@ export const LearningSection = ({
       notes: '',
       referenceLinks: newCourseForm.referenceLink.trim() ? [newCourseForm.referenceLink.trim()] : [],
       modules: modules.length ? modules : [{ id: `mod-${Date.now()}`, title: 'Lesson 1: Basics', completed: false }],
+      sources: Array.from(new Set([primaryPlatform, ...courseSourcesDraft].filter(Boolean))),
+      embedUrl: courseMetaDraft.embedUrl,
+      videoId: courseMetaDraft.videoId,
+      playlistId: courseMetaDraft.playlistId,
+      isPlaylist: courseMetaDraft.isPlaylist,
+      metadataNote: courseMetaDraft.note,
     };
 
     setCourses([created, ...courses]);
     setOpenCourseIds((prev) => ({ ...prev, [created.id]: true }));
     setShowAddCourseModal(false);
     setUrlInspectNote('');
+    setCourseUploadNote('');
+    setCourseMetaDraft({});
+    setCourseSourcesDraft(['YouTube']);
     setNewCourseForm({
       title: '',
       platform: 'YouTube',
@@ -964,7 +1027,7 @@ export const LearningSection = ({
 
       {/* 1. TODAY'S LEARNING (5-STAGE INTERACTIVE STEPPER) */}
       {subTab === 'today' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div data-tour="learning-today" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Lesson rail: where you are in today's five steps */}
           <aside className="lg:col-span-3 lg:sticky lg:top-6 space-y-4 min-w-0">
             <div className={`${cardClass} p-5 space-y-3`}>
@@ -1589,11 +1652,11 @@ export const LearningSection = ({
 
       {/* 2. MY COURSES */}
       {subTab === 'courses' && (
-        <div className="space-y-6">
+        <div data-tour="learning-courses" className="space-y-6">
           {courses.length === 0 ? (
             <EmptyState
               title="No courses linked yet"
-              description="Learning from YouTube, Udemy, freeCodeCamp, or downloaded notes? Add it here so Dev Hub can break it into daily lessons and spot any roadmap gaps."
+              description="Learning from YouTube, Udemy, Coursera, freeCodeCamp, or downloaded notes? Add it here so Dev Hub can break it into daily lessons and spot any roadmap gaps."
               actionLabel="Add a Course"
               onAction={() => setShowAddCourseModal(true)}
             />
@@ -1603,15 +1666,21 @@ export const LearningSection = ({
                 const plan = learningPlans.find((p) => p.courseId === course.id);
                 const busyPlan = planBusyId === course.id;
                 const modulesOpen = openCourseIds[course.id] ?? false;
+                const embedOpen = showEmbedForId[course.id] ?? false;
 
                 return (
-                  <div key={course.id} className={`${cardClass} p-6 space-y-5`}>
+                  <div key={course.id} className={`${cardClass} p-5 sm:p-6 space-y-5`}>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
                       <div className="space-y-3 max-w-2xl min-w-0">
-                        <p className={`text-xs ${textSecondary}`}>
-                          <span className="font-semibold text-[var(--accent-600)]">{course.platform}</span> · {course.skillLevel} · {course.field}
+                        <p className={`text-xs flex flex-wrap items-center gap-1.5 ${textSecondary}`}>
+                          <span className="font-semibold text-[var(--accent-600)]">{course.platform}</span>
+                          {course.sources && course.sources.length > 1 && (
+                            <span>({course.sources.join(' + ')})</span>
+                          )}
+                          <span>· {course.skillLevel} · {course.field}</span>
+                          {course.isPlaylist && <Badge variant="info">Playlist</Badge>}
                         </p>
-                        <h2 className={`text-2xl ${textPrimary}`}>{course.title}</h2>
+                        <h2 className={`text-2xl break-words ${textPrimary}`}>{course.title}</h2>
                         <p className={`text-sm ${textSecondary}`}>
                           Now on <strong className={textPrimary}>{course.currentTopic}</strong>
                         </p>
@@ -1631,6 +1700,30 @@ export const LearningSection = ({
                         <span key={m.id} title={m.title} className={`h-2.5 flex-1 rounded-sm ${m.completed ? 'bg-[var(--spark)]' : course.currentTopic === m.title ? 'bg-[var(--accent-500)]' : 'bg-[var(--border-hairline)]'}`} />
                       ))}
                     </div>
+
+                    {/* Optional safe YouTube video/playlist embed */}
+                    {course.embedUrl && (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowEmbedForId((prev) => ({ ...prev, [course.id]: !embedOpen }))}
+                          className={`${btnSecondary} min-h-[40px] text-xs`}
+                        >
+                          <Play className="w-3.5 h-3.5" /> {embedOpen ? 'Hide Embedded Player' : course.isPlaylist ? 'Open Embedded Playlist' : 'Watch Embedded Video'}
+                        </button>
+                        {embedOpen && (
+                          <div className={`rounded-xl overflow-hidden border ${borderClass} aspect-video bg-black`}>
+                            <iframe
+                              src={course.embedUrl}
+                              title={course.title}
+                              className="w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Actions + Notes */}
                     <div className={`pt-4 border-t ${borderClass} grid grid-cols-1 lg:grid-cols-12 gap-5 items-start`}>
@@ -1815,16 +1908,16 @@ export const LearningSection = ({
           )}
 
           {/* Add Course Modal using shared accessible Modal */}
-          <Modal open={showAddCourseModal} onClose={() => setShowAddCourseModal(false)} title="Add a Course or Resource">
+          <Modal open={showAddCourseModal} onClose={() => setShowAddCourseModal(false)} title="Add a Course or Multi-Source Path">
             <form onSubmit={handleRegisterCourse} className="space-y-3.5">
               <div>
-                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Course or Playlist URL (Optional)</label>
+                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Course or Playlist URL (YouTube, Udemy, Coursera, etc.)</label>
                 <div className="flex gap-2">
                   <input
                     type="url"
                     value={newCourseForm.url}
                     onChange={(e) => setNewCourseForm({ ...newCourseForm, url: e.target.value })}
-                    placeholder="https://www.youtube.com/watch?v=... or Udemy link"
+                    placeholder="https://www.youtube.com/playlist?list=... or Udemy / Coursera link"
                     className={inputClass}
                   />
                   <button type="button" disabled={urlInspectBusy || Boolean(courseUrlError) || !newCourseForm.url.trim()} onClick={handleInspectUrl} className={btnSecondary}>
@@ -1833,6 +1926,23 @@ export const LearningSection = ({
                 </div>
                 {courseUrlError && <p className="text-xs text-[var(--danger-ink)] mt-1">{courseUrlError}</p>}
                 {urlInspectNote && <p className={`text-xs mt-1 ${textSecondary}`}>{urlInspectNote}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Import Downloaded Course Folder (.zip) or Syllabus File (Optional)</label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".zip,.pdf,.doc,.docx,.txt,.md,.ppt,.pptx"
+                  onChange={(e) => {
+                    handleCourseMaterialUpload(e.target.files);
+                    e.target.value = '';
+                  }}
+                  className={`block w-full text-xs ${textSecondary} file:mr-3 file:min-h-10 file:px-3.5 file:rounded-lg file:border ${borderClass} file:bg-[var(--surface-elevated)] file:text-[var(--ink-primary)] file:cursor-pointer`}
+                />
+                <p className={`text-[11px] mt-1 ${textSecondary}`}>Extracts folders, PDFs, notes & starter code automatically. Video/audio files are skipped.</p>
+                {courseUploadBusy && <p className={`text-xs mt-1 ${textSecondary}`}>Reading course archive…</p>}
+                {courseUploadNote && <p className={`text-xs mt-1 ${textSecondary}`}>{courseUploadNote}</p>}
               </div>
 
               <div>
@@ -1849,16 +1959,17 @@ export const LearningSection = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Source / Format</label>
+                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Primary Source / Format</label>
                   <select
                     value={newCourseForm.platform}
                     onChange={(e) => setNewCourseForm({ ...newCourseForm, platform: e.target.value })}
                     className={inputClass}
                   >
-                    <option value="YouTube">YouTube</option>
+                    <option value="YouTube">YouTube (Video or Playlist)</option>
                     <option value="Udemy">Udemy</option>
+                    <option value="Coursera">Coursera</option>
                     <option value="freeCodeCamp">freeCodeCamp</option>
-                    <option value="Downloaded Course">Downloaded Course (Local)</option>
+                    <option value="Downloaded Course">Downloaded Course (.zip / Local)</option>
                     <option value="PDF / Personal Notes">PDF / Personal Notes</option>
                     <option value="Official Documentation">Official Documentation</option>
                     <option value="Other">Other</option>
@@ -1873,6 +1984,29 @@ export const LearningSection = ({
                     placeholder="e.g., JavaScript, Python, Frontend"
                     className={inputClass}
                   />
+                </div>
+              </div>
+
+              <div>
+                <span className={`block text-xs font-medium mb-1.5 ${textSecondary}`}>Combine Multiple Sources (Optional)</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {['YouTube', 'Udemy', 'Coursera', 'Downloaded Course', 'Official Docs'].map((src) => {
+                    const active = courseSourcesDraft.includes(src);
+                    return (
+                      <button
+                        key={src}
+                        type="button"
+                        onClick={() =>
+                          setCourseSourcesDraft((prev) => (prev.includes(src) ? prev.filter((x) => x !== src) : [...prev, src]))
+                        }
+                        className={`px-2.5 py-1 rounded-full text-xs border cursor-pointer ${
+                          active ? 'border-[var(--accent-600)] bg-[var(--accent-50)] text-[var(--accent-600)] font-semibold' : `${borderClass} ${textSecondary}`
+                        }`}
+                      >
+                        {src}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1899,7 +2033,7 @@ export const LearningSection = ({
               </div>
 
               <div>
-                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Modules or Topics (One per line)</label>
+                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Modules, Sections, Readings or Exercises (One per line)</label>
                 <textarea
                   rows={3}
                   value={newCourseForm.modulesText}
@@ -2015,7 +2149,7 @@ export const LearningSection = ({
 
       {/* 4. QUIZZES */}
       {subTab === 'quizzes' && (
-        <div className="space-y-6">
+        <div data-tour="learning-quizzes" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <section className="lg:col-span-8 space-y-4 min-w-0">
               <h2 className={`text-xl ${textPrimary}`}>Pick a quiz</h2>

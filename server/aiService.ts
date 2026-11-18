@@ -1,9 +1,7 @@
-// ---------------------------------------------------------------------------
-// Groq integration (OpenAI-compatible chat API). No SDK needed: plain fetch.
-// Docs: https://console.groq.com/docs
-// ---------------------------------------------------------------------------
+import { GoogleGenAI, Type as GeminiType } from '@google/genai';
 
-// The schemas below describe the JSON each AI task must return. Values are plain JSON Schema types.
+// The schemas below describe the JSON each AI task must return. Values are plain JSON Schema types
+// (converted automatically to Gemini Type enums when using @google/genai).
 const Type = {
   OBJECT: 'object',
   ARRAY: 'array',
@@ -15,10 +13,8 @@ const Type = {
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
-// Groq changes its model list often. Both of these can be overridden with environment variables
-// (GROQ_MODEL) or from the Admin screen, so a retired model never needs a code change.
-const DEFAULT_MODEL = (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim();
-export const MODEL_CHOICES: string[] = Array.from(new Set([DEFAULT_MODEL, 'openai/gpt-oss-120b', 'openai/gpt-oss-20b']));
+const DEFAULT_GEMINI_MODEL = 'gemini-4-hydrogen';
+const DEFAULT_GROQ_MODEL = (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim();
 const REASONING_EFFORT = (['low', 'medium', 'high'].includes(String(process.env.GROQ_REASONING_EFFORT))
   ? String(process.env.GROQ_REASONING_EFFORT)
   : 'low') as 'low' | 'medium' | 'high';
@@ -31,7 +27,7 @@ export interface GroundingSource {
 }
 
 export interface AiRuntimeSettings {
-  provider: 'Groq';
+  provider: 'Gemini' | 'Groq';
   model: SupportedModel;
   dailyLimitPerUser: number;
   enabled: boolean;
@@ -58,12 +54,103 @@ export interface AiUsageStats {
   perUserCallsToday: Record<string, number>;
 }
 
+function getGeminiApiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY?.trim().replace(/^['"]|['"]$/g, '');
+  if (!key || key === 'MY_GEMINI_API_KEY' || key.toLowerCase().includes('your-gemini')) return null;
+  return key;
+}
+
+function getGroqApiKey(): string | null {
+  const key = process.env.GROQ_API_KEY?.trim().replace(/^['"]|['"]$/g, '');
+  if (!key || key === 'MY_GROQ_API_KEY' || key.toLowerCase().includes('your-groq')) return null;
+  return key;
+}
+
+const initialProvider: 'Gemini' | 'Groq' = getGeminiApiKey() || !getGroqApiKey() ? 'Gemini' : 'Groq';
+export const MODEL_CHOICES: string[] = Array.from(
+  new Set([
+    DEFAULT_GEMINI_MODEL,
+    'gemini-3.1-flash-lite',
+    DEFAULT_GROQ_MODEL,
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+  ])
+);
+
 const runtimeSettings: AiRuntimeSettings = {
-  provider: 'Groq',
-  model: DEFAULT_MODEL,
+  provider: initialProvider,
+  model: initialProvider === 'Gemini' ? DEFAULT_GEMINI_MODEL : DEFAULT_GROQ_MODEL,
   dailyLimitPerUser: 40,
   enabled: true,
 };
+
+let cachedGeminiClient: { key: string; client: GoogleGenAI } | null = null;
+function getGeminiClient(apiKey: string): GoogleGenAI {
+  if (cachedGeminiClient && cachedGeminiClient.key === apiKey) {
+    return cachedGeminiClient.client;
+  }
+  const client = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+  cachedGeminiClient = { key: apiKey, client };
+  return client;
+}
+
+function toGeminiSchema(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema;
+  const mapType = (t: string | undefined) => {
+    switch (t) {
+      case 'object':
+        return GeminiType.OBJECT;
+      case 'array':
+        return GeminiType.ARRAY;
+      case 'string':
+        return GeminiType.STRING;
+      case 'number':
+        return GeminiType.NUMBER;
+      case 'integer':
+        return GeminiType.INTEGER;
+      case 'boolean':
+        return GeminiType.BOOLEAN;
+      default:
+        return t;
+    }
+  };
+  const out: any = { ...schema };
+  if (typeof out.type === 'string') out.type = mapType(out.type);
+  if (out.properties && typeof out.properties === 'object') {
+    const props: Record<string, any> = {};
+    for (const [k, v] of Object.entries(out.properties)) {
+      props[k] = toGeminiSchema(v);
+    }
+    out.properties = props;
+  }
+  if (out.items) {
+    out.items = toGeminiSchema(out.items);
+  }
+  return out;
+}
+
+function extractGeminiSources(response: any): GroundingSource[] {
+  const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (!Array.isArray(chunks)) return [];
+  const out: GroundingSource[] = [];
+  const seen = new Set<string>();
+  for (const chunk of chunks) {
+    const uri = chunk?.web?.uri || chunk?.retrievedContext?.uri;
+    const title = chunk?.web?.title || chunk?.retrievedContext?.title || uri;
+    if (typeof uri === 'string' && uri.startsWith('http') && !seen.has(uri)) {
+      seen.add(uri);
+      out.push({ title: String(title || uri).trim(), uri });
+    }
+  }
+  return out.slice(0, 6);
+}
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -81,6 +168,10 @@ const usageStats: AiUsageStats = {
   perUserCallsToday: {},
 };
 
+// Cache learning plan results to keep onboarding and repeat plan checks fast
+const learningPlanCache = new Map<string, { value: any; expiresAt: number }>();
+const PLAN_CACHE_TTL_MS = 30 * 60 * 1000;
+
 function resetDailyCountersIfNeeded() {
   const today = todayIso();
   if (usageStats.lastResetDate !== today) {
@@ -90,10 +181,19 @@ function resetDailyCountersIfNeeded() {
   }
 }
 
-function getApiKey(): string | null {
-  const key = process.env.GROQ_API_KEY?.trim().replace(/^['"]|['"]$/g, '');
-  if (!key || key === 'MY_GROQ_API_KEY' || key.toLowerCase().includes('your-groq')) return null;
-  return key;
+function getActiveProvider(): { provider: 'Gemini' | 'Groq'; apiKey: string; defaultModel: string } {
+  const geminiKey = getGeminiApiKey();
+  const groqKey = getGroqApiKey();
+  if (runtimeSettings.provider === 'Groq' && groqKey) {
+    return { provider: 'Groq', apiKey: groqKey, defaultModel: DEFAULT_GROQ_MODEL };
+  }
+  if (geminiKey) {
+    return { provider: 'Gemini', apiKey: geminiKey, defaultModel: DEFAULT_GEMINI_MODEL };
+  }
+  if (groqKey) {
+    return { provider: 'Groq', apiKey: groqKey, defaultModel: DEFAULT_GROQ_MODEL };
+  }
+  throw new Error('AI service key is not configured on the server yet.');
 }
 
 function recordError(operation: string, message: string) {
@@ -113,15 +213,12 @@ function estimateTokensFromText(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-function checkRateAndAvailability(userId: string, operation: string): { apiKey: string } {
+function checkRateAndAvailability(userId: string, operation: string): { provider: 'Gemini' | 'Groq'; apiKey: string; defaultModel: string } {
   resetDailyCountersIfNeeded();
   if (!runtimeSettings.enabled) {
     throw new Error('AI features are currently paused by the community administrator.');
   }
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error('The Groq API key is not set on the server yet. Add GROQ_API_KEY to the server environment variables.');
-  }
+  const active = getActiveProvider();
   const userCalls = usageStats.perUserCallsToday[userId] || 0;
   if (userCalls >= runtimeSettings.dailyLimitPerUser) {
     throw new Error(`Daily AI limit (${runtimeSettings.dailyLimitPerUser} requests) reached for today. Try again tomorrow or ask an admin to raise the limit.`);
@@ -130,7 +227,7 @@ function checkRateAndAvailability(userId: string, operation: string): { apiKey: 
   usageStats.totalCalls += 1;
   usageStats.callsToday += 1;
   usageStats.byOperation[operation] = (usageStats.byOperation[operation] || 0) + 1;
-  return { apiKey };
+  return active;
 }
 
 class GroqHttpError extends Error {
@@ -169,8 +266,6 @@ async function groqRequest(apiKey: string, body: Record<string, unknown>): Promi
   }
 }
 
-// Some optional settings (reasoning effort, JSON mode, web search) are not accepted by every model.
-// If Groq rejects the request as invalid, retry once without them so the feature still works.
 async function groqChat(apiKey: string, body: Record<string, unknown>, optionalKeys: string[]): Promise<any> {
   try {
     return await groqRequest(apiKey, body);
@@ -227,14 +322,20 @@ function extractSources(choice: any): GroundingSource[] {
 
 function formatAiError(err: any, fallback: string): Error {
   if (err instanceof GroqHttpError) {
-    if (err.status === 401) return new Error('Groq rejected the API key. Check GROQ_API_KEY on the server.');
-    if (err.status === 429) return new Error('Groq is busy or the rate limit was reached. Please wait a moment and try again.');
+    if (err.status === 401) return new Error('AI provider rejected the API key. Check server credentials.');
+    if (err.status === 429) return new Error('AI provider is busy or the rate limit was reached. Please wait a moment and try again.');
     if (err.status === 404 || /model.*(not found|does not exist|decommission|no longer)/i.test(err.message)) {
-      return new Error(`The AI model "${runtimeSettings.model}" is not available on your Groq account. Ask an admin to pick another model.`);
+      return new Error(`The AI model "${runtimeSettings.model}" is not available. Ask an admin to pick another model.`);
     }
     return new Error(err.message || fallback);
   }
   const raw = String(err?.message || '').trim();
+  if (/RESOURCE_EXHAUSTED|429/i.test(raw)) {
+    return new Error('AI rate limit was reached temporarily. Please wait a moment and try again.');
+  }
+  if (/API_KEY_INVALID|PERMISSION_DENIED/i.test(raw)) {
+    return new Error('AI service key is missing or invalid in Settings > Secrets.');
+  }
   return err instanceof Error ? err : new Error(raw || fallback);
 }
 
@@ -246,9 +347,36 @@ async function runTextOperation(
   options?: { useWebSearch?: boolean; forceModel?: SupportedModel }
 ): Promise<{ text: string; model: string; latencyMs: number; sources: GroundingSource[] }> {
   const started = Date.now();
-  const modelToUse = options?.forceModel || runtimeSettings.model;
   try {
-    const { apiKey } = checkRateAndAvailability(userId, operation);
+    const { provider, apiKey, defaultModel } = checkRateAndAvailability(userId, operation);
+    const chosen = options?.forceModel || runtimeSettings.model || defaultModel;
+
+    if (provider === 'Gemini') {
+      const modelToUse = chosen.startsWith('gemini-') ? chosen : DEFAULT_GEMINI_MODEL;
+      const ai = getGeminiClient(apiKey);
+      const config: Record<string, any> = {
+        systemInstruction,
+      };
+      if (options?.useWebSearch) {
+        config.tools = [{ googleSearch: {} }];
+      }
+      const response = await ai.models.generateContent({
+        model: modelToUse,
+        contents: prompt,
+        config,
+      });
+      const text = cleanModelText(response.text);
+      const sources = options?.useWebSearch ? extractGeminiSources(response) : [];
+      const latencyMs = Date.now() - started;
+      const tokens = Number(response.usageMetadata?.totalTokenCount) || estimateTokensFromText(prompt + text);
+      usageStats.estimatedTokens += tokens;
+      usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
+      usageStats.lastSuccessAt = new Date().toISOString();
+      usageStats.lastLatencyMs = latencyMs;
+      return { text, model: modelToUse, latencyMs, sources };
+    }
+
+    const modelToUse = !chosen.startsWith('gemini-') ? chosen : DEFAULT_GROQ_MODEL;
     const body: Record<string, unknown> = {
       model: modelToUse,
       messages: [
@@ -288,13 +416,38 @@ async function runJsonOperation<T>(
 ): Promise<{ data: T; model: string; latencyMs: number }> {
   const started = Date.now();
   try {
-    const { apiKey } = checkRateAndAvailability(userId, operation);
+    const { provider, apiKey, defaultModel } = checkRateAndAvailability(userId, operation);
+
+    if (provider === 'Gemini') {
+      const modelToUse = runtimeSettings.model.startsWith('gemini-') ? runtimeSettings.model : DEFAULT_GEMINI_MODEL;
+      const ai = getGeminiClient(apiKey);
+      const response = await ai.models.generateContent({
+        model: modelToUse,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema: toGeminiSchema(responseSchema),
+        },
+      });
+      const raw = cleanModelText(response.text) || '{}';
+      const parsed = parseJsonLoose(raw) as T;
+      const latencyMs = Date.now() - started;
+      const tokens = Number(response.usageMetadata?.totalTokenCount) || estimateTokensFromText(prompt + raw);
+      usageStats.estimatedTokens += tokens;
+      usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
+      usageStats.lastSuccessAt = new Date().toISOString();
+      usageStats.lastLatencyMs = latencyMs;
+      return { data: parsed, model: modelToUse, latencyMs };
+    }
+
+    const modelToUse = !runtimeSettings.model.startsWith('gemini-') ? runtimeSettings.model : DEFAULT_GROQ_MODEL;
     const jsonInstruction = `${systemInstruction}
 
 Return ONLY one valid JSON object, with no markdown and no commentary, that follows this JSON Schema exactly. Fill every field:
 ${JSON.stringify(responseSchema)}`;
     const body: Record<string, unknown> = {
-      model: runtimeSettings.model,
+      model: modelToUse,
       messages: [
         { role: 'system', content: jsonInstruction },
         { role: 'user', content: prompt },
@@ -302,7 +455,7 @@ ${JSON.stringify(responseSchema)}`;
       temperature: 0.4,
       max_completion_tokens: 6000,
       response_format: { type: 'json_object' },
-      ...modelOptions(runtimeSettings.model),
+      ...modelOptions(modelToUse),
     };
     const data = await groqChat(apiKey, body, ['response_format', 'reasoning_effort', 'max_completion_tokens']);
     const raw = cleanModelText(data?.choices?.[0]?.message?.content) || '{}';
@@ -313,7 +466,7 @@ ${JSON.stringify(responseSchema)}`;
     usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
     usageStats.lastSuccessAt = new Date().toISOString();
     usageStats.lastLatencyMs = latencyMs;
-    return { data: parsed, model: runtimeSettings.model, latencyMs };
+    return { data: parsed, model: modelToUse, latencyMs };
   } catch (err: any) {
     const cleanErr = formatAiError(err, 'Structured AI request failed');
     recordError(operation, cleanErr.message);
@@ -323,10 +476,13 @@ ${JSON.stringify(responseSchema)}`;
 
 export function getAiStatus() {
   resetDailyCountersIfNeeded();
-  const hasKey = Boolean(getApiKey());
+  const hasGemini = Boolean(getGeminiApiKey());
+  const hasGroq = Boolean(getGroqApiKey());
+  const activeProvider: 'Gemini' | 'Groq' =
+    runtimeSettings.provider === 'Groq' && hasGroq ? 'Groq' : hasGemini ? 'Gemini' : hasGroq ? 'Groq' : runtimeSettings.provider;
   return {
-    configured: hasKey,
-    settings: runtimeSettings,
+    configured: hasGemini || hasGroq,
+    settings: { ...runtimeSettings, provider: activeProvider },
     modelChoices: MODEL_CHOICES,
     stats: {
       totalCalls: usageStats.totalCalls,
@@ -345,7 +501,9 @@ export function getAiStatus() {
 
 export function updateAiSettings(patch: Partial<AiRuntimeSettings>) {
   if (typeof patch.model === 'string' && /^[A-Za-z0-9._\/:-]{3,80}$/.test(patch.model.trim())) {
-    runtimeSettings.model = patch.model.trim();
+    const nextModel = patch.model.trim();
+    runtimeSettings.model = nextModel;
+    runtimeSettings.provider = nextModel.startsWith('gemini-') ? 'Gemini' : 'Groq';
   }
   if (typeof patch.dailyLimitPerUser === 'number' && patch.dailyLimitPerUser >= 5 && patch.dailyLimitPerUser <= 500) {
     runtimeSettings.dailyLimitPerUser = Math.round(patch.dailyLimitPerUser);
@@ -442,6 +600,38 @@ export async function generateLearningPlan(
     studyTime: string;
   }
 ) {
+  const cacheKey = JSON.stringify({
+    courseTitle: (input.courseTitle || '').trim().toLowerCase(),
+    platform: (input.platform || '').trim().toLowerCase(),
+    field: (input.field || '').trim().toLowerCase(),
+    currentLesson: (input.currentLesson || '').trim().toLowerCase(),
+    modules: (input.modules || []).slice(0, 40).map((m) => m.trim().toLowerCase()),
+    roadmapTitle: (input.roadmapTitle || '').trim().toLowerCase(),
+    skillLevel: (input.skillLevel || '').trim().toLowerCase(),
+    studyTime: (input.studyTime || '').trim().toLowerCase(),
+  });
+
+  const cached = learningPlanCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      data: cached.value as {
+        planSummary: string;
+        dailyTargets: {
+          dayLabel: string;
+          topic: string;
+          objective: string;
+          estimatedMinutes: number;
+          whatYouWillUnderstand: string;
+        }[];
+        coveredRoadmapTopics: string[];
+        missingRoadmapTopics: string[];
+        advice: string;
+      },
+      model: runtimeSettings.model,
+      latencyMs: 1,
+    };
+  }
+
   const schema = {
     type: Type.OBJECT,
     properties: {
@@ -476,7 +666,7 @@ Roadmap topics: ${input.roadmapTopics.join(', ')}
 
 Return a structured 5-day starter learning plan with plain-English objectives, plus which roadmap topics their course appears to cover and which important topics might be missing.`;
 
-  return runJsonOperation<{
+  const res = await runJsonOperation<{
     planSummary: string;
     dailyTargets: {
       dayLabel: string;
@@ -495,6 +685,17 @@ Return a structured 5-day starter learning plan with plain-English objectives, p
     'You are a patient learning coach organizing external courses into clear daily targets without overwhelming beginners. Never claim to have watched videos you did not see.',
     schema
   );
+
+  if (learningPlanCache.size >= 100) {
+    const oldestKey = learningPlanCache.keys().next().value;
+    if (oldestKey) learningPlanCache.delete(oldestKey);
+  }
+  learningPlanCache.set(cacheKey, {
+    value: res.data,
+    expiresAt: Date.now() + PLAN_CACHE_TTL_MS,
+  });
+
+  return res;
 }
 
 // 3. Daily Exercise Generation

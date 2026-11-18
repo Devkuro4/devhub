@@ -350,7 +350,7 @@ export const MentorSection = ({
     }`;
 
   return (
-    <div className="space-y-4">
+    <div data-tour="mentor-workspace" className="space-y-4">
       <PageHeader
         title="AI Mentor"
         description="A private study guide that teaches one small step at a time. Your chats are saved."
@@ -763,7 +763,7 @@ export const ProfileSection = ({
   );
 
   return (
-    <div className="max-w-6xl space-y-8">
+    <div data-tour="profile-section" className="max-w-6xl space-y-8">
       <PageHeader
         title="Profile & Settings"
         description="Update your learning focus, links, badges and notification preferences whenever you like."
@@ -991,7 +991,7 @@ export const ProfileSection = ({
           </section>
 
           {/* One save for every section above */}
-          <div className={`sticky bottom-16 lg:bottom-0 z-10 -mx-1 px-1 py-3 border-t ${borderClass} bg-[var(--canvas-bg)] flex items-center justify-between gap-3`}>
+          <div className={`sticky bottom-[68px] lg:bottom-0 z-10 -mx-1 px-3 sm:px-1 py-3 border-t ${borderClass} bg-[var(--canvas-bg)] flex flex-wrap items-center justify-between gap-3`}>
             <p aria-live="polite" className={`text-sm ${hasChanges ? 'text-[var(--ink-primary)] font-medium' : textSecondary}`}>
               {hasChanges ? 'You have unsaved changes.' : 'All changes saved.'}
             </p>

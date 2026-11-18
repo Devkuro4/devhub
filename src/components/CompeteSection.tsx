@@ -171,7 +171,7 @@ export const CompeteSection = ({
     }`;
 
   return (
-    <div className="space-y-6">
+    <div data-tour="compete-section" className="space-y-6">
       <PageHeader
         title="Compete"
         description="Earn XP for real learning, build a streak at your own pace, and see how you grow. Competing is always optional."

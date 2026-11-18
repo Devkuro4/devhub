@@ -54,6 +54,7 @@ import {
   INITIAL_ROADMAP_PROGRESS,
   INITIAL_SHOWCASE,
   INITIAL_SUBMISSIONS,
+  INITIAL_TUTORIAL_STATE,
   INITIAL_WEEKLY_ACTIVITIES,
   INITIAL_WEEKLY_PROJECT,
   LAUNCH_POSTS,
@@ -85,6 +86,14 @@ import { CommunitySection } from './components/CommunitySection';
 import { normalizeStore } from './lib/mentorChats';
 import { MentorSection, ProfileSection } from './components/MentorAndProfile';
 import { AdminSection } from './components/AdminSection';
+import { StudyChatProvider, StudyGroupChatWidget } from './components/StudyGroupChat';
+import {
+  FirstLearningSessionModal,
+  HelpDiscoveryDrawer,
+  HelpTriggerButton,
+  ProductTour,
+  WelcomeExperience,
+} from './components/WelcomeAndTour';
 import type {
   AiHelpEvent,
   MentorChatStore,
@@ -104,6 +113,7 @@ import type {
   RoadmapItem,
   RoadmapTopicProgress,
   ShowcaseProject,
+  TutorialState,
   UserSession,
   WeeklyProjectItem,
 } from './types';
@@ -137,6 +147,12 @@ export default function App() {
     normalizeOnboarding(saved?.onboarded ?? false, saved?.onboardingState)
   );
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [tutorialState, setTutorialState] = useState<TutorialState>(saved?.tutorialState ?? INITIAL_TUTORIAL_STATE);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [tourActive, setTourActive] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+  const [showFirstSession, setShowFirstSession] = useState(false);
+  const [helpDrawerOpen, setHelpDrawerOpen] = useState(false);
   const [authView, setAuthView] = useState<null | 'in' | 'up'>(() =>
     typeof window !== 'undefined' && /[?&#](error|error_description)=/.test(window.location.search + window.location.hash) ? 'in' : null
   );
@@ -316,6 +332,7 @@ export default function App() {
           user,
           onboarded,
           onboardingState,
+          tutorialState,
         })
       );
       if (!CLOUD && (typeof navigator === 'undefined' || navigator.onLine)) {
@@ -328,6 +345,7 @@ export default function App() {
     role,
     activeTab,
     onboardingState,
+    tutorialState,
     profile,
     courses,
     selectedRoadmapId,
@@ -417,6 +435,7 @@ export default function App() {
     hackathon: [hackathon, setHackathon],
     onboarded: [onboarded, setOnboarded],
     onboardingState: [onboardingState, setOnboardingState],
+    tutorialState: [tutorialState, setTutorialState],
     quizzes: [quizzes, setQuizzes],
     weeklyActivities: [weeklyActivities, setWeeklyActivities],
     challenges: [challenges, setChallenges],
@@ -832,7 +851,7 @@ export default function App() {
     { id: 'roadmaps', label: 'My Roadmap', icon: MapIcon, match: ['roadmaps'], group: 'Workspace' },
     { id: 'weekly-project', label: 'Projects', icon: FolderGit2, match: ['weekly-project', 'projects', 'showcase', 'devtools'], group: 'Workspace' },
     { id: 'compete', label: 'Compete', icon: Trophy, match: ['compete', 'leaderboard', 'badges'], group: 'Community' },
-    { id: 'community-home', label: 'Community', icon: Users, match: ['community-home', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'], group: 'Community' },
+    { id: 'community-home', label: 'Community', icon: Users, match: ['community-home', 'study-chat', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'], group: 'Community' },
     { id: 'ai-mentor', label: 'AI Mentor', icon: Bot, match: ['ai-mentor'], group: 'Tools' },
   ];
 
@@ -893,6 +912,9 @@ export default function App() {
     setOnboardingState({ status: 'completed', step: 1, draft: null, version: 2, personalized: true, completedAt: new Date().toISOString() });
     setShowOnboardingWizard(false);
     setActiveTab('dashboard');
+    if (!wasCompleted && !tutorialState.welcomeCompleted) {
+      setShowWelcome(true);
+    }
     notify(result.course ? `“${result.course.title}” is set up. Your plan is ready.` : 'Your learning path is ready!');
   };
 
@@ -1025,7 +1047,7 @@ export default function App() {
   if (CLOUD && !hydrated) return <LoadingScreen error={loadError} onSignOut={signOut} />;
 
   const isLearningSubTab = ['today', 'courses', 'submissions', 'quizzes', 'progress'].includes(activeTab);
-  const isCommunitySubTab = ['community-home', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
+  const isCommunitySubTab = ['community-home', 'study-chat', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
   const isProjectsSubTab = ['weekly-project', 'projects', 'showcase', 'devtools'].includes(activeTab);
   const isCompeteSubTab = ['compete', 'leaderboard', 'badges'].includes(activeTab);
   const isAdminSubTab = ['admin-dashboard', 'admin-members', 'admin-support', 'admin-activities', 'admin-ai'].includes(activeTab);
@@ -1040,6 +1062,7 @@ export default function App() {
     if (activeTab === 'progress') return { primary: 'My Learning', secondary: 'Your Progress' };
     if (activeTab === 'roadmaps') return { primary: 'My Roadmap' };
     if (activeTab === 'community-home') return { primary: 'Community', secondary: 'Community Home' };
+    if (activeTab === 'study-chat') return { primary: 'Community', secondary: 'Study Group Chat' };
     if (activeTab === 'community') return { primary: 'Community', secondary: 'Discussions' };
     if (activeTab === 'announcements') return { primary: 'Community', secondary: 'Announcements' };
     if (activeTab === 'resources') return { primary: 'Community', secondary: 'Learning Resources' };
@@ -1087,9 +1110,19 @@ export default function App() {
   const initialsOf = (n: string) => (n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'D';
   const studyGroup = role === 'admin' ? [] : (teamRoster || []).filter((m: any) => m.name !== user.name).slice(0, 3);
 
+  const hasPausedTour = !tutorialState.tourCompleted && tutorialState.lastTourStep > 0;
+  const startTourFromStep = (idx = 0) => {
+    setShowOnboardingWizard(false);
+    setShowWelcome(false);
+    setHelpDrawerOpen(false);
+    setTourStep(idx);
+    setTourActive(true);
+  };
+
   return (
     <MotionConfig reducedMotion="user">
     <DarkCtx.Provider value={darkMode}>
+    <StudyChatProvider user={user} profile={profile}>
       <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-screen app-backdrop lg:p-6 ${textPrimary}`}>
         <div className="app-frame min-h-screen lg:min-h-[calc(100vh-3rem)] flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
@@ -1118,6 +1151,7 @@ export default function App() {
                     <button
                       key={item.id}
                       type="button"
+                      data-tour={`nav-${item.id}`}
                       onClick={() => {
                         setShowOnboardingWizard(false);
                         setActiveTab(item.id);
@@ -1136,7 +1170,19 @@ export default function App() {
 
               {studyGroup.length > 0 && (
                 <div className="mt-9">
-                  <p className={sideLabel}>Study group</p>
+                  <div className="flex items-center justify-between pr-2">
+                    <p className={sideLabel}>Study group</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowOnboardingWizard(false);
+                        setActiveTab('study-chat');
+                      }}
+                      className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer pb-1"
+                    >
+                      Chat
+                    </button>
+                  </div>
                   <ul className="space-y-0.5">
                     {studyGroup.map((m: any) => (
                       <li key={m.id || m.name}>
@@ -1144,7 +1190,7 @@ export default function App() {
                           type="button"
                           onClick={() => {
                             setShowOnboardingWizard(false);
-                            setActiveTab('pairing-help');
+                            setActiveTab('study-chat');
                           }}
                           className="w-full flex items-center gap-3 px-3 py-2 rounded-full text-left cursor-pointer hover:bg-[var(--surface-subtle)]"
                         >
@@ -1191,6 +1237,7 @@ export default function App() {
               <div className="space-y-0.5">
                 <button
                   type="button"
+                  data-tour="nav-profile"
                   onClick={() => {
                     setShowOnboardingWizard(false);
                     setActiveTab('profile');
@@ -1203,6 +1250,11 @@ export default function App() {
                   <Settings className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
                   <span>Settings</span>
                 </button>
+                <HelpTriggerButton
+                  onClick={() => setHelpDrawerOpen(true)}
+                  hasPausedTour={hasPausedTour}
+                  className="w-full justify-start border-transparent px-3"
+                />
                 <button
                   type="button"
                   onClick={() => setDarkMode((v) => !v)}
@@ -1264,6 +1316,11 @@ export default function App() {
                   </>
                 )}
               </span>
+              <HelpTriggerButton
+                compact
+                hasPausedTour={hasPausedTour}
+                onClick={() => setHelpDrawerOpen(true)}
+              />
               <button
                 type="button"
                 aria-label="Toggle dark mode"
@@ -1347,7 +1404,7 @@ export default function App() {
           <div className="flex-1 flex flex-col min-w-0">
             {/* Breadcrumb bar (the home screen has its own search bar instead) */}
             {!onDashboardHome && (
-              <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-10 items-center border-b ${borderClass} bg-[var(--surface-bg)]/90 backdrop-blur rounded-tr-[28px]`}>
+              <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-10 items-center justify-between gap-4 border-b ${borderClass} bg-[var(--surface-bg)]/90 backdrop-blur rounded-tr-[28px]`}>
                 <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
                   <span className={textSecondary}>Dev Hub</span>
                   <span className={textSecondary}>/</span>
@@ -1361,6 +1418,10 @@ export default function App() {
                     </>
                   )}
                 </nav>
+                <HelpTriggerButton
+                  onClick={() => setHelpDrawerOpen(true)}
+                  hasPausedTour={hasPausedTour}
+                />
               </header>
             )}
 
@@ -1421,6 +1482,8 @@ export default function App() {
                         independence={independence}
                         teamRoster={teamRoster}
                         userName={user.name || ''}
+                        tutorialState={tutorialState}
+                        onStartTour={startTourFromStep}
                         styles={styles}
                       />
                     )}
@@ -1639,6 +1702,137 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* Real-time Study Group Chat Floating Widget */}
+      <StudyGroupChatWidget
+        styles={styles}
+        currentUserId={user.id || user.email || 'me'}
+        hidden={role === 'admin' || showOnboardingWizard || showWelcome || tourActive || showFirstSession || activeTab === 'study-chat'}
+        onOpenFullRoom={() => {
+          setShowOnboardingWizard(false);
+          setActiveTab('study-chat');
+        }}
+      />
+
+      {/* Interactive Welcome Experience, Product Tour, First Learning Session & Help Drawer */}
+      <WelcomeExperience
+        open={showWelcome && role !== 'admin' && !showOnboardingWizard}
+        profile={profile}
+        activeCourse={courses[0]}
+        selectedRoadmap={selectedRoadmap}
+        onStartTour={() => {
+          setTutorialState((prev) => ({ ...prev, welcomeCompleted: true, tourSkipped: false }));
+          startTourFromStep(0);
+        }}
+        onExploreOwn={() => {
+          setShowWelcome(false);
+          setTutorialState((prev) => ({ ...prev, welcomeCompleted: true, tourSkipped: true }));
+          notify('Explore freely! Reopen the tour anytime from Help.');
+        }}
+        styles={styles}
+      />
+
+      <ProductTour
+        open={tourActive && role !== 'admin'}
+        stepIndex={tourStep}
+        onStepChange={(idx) => {
+          setTourStep(idx);
+          setTutorialState((prev) => ({ ...prev, lastTourStep: idx }));
+        }}
+        onSwitchTab={(t) => setActiveTab(t)}
+        onFinish={() => {
+          setTourActive(false);
+          setActiveTab('dashboard');
+          const shouldShowFirstSession = !tutorialState.firstSessionCompleted;
+          setTutorialState((prev) => ({
+            ...prev,
+            welcomeCompleted: true,
+            tourCompleted: true,
+            tourSkipped: false,
+            lastTourStep: 0,
+          }));
+          if (shouldShowFirstSession) {
+            setShowFirstSession(true);
+          } else {
+            notify('Guided tour completed!');
+          }
+        }}
+        onPause={(currentStep) => {
+          setTourActive(false);
+          setTutorialState((prev) => ({
+            ...prev,
+            welcomeCompleted: true,
+            lastTourStep: currentStep,
+          }));
+          notify(`Tour paused at Step ${currentStep + 1} of 8. Resume anytime from Help.`);
+        }}
+        onSkip={() => {
+          setTourActive(false);
+          setTutorialState((prev) => ({
+            ...prev,
+            welcomeCompleted: true,
+            tourSkipped: true,
+          }));
+          notify('Tour skipped — all features remain unlocked. Revisit anytime via Help.');
+        }}
+        onTryMentorSample={(prompt) => {
+          handleAskMentor(prompt);
+        }}
+        onOpenActiveCourse={() => {
+          if (courses[0]) {
+            handleContinueCourse(courses[0].id);
+          } else {
+            setActiveTab('today');
+          }
+        }}
+        onRecordMiniTutorial={(key) => {
+          setTutorialState((prev) => ({
+            ...prev,
+            completedMiniTutorials: prev.completedMiniTutorials.includes(key)
+              ? prev.completedMiniTutorials
+              : [...prev.completedMiniTutorials, key],
+          }));
+        }}
+        profile={profile}
+        activeCourse={courses[0]}
+        selectedRoadmap={selectedRoadmap}
+        styles={styles}
+      />
+
+      <FirstLearningSessionModal
+        open={showFirstSession && role !== 'admin'}
+        selectedRoadmap={selectedRoadmap}
+        activeCourse={courses[0]}
+        dailyTarget={dailyTarget}
+        onStartLearning={() => {
+          setShowFirstSession(false);
+          setTutorialState((prev) => ({ ...prev, firstSessionCompleted: true }));
+          if (courses[0]) {
+            handleContinueCourse(courses[0].id);
+          } else {
+            setActiveTab('today');
+          }
+        }}
+        onClose={() => {
+          setShowFirstSession(false);
+          setTutorialState((prev) => ({ ...prev, firstSessionCompleted: true }));
+          setActiveTab('dashboard');
+        }}
+        styles={styles}
+      />
+
+      <HelpDiscoveryDrawer
+        open={helpDrawerOpen}
+        onClose={() => setHelpDrawerOpen(false)}
+        tutorialState={tutorialState}
+        onStartTourFromStep={startTourFromStep}
+        onOpenWelcome={() => {
+          setHelpDrawerOpen(false);
+          setShowWelcome(true);
+        }}
+        styles={styles}
+      />
+    </StudyChatProvider>
     </DarkCtx.Provider>
     </MotionConfig>
   );

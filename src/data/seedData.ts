@@ -10,8 +10,19 @@ import type {
   RoadmapItem,
   RoadmapTopicProgress,
   ShowcaseProject,
+  TutorialState,
   WeeklyProjectItem,
 } from '../types';
+
+export const INITIAL_TUTORIAL_STATE: TutorialState = {
+  welcomeCompleted: false,
+  tourCompleted: false,
+  tourSkipped: false,
+  lastTourStep: 0,
+  firstSessionCompleted: false,
+  completedMiniTutorials: [],
+  dismissedTips: [],
+};
 
 export const STORAGE_KEY = 'dev_growth_hub_state_v2';
 
@@ -743,6 +754,7 @@ export const PERSONAL_KEYS = [
   'hackathon',
   'onboarded',
   'onboardingState',
+  'tutorialState',
   'xpLedger',
 ];
 
@@ -810,6 +822,7 @@ export function blankPersonal(name = '', hk: any = { checklist: [] }) {
     hackathon: { ...hk, teamName: '', idea: '', repoUrl: '', checklist: (hk.checklist || []).map((c: any) => ({ ...c, done: false })) },
     onboarded: false,
     onboardingState: { status: 'not_started', step: 1, draft: null, version: 2, personalized: false },
+    tutorialState: { ...INITIAL_TUTORIAL_STATE },
     xpLedger: [],
   };
 }

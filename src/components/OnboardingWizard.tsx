@@ -212,6 +212,15 @@ export const OnboardingWizard = ({
   const [buildError, setBuildError] = useState('');
   const [buildNotes, setBuildNotes] = useState<string[]>([]);
   const [modules, setModules] = useState<CourseModule[]>([]);
+  const [courseMeta, setCourseMeta] = useState<{
+    embedUrl?: string;
+    videoId?: string;
+    playlistId?: string;
+    isPlaylist?: boolean;
+    note?: string;
+    extraSources?: string[];
+  }>({});
+  const [extractedStructured, setExtractedStructured] = useState<CourseModule[]>([]);
 
   // Save-and-resume: persist after a short pause
   useEffect(() => {
@@ -265,6 +274,14 @@ export const OnboardingWizard = ({
         courseTitle: p.courseTitle || r.title || '',
         courseInstructor: p.courseInstructor || r.author || '',
       }));
+      setCourseMeta((prev) => ({
+        ...prev,
+        embedUrl: r.embedUrl || prev.embedUrl,
+        videoId: r.videoId || prev.videoId,
+        playlistId: r.playlistId || prev.playlistId,
+        isPlaylist: r.isPlaylist ?? prev.isPlaylist,
+        note: r.note || prev.note,
+      }));
       setInspectNote(r.note);
     } catch {
       setInspectNote('We could not check that link. Enter the course details by hand below.');
@@ -284,17 +301,38 @@ export const OnboardingWizard = ({
     setFileBusy(true);
     const notes: string[] = [];
     for (const f of picked) {
+      if (/\.(mp4|mkv|mov|avi|webm|m4v|flv|wmv|mp3|wav|m4a|aac|flac|ogg)$/i.test(f.name)) {
+        notes.push(`${f.name}: Skipped video/audio file — Dev Hub never uploads or processes video files.`);
+        continue;
+      }
       if (f.size > MAX_FILE_BYTES) {
         setFileError(`“${f.name}” is larger than 15 MB, so it was not added.`);
         continue;
       }
-      setD((p) => ({ ...p, materials: [...p.materials, { name: f.name, size: f.size }].slice(0, 10) }));
+      setD((p) => ({ ...p, materials: [...p.materials, { name: f.name, size: f.size }].slice(0, 12) }));
       try {
         const r = await extractCourseMaterial(f, userId);
         notes.push(`${f.name}: ${r.note}`);
+        if (Array.isArray(r.structuredItems) && r.structuredItems.length > 0) {
+          setExtractedStructured((prev) => [
+            ...prev,
+            ...r.structuredItems!.map((it, idx) => ({
+              id: `m-ext-${Date.now()}-${idx}`,
+              title: it.title,
+              completed: false,
+              kind: it.kind as any,
+              group: it.group,
+            })),
+          ]);
+        }
         if (r.readable && r.outline.length) {
-          // Only fill the syllabus when it is empty, so typed modules are never overwritten.
-          setD((p) => (p.syllabusText.trim() ? p : { ...p, syllabusText: r.outline.join('\n') }));
+          setD((p) => {
+            const existing = p.syllabusText.trim();
+            const merged = existing
+              ? Array.from(new Set([...existing.split('\n').map((s) => s.trim()).filter(Boolean), ...r.outline])).join('\n')
+              : r.outline.join('\n');
+            return { ...p, syllabusText: merged };
+          });
         }
       } catch (e: any) {
         notes.push(`${f.name}: saved by name only. ${e?.message || 'Reading files is unavailable right now.'} You can paste the table of contents instead.`);
@@ -305,7 +343,12 @@ export const OnboardingWizard = ({
   };
 
   const goToReview = () => {
-    setModules(d.hasCourse ? parseModules(d.syllabusText) : []);
+    const parsed = d.hasCourse ? parseModules(d.syllabusText) : [];
+    const mergedMods = parsed.map((m) => {
+      const matched = extractedStructured.find((ex) => ex.title.toLowerCase() === m.title.toLowerCase());
+      return matched ? { ...m, kind: matched.kind, group: matched.group } : m;
+    });
+    setModules(mergedMods);
     setBuildError('');
     setBuildNotes([]);
     setStep(TOTAL);
@@ -413,6 +456,12 @@ export const OnboardingWizard = ({
           currentModuleId: current?.id,
           materials: d.materials,
           origin: 'onboarding',
+          sources: Array.from(new Set([d.coursePlatform.trim() || 'Course', ...d.sources].filter(Boolean))),
+          embedUrl: courseMeta.embedUrl,
+          videoId: courseMeta.videoId,
+          playlistId: courseMeta.playlistId,
+          isPlaylist: courseMeta.isPlaylist,
+          metadataNote: courseMeta.note,
         };
         if (!mods.length) notes.push('No syllabus was entered, so progress starts at 0%. You can add modules from the Learning page.');
 
@@ -693,10 +742,10 @@ export const OnboardingWizard = ({
                 )}
                 <div>
                   <label htmlFor="ob-files" className="block text-sm font-medium text-[var(--ink-primary)] mb-1.5">
-                    Course files <span className="font-normal text-[var(--ink-secondary)]">(optional)</span>
+                    Downloaded course folder (.zip) or notes <span className="font-normal text-[var(--ink-secondary)]">(optional)</span>
                   </label>
-                  <input id="ob-files" type="file" multiple accept=".pdf,.doc,.docx,.txt,.md,.ppt,.pptx" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} className="block w-full text-sm text-[var(--ink-secondary)] file:mr-3 file:min-h-11 file:px-4 file:rounded-lg file:border file:border-[var(--border-strong)] file:bg-[var(--surface-elevated)] file:text-[var(--ink-primary)] file:cursor-pointer" />
-                  <p className="mt-1.5 text-sm text-[var(--ink-secondary)]">We read PDF, Word, text and Markdown files to find a list of modules, and keep the file names. Scanned files can’t be read yet.</p>
+                  <input id="ob-files" type="file" multiple accept=".zip,.pdf,.doc,.docx,.txt,.md,.ppt,.pptx" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} className="block w-full text-sm text-[var(--ink-secondary)] file:mr-3 file:min-h-11 file:px-4 file:rounded-lg file:border file:border-[var(--border-strong)] file:bg-[var(--surface-elevated)] file:text-[var(--ink-primary)] file:cursor-pointer" />
+                  <p className="mt-1.5 text-sm text-[var(--ink-secondary)]">Supports .zip downloaded courses, PDFs, Word docs, and Markdown notes. Video and audio files are automatically skipped.</p>
                   {fileBusy && <p role="status" className="mt-1.5 text-sm text-[var(--ink-secondary)]">Reading your file…</p>}
                   {fileNotes.map((n) => <p key={n} className="mt-1.5 text-sm text-[var(--ink-secondary)]">{n}</p>)}
                   {fileError && <p role="alert" className="mt-1.5 text-sm text-[var(--danger-ink)]">{fileError}</p>}

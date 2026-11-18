@@ -50,10 +50,27 @@ export interface OnboardingProfile {
   };
 }
 
+export type CourseItemKind =
+  | 'module'
+  | 'section'
+  | 'lecture'
+  | 'lesson'
+  | 'reading'
+  | 'quiz'
+  | 'assignment'
+  | 'project'
+  | 'exercise'
+  | 'video'
+  | 'day';
+
 export interface CourseModule {
   id: string;
   title: string;
   completed: boolean;
+  kind?: CourseItemKind;
+  group?: string;
+  duration?: string;
+  notes?: string;
 }
 
 export interface CourseItem {
@@ -76,8 +93,16 @@ export interface CourseItem {
   /** Added by the personalized onboarding (optional, so older courses stay valid). */
   description?: string;
   currentModuleId?: string;
-  materials?: { name: string; size: number }[];
+  materials?: { name: string; size: number; kind?: string }[];
   origin?: 'onboarding' | 'manual';
+  /** Multi-source enhancements */
+  sources?: string[];
+  structureStyle?: string;
+  embedUrl?: string;
+  videoId?: string;
+  playlistId?: string;
+  isPlaylist?: boolean;
+  metadataNote?: string;
 }
 
 export interface DailyTarget {
@@ -459,3 +484,37 @@ export interface OnboardingState {
   /** True once the member has run the personalized flow (migrated members start false) */
   personalized: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Welcome experience, interactive product tour & discovery help state
+// ---------------------------------------------------------------------------
+export interface TutorialState {
+  welcomeCompleted: boolean;
+  tourCompleted: boolean;
+  tourSkipped: boolean;
+  lastTourStep: number;
+  firstSessionCompleted: boolean;
+  completedMiniTutorials: string[];
+  dismissedTips: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Real-time Study Group Chat types
+// ---------------------------------------------------------------------------
+export interface StudyChatRoom {
+  id: string;
+  name: string;
+  topic: string;
+}
+
+export interface StudyChatMessage {
+  id: string;
+  roomId: string;
+  senderId: string;
+  senderName: string;
+  senderField?: string;
+  text: string;
+  codeSnippet?: string;
+  createdAt: string;
+}
+

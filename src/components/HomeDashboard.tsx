@@ -88,6 +88,8 @@ export const HomeDashboard = ({
   independence,
   teamRoster,
   userName,
+  tutorialState,
+  onStartTour,
   styles,
 }: {
   firstName: string;
@@ -125,6 +127,13 @@ export const HomeDashboard = ({
   independence: IndependenceSummary;
   teamRoster: any[];
   userName: string;
+  tutorialState?: {
+    welcomeCompleted: boolean;
+    tourCompleted: boolean;
+    tourSkipped: boolean;
+    lastTourStep: number;
+  };
+  onStartTour?: (stepIndex?: number) => void;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -296,7 +305,7 @@ export const HomeDashboard = ({
   return (
     <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_340px]">
       {/* ------------------------------------------------------------ MAIN */}
-      <div className="p-5 sm:p-8 xl:p-10 space-y-9 min-w-0">
+      <div data-tour="home-workspace" className="p-4 sm:p-8 xl:p-10 space-y-8 sm:space-y-9 min-w-0">
         {/* Search */}
         <div className="flex items-center gap-4">
           <label className="relative flex-1">
@@ -366,23 +375,36 @@ export const HomeDashboard = ({
           </section>
         )}
 
+        {tutorialState && !tutorialState.tourCompleted && tutorialState.lastTourStep > 0 && onStartTour && (
+          <section aria-label="Resume guided tour" className="soft-card px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[var(--ink-secondary)]">
+              Tour paused at <strong className="text-[var(--ink-primary)]">Step {tutorialState.lastTourStep + 1} of 8</strong>. Ready to see the rest of Dev Hub?
+            </p>
+            <button type="button" onClick={() => onStartTour(tutorialState.lastTourStep)} className="min-h-11 px-4 rounded-full bg-[var(--accent-600)] text-white text-sm font-semibold cursor-pointer">
+              Resume tour
+            </button>
+          </section>
+        )}
+
         {!isBrandNewMember && (
-          <PersonalPath
-            profile={profile}
-            courses={courses}
-            learningPlans={learningPlans}
-            dailyTarget={dailyTarget}
-            selectedRoadmap={selectedRoadmap}
-            roadmapProgress={roadmapProgress}
-            quizAttempts={quizAttempts}
-            weeklyProjects={weeklyProjects}
-            challenges={challenges}
-            startAction={startAction}
-            onStartLearning={onStartLearning}
-            onContinueCourse={onContinueCourse}
-            onPersonalize={onPersonalize}
-            onNavigate={onNavigate}
-          />
+          <div data-tour="home-learning-path">
+            <PersonalPath
+              profile={profile}
+              courses={courses}
+              learningPlans={learningPlans}
+              dailyTarget={dailyTarget}
+              selectedRoadmap={selectedRoadmap}
+              roadmapProgress={roadmapProgress}
+              quizAttempts={quizAttempts}
+              weeklyProjects={weeklyProjects}
+              challenges={challenges}
+              startAction={startAction}
+              onStartLearning={onStartLearning}
+              onContinueCourse={onContinueCourse}
+              onPersonalize={onPersonalize}
+              onNavigate={onNavigate}
+            />
+          </div>
         )}
 
         {/* Three small stat cards */}
