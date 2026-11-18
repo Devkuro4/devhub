@@ -541,7 +541,7 @@ export const CommunitySection = ({
   const commPrimary = `${commBtn} font-semibold bg-[var(--accent-600)] text-white hover:bg-[var(--accent-700)]`;
   const commSecondary = `${commBtn} font-medium border border-[var(--border-strong)] bg-transparent text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)]`;
   const commInput =
-    'w-full px-3.5 py-2.5 text-[15px] rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)] focus:outline-none focus:border-[var(--accent-600)] transition-colors';
+    'w-full px-3.5 py-2.5 text-base rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)] focus:outline-none focus:border-[var(--accent-600)] transition-colors';
 
   const headerAction =
     subTab === 'community' ? (
@@ -589,12 +589,12 @@ export const CommunitySection = ({
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Feed: the main reason to be here */}
-            <section className="lg:col-span-8 space-y-3 min-w-0">
+            <section className="lg:col-span-8 space-y-4 min-w-0">
               <div className="flex items-end justify-between">
                 <h2 className={`text-xl ${textPrimary}`}>Recent discussions</h2>
                 <button type="button" onClick={() => setSubTab('community')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Join in</button>
               </div>
-              <ul className="space-y-3">
+              <ul className="space-y-4">
                 {posts.slice(0, 5).map((p) => (
                   <li key={p.id}>
                     <button type="button" onClick={() => setSubTab('community')} className={`${cardClass} studio-card-interactive w-full text-left p-4 flex gap-4 items-start cursor-pointer`}>
@@ -617,7 +617,7 @@ export const CommunitySection = ({
             {/* Rail: things with a date or a task attached */}
             <aside className="lg:col-span-4 space-y-4 min-w-0">
               {presentations[0] && (
-                <section className={`${cardClass} p-5 space-y-2`}>
+                <section className={`${cardClass} p-6 space-y-3`}>
                   <div className={`flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-600)]`}><Calendar className="w-3.5 h-3.5" /> Next session · {presentations[0].dateTime}</div>
                   <h3 className={`text-lg ${textPrimary}`}>{presentations[0].title}</h3>
                   <p className={`text-sm line-clamp-3 ${textSecondary}`}>{presentations[0].description}</p>
@@ -625,7 +625,7 @@ export const CommunitySection = ({
                 </section>
               )}
               {challenges[0] && (
-                <section className={`${cardClass} p-5 space-y-2`}>
+                <section className={`${cardClass} p-6 space-y-3`}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-[var(--accent-600)] inline-flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> Weekly challenge</span>
                     <span className={textSecondary}>{challenges[0].difficulty}</span>
@@ -635,7 +635,7 @@ export const CommunitySection = ({
                   <button type="button" onClick={() => setSubTab('challenges')} className={btnSecondary}>Try it</button>
                 </section>
               )}
-              <section className={`${cardClass} p-5 space-y-3 bg-[var(--accent-50)]`}>
+              <section className={`${cardClass} p-6 space-y-4 bg-[var(--accent-50)]`}>
                 <div>
                   <h3 className={`text-lg ${textPrimary}`}>Peer help</h3>
                   <p className={`text-sm ${textSecondary}`}>{openHelpList.length} open question{openHelpList.length === 1 ? '' : 's'} · {teamRoster.length} members</p>
@@ -737,7 +737,7 @@ export const CommunitySection = ({
                       <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90 text-[var(--accent-600)]" />
                       {post.comments.length === 0 ? 'Be the first to reply' : `${post.comments.length} repl${post.comments.length === 1 ? 'y' : 'ies'}`}
                     </summary>
-                    <div className="space-y-2.5 mt-3">
+                    <div className="space-y-3 mt-3">
 
                       {post.comments.map((c) => (
                         <div key={c.id} className={`py-2 px-3 rounded-lg ${subtleBgClass} flex items-start justify-between gap-3`}>
@@ -751,7 +751,7 @@ export const CommunitySection = ({
                           <button
                             type="button"
                             onClick={() => toggleHelpfulComment(post.id, c.id)}
-                            className={`text-[11px] font-medium shrink-0 cursor-pointer ${
+                            className={`text-xs font-medium shrink-0 cursor-pointer ${
                               c.isHelpful ? 'text-[var(--success-ink)]' : 'text-[var(--accent-600)] hover:underline'
                             }`}
                           >
@@ -796,7 +796,7 @@ export const CommunitySection = ({
                         sessionStorage.removeItem(postDraftKey);
                       } catch {}
                     }}
-                    className={`text-[11px] underline ${textSecondary} hover:text-[var(--danger-ink)] cursor-pointer shrink-0`}
+                    className={`text-xs underline ${textSecondary} hover:text-[var(--danger-ink)] cursor-pointer shrink-0`}
                   >
                     Clear draft
                   </button>
@@ -827,7 +827,7 @@ export const CommunitySection = ({
                 required
               />
               {showPostExtras && (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   <textarea
                     rows={3}
                     value={postCode}
@@ -842,7 +842,7 @@ export const CommunitySection = ({
                       placeholder="Optional link or resource URL..."
                       className={inputClass}
                     />
-                    {postLinkError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{postLinkError}</p>}
+                    {postLinkError && <p className="text-xs text-[var(--danger-ink)] mt-1">{postLinkError}</p>}
                   </div>
                 </div>
               )}
@@ -871,7 +871,7 @@ export const CommunitySection = ({
       {subTab === 'announcements' && (
         <div className="space-y-8 max-w-3xl">
           {isAdminMode && (
-            <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-5 sm:p-6 space-y-4`}>
+            <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-6 sm:p-6 space-y-4`}>
               <h2 className={`text-lg flex items-center gap-2 ${textPrimary}`}>
                 <Megaphone className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" /> Post an announcement
               </h2>
@@ -895,7 +895,7 @@ export const CommunitySection = ({
               const [lead, ...rest] = ordered;
               return (
                 <>
-                  <article className={`${cardClass} p-6 sm:p-8 space-y-3 border-l-4 !border-l-[var(--spark)]`}>
+                  <article className={`${cardClass} p-6 sm:p-8 space-y-4 border-l-4 !border-l-[var(--spark)]`}>
                     <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm ${textSecondary}`}>
                       <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--accent-600)]">
                         <Pin className="w-3.5 h-3.5" aria-hidden="true" /> Pinned
@@ -911,14 +911,14 @@ export const CommunitySection = ({
                       <h2 id="ann-earlier" className={`text-lg mb-2 ${textPrimary}`}>Earlier updates</h2>
                       <ul className={`divide-y ${borderClass} border-y ${borderClass}`}>
                         {rest.map((a) => (
-                          <li key={a.id} className="py-5 space-y-1.5">
+                          <li key={a.id} className="py-5 space-y-2">
                             <p className={`flex flex-wrap items-center gap-x-2 text-sm ${textSecondary}`}>
                               {a.pinned && <Pin className="w-3.5 h-3.5 text-[var(--accent-600)]" aria-label="Pinned" />}
                               <span className="font-semibold text-[var(--accent-600)]">{a.category}</span>
                               <span>· {a.author} · {a.timestamp}</span>
                             </p>
                             <h3 className={`text-lg ${textPrimary}`}>{a.title}</h3>
-                            <p className={`text-[15px] leading-relaxed max-w-[66ch] ${textSecondary}`}>{a.content}</p>
+                            <p className={`text-base leading-relaxed max-w-[66ch] ${textSecondary}`}>{a.content}</p>
                           </li>
                         ))}
                       </ul>
@@ -976,14 +976,14 @@ export const CommunitySection = ({
                       rel="noreferrer"
                       className={`${cardClass} studio-card-interactive p-5 flex flex-col justify-between gap-4 w-full`}
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <p className={`flex items-center gap-2 text-sm ${textSecondary}`}>
                           <Library className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" />
                           <span className="font-semibold text-[var(--accent-600)]">{r.type}</span>
                           <span>· {r.category}</span>
                         </p>
                         <h2 className={`text-lg ${textPrimary}`}>{r.title}</h2>
-                        <p className={`text-[15px] leading-relaxed ${textSecondary}`}>{r.description}</p>
+                        <p className={`text-base leading-relaxed ${textSecondary}`}>{r.description}</p>
                       </div>
                       <div className={`pt-3 border-t ${borderClass} flex items-center justify-between gap-3 text-sm`}>
                         <span className={`${textSecondary} truncate`}>Shared by {r.addedBy}</span>
@@ -1011,7 +1011,7 @@ export const CommunitySection = ({
                 </span>
                 <ChevronDown className={`w-4 h-4 shrink-0 transition-transform group-open:rotate-180 ${textSecondary}`} aria-hidden="true" />
               </summary>
-              <form onSubmit={handleWebResourceSearch} className={`px-5 pb-5 pt-4 space-y-3 border-t ${borderClass}`}>
+              <form onSubmit={handleWebResourceSearch} className={`px-5 pb-5 pt-4 space-y-4 border-t ${borderClass}`}>
                 <label htmlFor="web-search" className={`block text-sm font-medium ${textPrimary}`}>What do you want to find?</label>
                 <input
                   id="web-search"
@@ -1026,7 +1026,7 @@ export const CommunitySection = ({
                 </button>
 
                 {webSearchResult && (
-                  <div className="pt-4 space-y-3">
+                  <div className="pt-4 space-y-4">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className={`text-base ${textPrimary}`}>Results for “{webSearchResult.query}”</h3>
                       <button
@@ -1037,11 +1037,11 @@ export const CommunitySection = ({
                         Close
                       </button>
                     </div>
-                    <p className={`text-[15px] leading-relaxed whitespace-pre-wrap ${textPrimary}`}>{webSearchResult.answer}</p>
+                    <p className={`text-base leading-relaxed whitespace-pre-wrap ${textPrimary}`}>{webSearchResult.answer}</p>
                     {webSearchResult.sources.length > 0 && (
-                      <div className={`space-y-2 pt-3 border-t ${borderClass}`}>
+                      <div className={`space-y-3 pt-3 border-t ${borderClass}`}>
                         <div className={`text-sm font-semibold ${textPrimary}`}>Verified links</div>
-                        <ul className="space-y-2">
+                        <ul className="space-y-3">
                           {webSearchResult.sources.map((src, idx) => (
                             <li key={idx} className={`p-3 rounded-lg border ${borderClass} flex items-center justify-between gap-2`}>
                               <a
@@ -1081,7 +1081,7 @@ export const CommunitySection = ({
               </div>
               <div>
                 <input type="url" value={resUrl} onChange={(e) => setResUrl(e.target.value)} placeholder="https://..." className={inputClass} required />
-                {resUrlError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{resUrlError}</p>}
+                {resUrlError && <p className="text-xs text-[var(--danger-ink)] mt-1">{resUrlError}</p>}
               </div>
               <input value={resDesc} onChange={(e) => setResDesc(e.target.value)} placeholder="Why is this helpful for beginners?" className={inputClass} />
               <div className="flex justify-end gap-2 pt-2">
@@ -1107,8 +1107,8 @@ export const CommunitySection = ({
                     <div className="font-display text-xl leading-tight">{day}</div>
                     <div className="text-sm tabular-nums">{rest.join(' · ') || ev.type}</div>
                   </div>
-                  <div className="p-5 flex-1 min-w-0 space-y-3">
-                    <div className="space-y-1.5">
+                  <div className="p-5 flex-1 min-w-0 space-y-4">
+                    <div className="space-y-2">
                       <p className={`text-xs ${textSecondary}`}>
                         <span className="font-semibold text-[var(--accent-600)]">{ev.type}</span> · hosted by {ev.presenter} · <span className="tabular-nums">{ev.attendees.length}</span> going
                       </p>
@@ -1150,7 +1150,7 @@ export const CommunitySection = ({
               <textarea rows={2} value={evDesc} onChange={(e) => setEvDesc(e.target.value)} placeholder="What will you cover together?" className={inputClass} />
               <div>
                 <input value={evUrl} onChange={(e) => setEvUrl(e.target.value)} placeholder="Meeting / resource link (optional)" className={inputClass} />
-                {evUrlError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{evUrlError}</p>}
+                {evUrlError && <p className="text-xs text-[var(--danger-ink)] mt-1">{evUrlError}</p>}
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowAddEvent(false)} className={btnSecondary}>Cancel</button>
@@ -1183,8 +1183,8 @@ export const CommunitySection = ({
 
           <div className="lg:col-span-9 grid grid-cols-1 xl:grid-cols-2 gap-4 items-start min-w-0">
             {filteredChallenges.map((c) => (
-              <div key={c.id} className={`${cardClass} p-5 space-y-3.5 flex flex-col justify-between`}>
-                <div className="space-y-2.5">
+              <div key={c.id} className={`${cardClass} p-6 space-y-3.5 flex flex-col justify-between`}>
+                <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className={`text-xs ${textSecondary}`}>
@@ -1203,10 +1203,10 @@ export const CommunitySection = ({
                 </div>
 
                 {submitChId === c.id ? (
-                  <form onSubmit={handleSubmitChallenge} className={`pt-3 border-t ${borderClass} space-y-2.5`}>
+                  <form onSubmit={handleSubmitChallenge} className={`pt-3 border-t ${borderClass} space-y-3`}>
                     <div>
                       <input value={chRepo} onChange={(e) => setChRepo(e.target.value)} placeholder="GitHub repo or snippet link (optional)" className={inputClass} />
-                      {chRepoError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{chRepoError}</p>}
+                      {chRepoError && <p className="text-xs text-[var(--danger-ink)] mt-1">{chRepoError}</p>}
                     </div>
                     <textarea rows={2} value={chExplain} onChange={(e) => setChExplain(e.target.value)} placeholder="Explain what you built and how it works..." className={inputClass} required />
                     <input value={chDiff} onChange={(e) => setChDiff(e.target.value)} placeholder="Anything tricky or confusing? (optional)" className={inputClass} />
@@ -1282,9 +1282,9 @@ export const CommunitySection = ({
               );
               const renderResponses = (h: any) =>
                 (h.responses || []).length > 0 && (
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {(h.responses || []).map((r: any) => (
-                      <li key={r.id} className={`pl-4 py-1 border-l-4 border-[var(--accent-500)] text-[15px] leading-relaxed max-w-[66ch]`}>
+                      <li key={r.id} className={`pl-4 py-1 border-l-4 border-[var(--accent-500)] text-base leading-relaxed max-w-[66ch]`}>
                         <strong className={`font-semibold ${textPrimary}`}>{r.responder}</strong>
                         <span className={textSecondary}> · {r.text}</span>
                       </li>
@@ -1300,12 +1300,12 @@ export const CommunitySection = ({
                       </h2>
                     </div>
                     {openHelpList.length === 0 ? (
-                      <p className={`p-5 rounded-xl border border-dashed ${borderClass} text-[15px] ${textSecondary}`}>
+                      <p className={`p-5 rounded-xl border border-dashed ${borderClass} text-base ${textSecondary}`}>
                         Every question has been answered. Ask your own below, or check back later.
                       </p>
                     ) : (
                       openHelpList.map((h) => (
-                        <article key={h.id} className={`${cardClass} p-5 sm:p-6 space-y-4 border-l-4 !border-l-[var(--spark)]`}>
+                        <article key={h.id} className={`${cardClass} p-6 sm:p-6 space-y-4 border-l-4 !border-l-[var(--spark)]`}>
                           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                             <span className={textSecondary}>
                               <strong className={`font-semibold ${textPrimary}`}>{h.author}</strong> · {h.field} · {h.createdAt}
@@ -1313,7 +1313,7 @@ export const CommunitySection = ({
                             <Badge variant="info">{h.status}</Badge>
                           </div>
                           <h3 className={`text-lg ${textPrimary}`}>{h.helpNeeded}</h3>
-                          <p className={`text-[15px] leading-relaxed max-w-[66ch] ${textSecondary}`}>
+                          <p className={`text-base leading-relaxed max-w-[66ch] ${textSecondary}`}>
                             <strong className={`font-semibold ${textPrimary}`}>Goal:</strong> {h.goal}
                             {h.attempted ? (
                               <>
@@ -1323,7 +1323,7 @@ export const CommunitySection = ({
                             ) : null}
                           </p>
                           {h.errorOrCode && (
-                            <pre className={`p-3.5 ${subtleBgClass} text-[13px] overflow-x-auto ${textPrimary}`}>{h.errorOrCode}</pre>
+                            <pre className={`p-3.5 ${subtleBgClass} text-sm overflow-x-auto ${textPrimary}`}>{h.errorOrCode}</pre>
                           )}
                           {renderResponses(h)}
                           {renderReply(h, 'Write an answer to help')}
@@ -1332,11 +1332,11 @@ export const CommunitySection = ({
                     )}
                   </section>
 
-                  <form onSubmit={handleAskHelp} className={`${cardClass} p-5 sm:p-6 space-y-4`}>
+                  <form onSubmit={handleAskHelp} className={`${cardClass} p-6 sm:p-6 space-y-4`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <h2 className={`text-xl ${textPrimary}`}>Ask for help</h2>
-                        <p className={`text-[15px] mt-1 max-w-[56ch] ${textSecondary}`}>No question is too basic. Telling us what you tried helps peers guide you.</p>
+                        <p className={`text-base mt-1 max-w-[56ch] ${textSecondary}`}>No question is too basic. Telling us what you tried helps peers guide you.</p>
                       </div>
                       {(helpGoal.trim() || helpTried.trim() || helpCode.trim() || helpAsk.trim()) && (
                         <button
@@ -1366,7 +1366,7 @@ export const CommunitySection = ({
                     </div>
                     <div>
                       <label htmlFor="help-code" className={`block text-sm font-medium mb-1.5 ${textPrimary}`}>Error message or code <span className={`font-normal ${textSecondary}`}>(optional)</span></label>
-                      <textarea id="help-code" rows={3} spellCheck={false} value={helpCode} onChange={(e) => setHelpCode(e.target.value)} placeholder="Paste it here" className={`${commInput} font-mono text-[13px]`} />
+                      <textarea id="help-code" rows={3} spellCheck={false} value={helpCode} onChange={(e) => setHelpCode(e.target.value)} placeholder="Paste it here" className={`${commInput} font-mono text-sm`} />
                     </div>
                     <div>
                       <label htmlFor="help-ask" className={`block text-sm font-medium mb-1.5 ${textPrimary}`}>Your question</label>
@@ -1376,12 +1376,12 @@ export const CommunitySection = ({
                   </form>
 
                   {resolvedList.length > 0 && (
-                    <section aria-labelledby="help-resolved" className="space-y-3">
+                    <section aria-labelledby="help-resolved" className="space-y-4">
                       <h2 id="help-resolved" className={`text-xl ${textSecondary}`}>
                         Resolved <span className="tabular-nums">({resolvedList.length})</span>
                       </h2>
                       {resolvedList.map((h) => (
-                        <article key={h.id} className={`${cardClass} p-5 space-y-3 opacity-70 hover:opacity-100 focus-within:opacity-100 transition-opacity`}>
+                        <article key={h.id} className={`${cardClass} p-6 space-y-4 opacity-70 hover:opacity-100 focus-within:opacity-100 transition-opacity`}>
                           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                             <span className={textSecondary}>
                               <strong className={`font-semibold ${textPrimary}`}>{h.author}</strong> · {h.field} · {h.createdAt}
@@ -1394,8 +1394,8 @@ export const CommunitySection = ({
                               <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" aria-hidden="true" />
                               {(h.responses || []).length} {(h.responses || []).length === 1 ? 'answer' : 'answers'} and details
                             </summary>
-                            <div className="space-y-3 pt-2">
-                              <p className={`text-[15px] leading-relaxed max-w-[66ch] ${textSecondary}`}>
+                            <div className="space-y-4 pt-2">
+                              <p className={`text-base leading-relaxed max-w-[66ch] ${textSecondary}`}>
                                 <strong className={`font-semibold ${textPrimary}`}>Goal:</strong> {h.goal}
                                 {h.attempted ? (
                                   <>
@@ -1405,7 +1405,7 @@ export const CommunitySection = ({
                                 ) : null}
                               </p>
                               {h.errorOrCode && (
-                                <pre className={`p-3.5 ${subtleBgClass} text-[13px] overflow-x-auto ${textPrimary}`}>{h.errorOrCode}</pre>
+                                <pre className={`p-3.5 ${subtleBgClass} text-sm overflow-x-auto ${textPrimary}`}>{h.errorOrCode}</pre>
                               )}
                               {renderResponses(h)}
                               {renderReply(h, 'Add another answer')}
@@ -1422,16 +1422,16 @@ export const CommunitySection = ({
 
           <div className="lg:col-span-4 lg:sticky lg:top-6 space-y-5 min-w-0">
             {pairingState?.partnerName && (
-              <div className={`${cardClass} p-5 space-y-2 border-l-4 !border-l-[var(--spark)]`}>
+              <div className={`${cardClass} p-6 space-y-3 border-l-4 !border-l-[var(--spark)]`}>
                 <h2 className={`text-lg ${textPrimary}`}>Your study buddy</h2>
-                <p className={`text-[15px] leading-relaxed ${textSecondary}`}>
+                <p className={`text-base leading-relaxed ${textSecondary}`}>
                   Paired with <strong className={`font-semibold ${textPrimary}`}>{pairingState.partnerName}</strong> ({pairingState.partnerField || 'Fellow learner'}).
                 </p>
-                {pairingState.pairExercise && <p className={`text-[15px] leading-relaxed ${textSecondary}`}>{pairingState.pairExercise}</p>}
+                {pairingState.pairExercise && <p className={`text-base leading-relaxed ${textSecondary}`}>{pairingState.pairExercise}</p>}
               </div>
             )}
 
-            <div className={`${cardClass} p-5 space-y-3`}>
+            <div className={`${cardClass} p-6 space-y-4`}>
               <div className="flex items-center justify-between gap-2">
                 <h2 className={`text-lg flex items-center gap-2 ${textPrimary}`}>
                   <Users className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" /> Member directory
@@ -1443,7 +1443,7 @@ export const CommunitySection = ({
                 {teamRoster.map((m) => (
                   <li key={m.id} className="py-3 first:pt-1 last:pb-1 space-y-0.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`text-[15px] font-semibold ${textPrimary}`}>{m.name}</span>
+                      <span className={`text-base font-semibold ${textPrimary}`}>{m.name}</span>
                       <span className="text-sm font-medium text-[var(--accent-600)]">{m.role || 'Member'}</span>
                     </div>
                     {(m.field || m.level) && <div className={`text-sm ${textSecondary}`}>{[m.field, m.level].filter(Boolean).join(' · ')}</div>}

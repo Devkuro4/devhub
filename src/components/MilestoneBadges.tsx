@@ -76,7 +76,7 @@ export const DashboardMilestoneStrip = ({
   const nextUp = [...summary.upcoming].sort((a, b) => b.current / b.target - a.current / a.target)[0];
 
   return (
-    <div className={`pt-3 border-t ${borderClass} space-y-2.5`}>
+    <div className={`pt-3 border-t ${borderClass} space-y-3`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Award className="w-3.5 h-3.5 text-[var(--accent-600)]" />
@@ -87,7 +87,7 @@ export const DashboardMilestoneStrip = ({
         <button
           type="button"
           onClick={onOpenProfile}
-          className="text-[11px] font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+          className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
         >
           View all badges →
         </button>
@@ -101,7 +101,7 @@ export const DashboardMilestoneStrip = ({
               <span
                 key={m.id}
                 title={`${m.title} (${m.requirementLabel}) — ${m.encouragement}`}
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-medium ${palette.earned}`}
+                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-medium ${palette.earned}`}
               >
                 <span className={`w-4 h-4 rounded flex items-center justify-center ${palette.iconWrap}`}>
                   <MilestoneIcon icon={m.icon} className="w-3 h-3" />
@@ -112,13 +112,13 @@ export const DashboardMilestoneStrip = ({
           })}
         </div>
       ) : (
-        <p className={`text-[11px] ${textSecondary}`}>
+        <p className={`text-xs ${textSecondary}`}>
           Your first badge unlocks as soon as you save a daily check-in, share a resource, or submit code.
         </p>
       )}
 
       {nextUp && (
-        <div className={`px-2.5 py-1.5 rounded-lg border ${borderClass} ${subtleBgClass} flex items-center justify-between gap-2 text-[11px]`}>
+        <div className={`px-2.5 py-1.5 rounded-lg border ${borderClass} ${subtleBgClass} flex items-center justify-between gap-2 text-xs`}>
           <span className={`inline-flex items-center gap-1.5 min-w-0 ${textSecondary}`}>
             <MilestoneIcon icon={nextUp.icon} className="w-3 h-3 shrink-0 text-[var(--accent-600)]" />
             <span className="truncate">
@@ -156,7 +156,7 @@ export const ProfileMilestonesCard = ({
   const remaining = summary.milestones.filter((m) => !m.earned);
 
   return (
-    <div className={`${cardClass} p-5 sm:p-8 space-y-6`}>
+    <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="space-y-1 min-w-0">
           <h3 className={`text-lg ${textPrimary}`}>Milestones and badges</h3>
@@ -183,7 +183,7 @@ export const ProfileMilestonesCard = ({
         ))}
       </div>
 
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         <h4 className={`text-sm font-semibold ${textPrimary}`}>Unlocked</h4>
         {earned.length > 0 ? (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -197,7 +197,7 @@ export const ProfileMilestonesCard = ({
                 </span>
                 <span className="min-w-0 space-y-0.5">
                   <span className={`block text-sm font-semibold ${textPrimary}`}>{m.title}</span>
-                  <span className={`block text-[13px] leading-relaxed ${textSecondary}`}>{m.encouragement}</span>
+                  <span className={`block text-sm leading-relaxed ${textSecondary}`}>{m.encouragement}</span>
                 </span>
               </li>
             ))}
@@ -210,7 +210,7 @@ export const ProfileMilestonesCard = ({
       </div>
 
       {remaining.length > 0 && (
-        <div className={`space-y-2.5 pt-5 border-t ${borderClass}`}>
+        <div className={`space-y-3 pt-5 border-t ${borderClass}`}>
           <h4 className={`text-sm font-semibold ${textPrimary}`}>Still to go</h4>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
             {remaining.map((m) => {
@@ -223,11 +223,11 @@ export const ProfileMilestonesCard = ({
                   <span className="min-w-0 flex-1 space-y-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className={`text-sm font-medium ${textPrimary}`}>{m.title}</span>
-                      <span className={`text-[13px] font-mono tabular-nums shrink-0 ${textSecondary}`}>
+                      <span className={`text-sm font-mono tabular-nums shrink-0 ${textSecondary}`}>
                         {m.current}/{m.target}
                       </span>
                     </span>
-                    <span className={`block text-[13px] leading-relaxed ${textSecondary}`}>{m.requirementLabel}</span>
+                    <span className={`block text-sm leading-relaxed ${textSecondary}`}>{m.requirementLabel}</span>
                     <span className="block h-1.5 w-full rounded-full bg-[var(--border-hairline)] overflow-hidden">
                       <span className="block h-full rounded-full bg-[var(--spark)]" style={{ width: `${pct}%` }} />
                     </span>

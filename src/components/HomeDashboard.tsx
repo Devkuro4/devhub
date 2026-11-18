@@ -158,10 +158,10 @@ export const HomeDashboard = ({
   const rollup = latestCourse ? latestCourse.progress : Math.round((demonstratedCount / Math.max(1, selectedRoadmap.topics.length)) * 100);
   const doneCount = todayChecklist.filter((s) => s.done).length;
   const row = (Icon: React.ElementType, kicker: string, title: string, tab: string, cta: string) => (
-    <button type="button" onClick={() => onNavigate(tab)} className="w-full py-3 flex items-start gap-3 text-left cursor-pointer group">
-      <Icon className="w-4 h-4 text-[var(--accent-600)] shrink-0 mt-0.5" />
+    <button type="button" onClick={() => onNavigate(tab)} className="w-full py-4 flex items-start gap-4 text-left cursor-pointer group">
+      <Icon className="w-5 h-5 text-[var(--accent-600)] shrink-0 mt-0.5" />
       <span className="min-w-0 flex-1">
-        <span className={`block text-[11px] ${textSecondary}`}>{kicker}</span>
+        <span className={`block text-xs ${textSecondary}`}>{kicker}</span>
         <span className={`block text-sm font-semibold leading-snug ${textPrimary}`}>{title}</span>
       </span>
       <span className="text-xs font-medium text-[var(--accent-600)] shrink-0 group-hover:underline">{cta}</span>
@@ -171,7 +171,7 @@ export const HomeDashboard = ({
   const isBrandNewMember = !onboarded && !latestCourse && codeSubmissions.length === 0 && dailyLogs.length === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       {/* 1. Calm Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div className="space-y-1">
@@ -190,7 +190,7 @@ export const HomeDashboard = ({
       {/* New Member Guided Welcome (Replaces Empty Stats) */}
       {isBrandNewMember ? (
         <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
-          <div className="max-w-2xl space-y-2">
+          <div className="max-w-2xl space-y-3">
             <p className="text-xs font-semibold text-[var(--accent-600)]">First time here? Start in 1 minute</p>
             <h2 className={`font-display text-2xl ${textPrimary}`}>
               Let’s set up your learning path together.
@@ -211,10 +211,10 @@ export const HomeDashboard = ({
       ) : (
         <>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
             {/* MAIN: one clear next step, today's trail, check-in, recent work */}
-            <div className="lg:col-span-8 space-y-6 min-w-0">
-              <section className="rounded-2xl rounded-bl-md bg-[var(--panel-deep)] text-white p-6 sm:p-8 border-[1.5px] border-[var(--border-hairline)] shadow-[6px_6px_0_var(--spark)]">
+            <div className="lg:col-span-8 space-y-8 min-w-0">
+              <section className="rounded-[20px] bg-[var(--panel-deep)] text-white p-6 sm:p-8 border border-[var(--border-hairline)] shadow-[var(--shadow-lg)]">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/70">
                   <span>{latestCourse ? latestCourse.platform : selectedRoadmap.title} · ~{dailyTarget.estimatedMinutes} min left today</span>
                   <span className="tabular-nums">{doneCount} of {todayChecklist.length} steps done</span>
@@ -224,7 +224,7 @@ export const HomeDashboard = ({
                   {nextActivity.detail}{currentStage ? ` · ${currentStage.title}` : ''}
                 </p>
                 <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={() => onNavigate(nextActivity.tab)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--spark)] text-[var(--on-spark)] text-sm font-semibold cursor-pointer hover:brightness-105 active:translate-y-px">
+                  <button type="button" onClick={() => onNavigate(nextActivity.tab)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#F5BE4F] text-[#2A1A00] text-base font-semibold cursor-pointer hover:brightness-105 active:translate-y-px">
                     {doneCount === 0 ? 'Start today' : 'Continue'} <ArrowRight className="w-4 h-4" />
                   </button>
                   <button type="button" onClick={() => onNavigate('ai-mentor')} className="text-sm text-white/80 underline-offset-4 hover:underline cursor-pointer">
@@ -233,25 +233,25 @@ export const HomeDashboard = ({
                 </div>
               </section>
 
-              <ol className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Today's steps">
+              <ol className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-6" aria-label="Today's steps">
                 {todayChecklist.map((step, i) => {
                   const isNext = !step.done && step.id === nextActivity.id;
                   return (
                     <li key={step.id}>
                       <button type="button" onClick={() => onNavigate(step.tab)} className={`w-full h-full text-left pt-3 cursor-pointer border-t-4 transition-colors ${step.done ? 'border-[var(--spark)]' : isNext ? 'border-[var(--accent-600)]' : borderClass}`}>
-                        <span className={`flex items-center gap-1.5 text-[11px] tabular-nums ${textSecondary}`}>
+                        <span className={`flex items-center gap-1.5 text-xs tabular-nums ${textSecondary}`}>
                           {step.done ? <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> : <Circle className="w-3.5 h-3.5" />}
                           Step {i + 1}
                         </span>
                         <span className={`mt-1 block text-sm font-semibold leading-snug ${step.done ? 'line-through opacity-60' : textPrimary}`}>{step.label}</span>
-                        <span className={`block text-xs truncate ${textSecondary}`}>{step.detail}</span>
+                        <span className={`block text-xs line-clamp-2 ${textSecondary}`}>{step.detail}</span>
                       </button>
                     </li>
                   );
                 })}
               </ol>
 
-              <form onSubmit={onQuickCheckIn} className={`${cardClass} p-4 sm:p-5 space-y-3`}>
+              <form onSubmit={onQuickCheckIn} className={`${cardClass} p-6 sm:p-6 space-y-4`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label htmlFor="checkin" className={`text-sm font-semibold ${textPrimary}`}>What did you figure out today?</label>
                   <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${textSecondary}`}>
@@ -265,7 +265,7 @@ export const HomeDashboard = ({
                 </div>
               </form>
 
-              <section className={`${cardClass} px-5 pt-4 pb-1`}>
+              <section className={`${cardClass} px-6 pt-5 pb-2`}>
                 <div className="flex items-center justify-between">
                   <h2 className={`text-lg ${textPrimary}`}>Your latest work</h2>
                   <button type="button" onClick={() => onNavigate('progress')} className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer">All progress</button>
@@ -279,10 +279,10 @@ export const HomeDashboard = ({
             </div>
 
             {/* RAIL: where you are, how independent you are, who is around */}
-            <aside className="lg:col-span-4 space-y-6 min-w-0 lg:sticky lg:top-6">
-              <section className={`${cardClass} p-5 space-y-3`}>
+            <aside className="lg:col-span-4 space-y-8 min-w-0 lg:sticky lg:top-24">
+              <section className={`${cardClass} p-6 space-y-4`}>
                 <div className="flex items-baseline justify-between gap-3">
-                  <h2 className={`text-lg truncate ${textPrimary}`}>{latestCourse ? latestCourse.title : selectedRoadmap.title}</h2>
+                  <h2 className={`text-lg leading-snug ${textPrimary}`}>{latestCourse ? latestCourse.title : selectedRoadmap.title}</h2>
                   <span className={`text-2xl font-display tabular-nums ${textPrimary}`}>{rollup}%</span>
                 </div>
                 <ProgressBar value={rollup} />
@@ -291,15 +291,13 @@ export const HomeDashboard = ({
                 </p>
               </section>
 
-              <section className={`${cardClass} p-5`}>
-                <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
-              </section>
+              <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
 
-              <section className={`${cardClass} p-5`}>
+              <section className={`${cardClass} p-6`}>
                 <DashboardMilestoneStrip summary={milestones} borderClass={borderClass} subtleBgClass={subtleBgClass} textPrimary={textPrimary} textSecondary={textSecondary} onOpenProfile={() => onNavigate('profile')} />
               </section>
 
-              <section className={`${cardClass} px-5 pt-4 pb-1`}>
+              <section className={`${cardClass} px-6 pt-5 pb-2`}>
                 <div className="flex items-center justify-between">
                   <h2 className={`text-lg ${textPrimary}`}>Around the hub</h2>
                   <button type="button" onClick={() => onNavigate('community')} className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Community</button>

@@ -756,7 +756,7 @@ export const LearningSection = ({
                 const aiNote = result.aiQuestionNotes?.[q.id];
                 const correct = !result.missedQuestionIds.includes(q.id);
                 return (
-                  <div key={q.id} className="py-4 first:pt-0 last:pb-0 space-y-2 text-xs">
+                  <div key={q.id} className="py-4 first:pt-0 last:pb-0 space-y-3 text-xs">
                     <div className="flex items-center justify-between gap-2">
                       <span className={`font-semibold ${textPrimary}`}>Question {idx + 1} · {q.topic}</span>
                       <Badge variant={correct ? 'success' : 'warning'}>{correct ? 'Understood' : 'Needs Review'}</Badge>
@@ -848,7 +848,7 @@ export const LearningSection = ({
               {currentQ.code && <pre className={`p-4 rounded-xl text-xs font-mono overflow-x-auto border ${borderClass} ${subtleBgClass} ${textPrimary}`}>{currentQ.code}</pre>}
 
               {currentQ.options && currentQ.options.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {currentQ.options.map((opt: string, i: number) => {
                     const selected = answers[currentQ.id] === opt;
                     return (
@@ -919,7 +919,7 @@ export const LearningSection = ({
   const stagePrimary = `${stageBtn} font-semibold bg-[var(--accent-600)] text-white hover:bg-[var(--accent-700)]`;
   const stageSecondary = `${stageBtn} font-medium border border-[var(--border-strong)] bg-transparent text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)]`;
   const stageInput =
-    'w-full px-3.5 py-2.5 text-[15px] rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)] focus:outline-none focus:border-[var(--accent-600)] transition-colors';
+    'w-full px-3.5 py-2.5 text-base rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)] focus:outline-none focus:border-[var(--accent-600)] transition-colors';
 
   // Progress Metrics
   const statuses = selectedRoadmap.topics.map((t) => ({
@@ -966,8 +966,8 @@ export const LearningSection = ({
       {subTab === 'today' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Lesson rail: where you are in today's five steps */}
-          <aside className="lg:col-span-3 lg:sticky lg:top-6 space-y-3 min-w-0">
-            <div className={`${cardClass} p-4 space-y-2`}>
+          <aside className="lg:col-span-3 lg:sticky lg:top-6 space-y-4 min-w-0">
+            <div className={`${cardClass} p-5 space-y-3`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-[var(--accent-600)]">{dailyTarget.dayLabel}</span>
                 <Badge variant={dailyTarget.status === 'Demonstrated' ? 'success' : 'info'}>{dailyTarget.status}</Badge>
@@ -989,14 +989,14 @@ export const LearningSection = ({
                       }`}
                     >
                       {isActive && <span aria-hidden="true" className="hidden lg:block absolute -left-[3px] top-0 bottom-0 w-[3px] bg-[var(--spark)]" />}
-                      <span className={`mt-0.5 w-5 h-5 rounded-full text-[11px] font-semibold tabular-nums flex items-center justify-center shrink-0 ${
+                      <span className={`mt-0.5 w-5 h-5 rounded-full text-xs font-semibold tabular-nums flex items-center justify-center shrink-0 ${
                         st.done ? 'bg-[var(--success-ink)] text-white' : isActive ? 'bg-[var(--accent-600)] text-white' : `border ${borderClass} ${textSecondary}`
                       }`}>
                         {st.done ? <CheckCircle2 className="w-3.5 h-3.5" /> : st.n}
                       </span>
                       <span className="min-w-0">
                         <span className={`block text-sm font-semibold whitespace-nowrap lg:whitespace-normal ${isActive ? 'text-[var(--accent-600)]' : textPrimary}`}>{st.label}</span>
-                        <span className={`hidden lg:block text-[11px] truncate ${textSecondary}`}>{st.hint}</span>
+                        <span className={`hidden lg:block text-xs truncate ${textSecondary}`}>{st.hint}</span>
                       </span>
                     </button>
                   </li>
@@ -1011,7 +1011,7 @@ export const LearningSection = ({
             <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
               <div className="space-y-4">
                 <p className="text-sm font-semibold text-[var(--accent-600)]">Step 1 of 5 · Learn</p>
-                <div className="border-l-4 border-[var(--spark)] pl-4 space-y-1.5">
+                <div className="border-l-4 border-[var(--spark)] pl-4 space-y-2">
                   <p className={`text-sm ${textSecondary}`}>Today’s goal</p>
                   <h2 className={`font-display text-xl sm:text-2xl max-w-[44ch] [text-wrap:pretty] ${textPrimary}`}>{dailyTarget.objective}</h2>
                 </div>
@@ -1023,9 +1023,9 @@ export const LearningSection = ({
                 </p>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <h3 className={`text-lg ${textPrimary}`}>By the end you’ll be able to</h3>
-                <p className={`text-[15px] leading-relaxed max-w-[62ch] ${textSecondary}`}>{dailyTarget.whatYouWillUnderstand}</p>
+                <p className={`text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>{dailyTarget.whatYouWillUnderstand}</p>
               </div>
 
               <div className={`pt-5 border-t ${borderClass} flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3`}>
@@ -1055,14 +1055,14 @@ export const LearningSection = ({
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
                 <div className="md:col-span-7 space-y-5 min-w-0">
-                  <p className={`text-[15px] leading-relaxed max-w-[62ch] ${textSecondary}`}>{dailyTarget.exerciseInstructions}</p>
+                  <p className={`text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>{dailyTarget.exerciseInstructions}</p>
 
                   {dailyTarget.exerciseRequirements.length > 0 && (
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       <h3 className={`text-lg ${textPrimary}`}>Your solution should</h3>
-                      <ol className="space-y-2">
+                      <ol className="space-y-3">
                         {dailyTarget.exerciseRequirements.map((req, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-[15px]">
+                          <li key={idx} className="flex items-start gap-3 text-base">
                             <span
                               aria-hidden="true"
                               className={`mt-0.5 w-6 h-6 rounded-full border ${borderClass} flex items-center justify-center text-xs font-semibold tabular-nums shrink-0 ${textSecondary}`}
@@ -1080,7 +1080,7 @@ export const LearningSection = ({
                 <aside aria-label="Help with this exercise" className={`md:col-span-5 md:border-l ${borderClass} md:pl-8 space-y-4 min-w-0`}>
                   <h3 className={`text-lg ${textPrimary}`}>Need a hand?</h3>
                   {dailyTarget.starterHint && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <button
                         type="button"
                         onClick={() => setShowHint((v) => !v)}
@@ -1091,7 +1091,7 @@ export const LearningSection = ({
                         <ChevronDown className={`w-4 h-4 transition-transform ${showHint ? 'rotate-180' : ''}`} aria-hidden="true" />
                       </button>
                       {showHint && (
-                        <p className={`p-3.5 rounded-lg border-l-4 border-[var(--spark)] ${subtleBgClass} text-[15px] leading-relaxed ${textPrimary}`}>
+                        <p className={`p-3.5 rounded-lg border-l-4 border-[var(--spark)] ${subtleBgClass} text-base leading-relaxed ${textPrimary}`}>
                           {dailyTarget.starterHint}
                         </p>
                       )}
@@ -1138,7 +1138,7 @@ export const LearningSection = ({
               </div>
 
               {/* How are you sharing it? */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p id="submission-method-label" className={`text-sm font-medium ${textPrimary}`}>How do you want to share it?</p>
                 <div
                   role="radiogroup"
@@ -1175,7 +1175,7 @@ export const LearningSection = ({
               </div>
 
               {(submissionKind === 'files' || submissionKind === 'zip') && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <label
                     className={`flex items-start gap-3 p-4 rounded-xl border-2 border-dashed ${borderClass} ${subtleBgClass} cursor-pointer focus-within:ring-2 focus-within:ring-[var(--spark)]`}
                   >
@@ -1185,7 +1185,7 @@ export const LearningSection = ({
                       <Upload className="w-5 h-5 mt-0.5 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
                     )}
                     <span className="space-y-0.5">
-                      <span className={`block text-[15px] font-medium ${textPrimary}`}>
+                      <span className={`block text-base font-medium ${textPrimary}`}>
                         {submissionKind === 'zip' ? 'Choose a .zip of your practice project' : 'Choose one or more code files'}
                       </span>
                       <span className={`block text-sm ${textSecondary}`}>
@@ -1222,7 +1222,7 @@ export const LearningSection = ({
                   )}
 
                   {uploadFeedback && (uploadFeedback.accepted.length > 0 || uploadFeedback.warnings.length > 0) && (
-                    <div className={`p-3.5 rounded-lg border ${borderClass} ${subtleBgClass} text-sm space-y-2`}>
+                    <div className={`p-3.5 rounded-lg border ${borderClass} ${subtleBgClass} text-sm space-y-3`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className={`font-semibold ${textPrimary}`}>
                           {uploadFeedback.accepted.length} loaded{uploadFeedback.warnings.length ? `, ${uploadFeedback.warnings.length} skipped or flagged` : ''}
@@ -1273,7 +1273,7 @@ export const LearningSection = ({
               {/* Code and explanation live together in one panel */}
               <div className={`rounded-xl border ${borderClass} divide-y ${borderClass} overflow-hidden`}>
                 {submissionKind !== 'notes' && (
-                  <div className="p-4 space-y-2">
+                  <div className="p-4 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <label htmlFor="submission-code" className={`text-sm font-medium ${textPrimary}`}>
                         {submissionKind === 'github' ? 'Code you want reviewed (optional)' : 'Your code'}
@@ -1299,11 +1299,11 @@ export const LearningSection = ({
                       value={codeDraft}
                       onChange={(e) => setCodeDraft(e.target.value)}
                       placeholder={`// Paste or write your ${submissionLang} code here`}
-                      className={`${stageInput} font-mono text-[13px] leading-relaxed`}
+                      className={`${stageInput} font-mono text-sm leading-relaxed`}
                     />
                   </div>
                 )}
-                <div className="p-4 space-y-2">
+                <div className="p-4 space-y-3">
                   <label htmlFor="submission-explanation" className={`block text-sm font-medium ${textPrimary}`}>
                     {submissionKind === 'notes' ? 'Your explanation or study notes (required)' : 'What did you try, and what felt tricky?'}
                   </label>
@@ -1344,11 +1344,11 @@ export const LearningSection = ({
               )}
 
               {sandboxPreview && (
-                <div className={`p-4 rounded-lg border ${borderClass} ${subtleBgClass} space-y-1.5`}>
+                <div className={`p-4 rounded-lg border ${borderClass} ${subtleBgClass} space-y-2`}>
                   <div className="text-sm font-semibold text-[var(--accent-600)]">
                     {sandboxPreview.executed ? 'Safe browser check (isolated)' : 'Static check note'}
                   </div>
-                  <pre className={`text-[13px] font-mono whitespace-pre-wrap ${textPrimary}`}>{sandboxPreview.output}</pre>
+                  <pre className={`text-sm font-mono whitespace-pre-wrap ${textPrimary}`}>{sandboxPreview.output}</pre>
                 </div>
               )}
 
@@ -1380,10 +1380,10 @@ export const LearningSection = ({
           {/* STAGE 4: TAKE QUIZ */}
           {dailyStage === 4 && (
             <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm font-semibold text-[var(--accent-600)]">Step 4 of 5 · Quiz</p>
                 <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>Check what clicked</h2>
-                <p className={`text-[15px] leading-relaxed max-w-[62ch] ${textSecondary}`}>
+                <p className={`text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>
                   A short quiz on <strong className={`font-semibold ${textPrimary}`}>{dailyTarget.topic}</strong>. It’s untimed and shows one question at a time, so small misunderstandings come up early.
                 </p>
               </div>
@@ -1413,7 +1413,7 @@ export const LearningSection = ({
                   </button>
                 </div>
               ) : (
-                <p className={`text-[15px] ${textSecondary}`}>There’s no quiz for this topic yet. You can browse all quizzes or move on to your feedback.</p>
+                <p className={`text-base ${textSecondary}`}>There’s no quiz for this topic yet. You can browse all quizzes or move on to your feedback.</p>
               )}
 
               <div className={`pt-5 border-t ${borderClass} flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3`}>
@@ -1444,7 +1444,7 @@ export const LearningSection = ({
                 />
               ) : (
                 <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <p className="text-sm font-semibold text-[var(--accent-600)]">Step 5 of 5 · Feedback</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                       <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>
@@ -1456,16 +1456,16 @@ export const LearningSection = ({
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
                     {/* Your work */}
-                    <section aria-labelledby="fb-code" className="space-y-2.5 min-w-0">
+                    <section aria-labelledby="fb-code" className="space-y-3 min-w-0">
                       <h3 id="fb-code" className={`text-lg ${textPrimary}`}>What you submitted</h3>
                       {latestTopicSubmission.code?.trim() ? (
-                        <pre className={`p-4 text-[13px] leading-relaxed overflow-x-auto max-h-[28rem] ${subtleBgClass} ${textPrimary}`}>
+                        <pre className={`p-4 text-sm leading-relaxed overflow-x-auto max-h-[28rem] ${subtleBgClass} ${textPrimary}`}>
                           <code>{latestTopicSubmission.code}</code>
                         </pre>
                       ) : latestTopicSubmission.repoUrl ? (
-                        <p className={`p-4 rounded-lg ${subtleBgClass} text-[15px] break-all ${textPrimary}`}>{latestTopicSubmission.repoUrl}</p>
+                        <p className={`p-4 rounded-lg ${subtleBgClass} text-base break-all ${textPrimary}`}>{latestTopicSubmission.repoUrl}</p>
                       ) : (
-                        <p className={`p-4 rounded-lg ${subtleBgClass} text-[15px] leading-relaxed max-w-[62ch] ${textPrimary}`}>
+                        <p className={`p-4 rounded-lg ${subtleBgClass} text-base leading-relaxed max-w-[62ch] ${textPrimary}`}>
                           {latestTopicSubmission.explanation || 'No code was included in this submission.'}
                         </p>
                       )}
@@ -1476,18 +1476,18 @@ export const LearningSection = ({
                       <h3 id="fb-review" className={`text-lg ${textPrimary}`}>Feedback</h3>
                       <div className="pl-4 border-l-4 border-[var(--success-ink)] space-y-1">
                         <div className="text-sm font-semibold text-[var(--success-ink)]">What you did well</div>
-                        <p className={`text-[15px] leading-relaxed max-w-[62ch] ${textPrimary}`}>{latestTopicSubmission.review.whatYouDidWell}</p>
+                        <p className={`text-base leading-relaxed max-w-[62ch] ${textPrimary}`}>{latestTopicSubmission.review.whatYouDidWell}</p>
                       </div>
                       <div className="pl-4 border-l-4 border-[var(--warning-ink)] space-y-1">
                         <div className="text-sm font-semibold text-[var(--warning-ink)]">What to improve</div>
-                        <p className={`text-[15px] leading-relaxed max-w-[62ch] ${textPrimary}`}>{latestTopicSubmission.review.whatNeedsImprovement}</p>
+                        <p className={`text-base leading-relaxed max-w-[62ch] ${textPrimary}`}>{latestTopicSubmission.review.whatNeedsImprovement}</p>
                       </div>
                       {latestTopicSubmission.review.suggestions.length > 0 && (
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                           <div className={`text-sm font-semibold ${textPrimary}`}>Practical suggestions</div>
-                          <ul className="space-y-1.5">
+                          <ul className="space-y-2">
                             {latestTopicSubmission.review.suggestions.map((s, idx) => (
-                              <li key={idx} className={`flex gap-2.5 text-[15px] leading-relaxed max-w-[62ch] ${textSecondary}`}>
+                              <li key={idx} className={`flex gap-2.5 text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>
                                 <span aria-hidden="true" className="w-1.5 h-1.5 mt-2.5 rounded-full bg-[var(--spark)] shrink-0" />
                                 <span>{s}</span>
                               </li>
@@ -1506,8 +1506,8 @@ export const LearningSection = ({
                         const savedAns = latestTopicSubmission.review?.learnerAnswers?.[qIdx] || '';
                         const draft = understandingReplyDrafts[latestTopicSubmission.id]?.[qIdx] ?? savedAns;
                         return (
-                          <div key={qIdx} className="space-y-2">
-                            <label htmlFor={`understanding-${qIdx}`} className={`block text-[15px] font-medium max-w-[62ch] ${textPrimary}`}>
+                          <div key={qIdx} className="space-y-3">
+                            <label htmlFor={`understanding-${qIdx}`} className={`block text-base font-medium max-w-[62ch] ${textPrimary}`}>
                               {qIdx + 1}. {q}
                             </label>
                             <div className="flex flex-col sm:flex-row gap-2">
@@ -1559,7 +1559,7 @@ export const LearningSection = ({
                   <div className={`pt-5 border-t ${borderClass} space-y-4`}>
                     <div className="border-l-4 border-[var(--spark)] pl-4 space-y-1">
                       <h3 className={`text-lg ${textPrimary}`}>Your next step</h3>
-                      <p className={`text-[15px] leading-relaxed max-w-[62ch] ${textPrimary}`}>{latestTopicSubmission.review.nextStep}</p>
+                      <p className={`text-base leading-relaxed max-w-[62ch] ${textPrimary}`}>{latestTopicSubmission.review.nextStep}</p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <button
@@ -1607,7 +1607,7 @@ export const LearningSection = ({
                 return (
                   <div key={course.id} className={`${cardClass} p-6 space-y-5`}>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
-                      <div className="space-y-2 max-w-2xl min-w-0">
+                      <div className="space-y-3 max-w-2xl min-w-0">
                         <p className={`text-xs ${textSecondary}`}>
                           <span className="font-semibold text-[var(--accent-600)]">{course.platform}</span> · {course.skillLevel} · {course.field}
                         </p>
@@ -1634,7 +1634,7 @@ export const LearningSection = ({
 
                     {/* Actions + Notes */}
                     <div className={`pt-4 border-t ${borderClass} grid grid-cols-1 lg:grid-cols-12 gap-5 items-start`}>
-                      <div className="lg:col-span-5 space-y-3">
+                      <div className="lg:col-span-5 space-y-4">
                         <div className="flex flex-wrap gap-2">
                           {course.url && (
                             <a href={course.url} target="_blank" rel="noopener noreferrer" className={btnSecondary}>
@@ -1667,7 +1667,7 @@ export const LearningSection = ({
                       </div>
 
                       {/* Collapsible Modules Accordion */}
-                      <div className="lg:col-span-7 space-y-2">
+                      <div className="lg:col-span-7 space-y-3">
                         <button
                           type="button"
                           onClick={() => setOpenCourseIds((prev) => ({ ...prev, [course.id]: !modulesOpen }))}
@@ -1765,7 +1765,7 @@ export const LearningSection = ({
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                          <div className={`p-3.5 rounded-xl ${subtleBgClass} space-y-1.5`}>
+                          <div className={`p-3.5 rounded-xl ${subtleBgClass} space-y-2`}>
                             <div className={`font-semibold ${textPrimary}`}>Roadmap topics covered</div>
                             {plan.coveredRoadmapTopics.length > 0 ? (
                               plan.coveredRoadmapTopics.map((t, i) => <div key={i} className="text-[var(--success-ink)]">✓ {t}</div>)
@@ -1773,7 +1773,7 @@ export const LearningSection = ({
                               <p className={textSecondary}>Add more module names so we can match more topics.</p>
                             )}
                           </div>
-                          <div className={`p-3.5 rounded-xl ${subtleBgClass} space-y-1.5`}>
+                          <div className={`p-3.5 rounded-xl ${subtleBgClass} space-y-2`}>
                             <div className={`font-semibold ${textPrimary}`}>Missing compared to {selectedRoadmap.title}</div>
                             {plan.missingRoadmapTopics.length > 0 ? (
                               plan.missingRoadmapTopics.map((t, i) => <div key={i} className="text-[var(--warning-ink)]">• {t}</div>)
@@ -1785,13 +1785,13 @@ export const LearningSection = ({
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {plan.dailyTargets.map((dt) => (
-                            <div key={dt.id} className={`p-3.5 rounded-xl border ${borderClass} space-y-2`}>
+                            <div key={dt.id} className={`p-3.5 rounded-xl border ${borderClass} space-y-3`}>
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-[var(--accent-600)]">{dt.dayLabel}</span>
                                 <span className={`tabular-nums ${textSecondary}`}>~{dt.estimatedMinutes}m</span>
                               </div>
                               <div className={`text-xs font-semibold ${textPrimary}`}>{dt.topic}</div>
-                              <p className={`text-[11px] ${textSecondary}`}>{dt.objective}</p>
+                              <p className={`text-xs ${textSecondary}`}>{dt.objective}</p>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1831,7 +1831,7 @@ export const LearningSection = ({
                     {urlInspectBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Check Link'}
                   </button>
                 </div>
-                {courseUrlError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{courseUrlError}</p>}
+                {courseUrlError && <p className="text-xs text-[var(--danger-ink)] mt-1">{courseUrlError}</p>}
                 {urlInspectNote && <p className={`text-xs mt-1 ${textSecondary}`}>{urlInspectNote}</p>}
               </div>
 
@@ -1917,7 +1917,7 @@ export const LearningSection = ({
                   placeholder="https://developer.mozilla.org/..."
                   className={inputClass}
                 />
-                {refUrlError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{refUrlError}</p>}
+                {refUrlError && <p className="text-xs text-[var(--danger-ink)] mt-1">{refUrlError}</p>}
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -1931,7 +1931,7 @@ export const LearningSection = ({
 
       {/* 3. SUBMISSIONS & FEEDBACK HISTORY */}
       {subTab === 'submissions' && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {codeSubmissions.length === 0 ? (
             <EmptyState
               title="No code submissions yet"
@@ -1961,7 +1961,7 @@ export const LearningSection = ({
                       <p className={`text-sm ${textSecondary}`}><strong className={textPrimary}>Your notes:</strong> {sub.explanation}</p>
                     )}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-                      <div className="space-y-3 min-w-0">
+                      <div className="space-y-4 min-w-0">
                         {sub.code && (
                           <pre className={`p-4 border ${borderClass} ${subtleBgClass} text-xs overflow-x-auto max-h-96 ${textPrimary}`}>{sub.code}</pre>
                         )}
@@ -2021,8 +2021,8 @@ export const LearningSection = ({
               <h2 className={`text-xl ${textPrimary}`}>Pick a quiz</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {quizzes.map((q) => (
-                  <article key={q.id} className={`${cardClass} p-5 flex flex-col gap-4`}>
-                    <div className="space-y-1.5 flex-1">
+                  <article key={q.id} className={`${cardClass} p-6 flex flex-col gap-4`}>
+                    <div className="space-y-2 flex-1">
                       <p className={`text-xs ${textSecondary}`}>{q.scope || 'Practice'} · {q.difficulty}</p>
                       <h3 className={`text-lg leading-snug ${textPrimary}`}>{q.title}</h3>
                       <p className={`text-sm ${textSecondary}`}>{q.topic} · <span className="tabular-nums">{q.questions.length} questions</span></p>
@@ -2084,13 +2084,13 @@ export const LearningSection = ({
               </details>
             </section>
 
-            <aside className="lg:col-span-4 space-y-3 lg:sticky lg:top-6 min-w-0">
+            <aside className="lg:col-span-4 space-y-4 lg:sticky lg:top-6 min-w-0">
               <h2 className={`text-xl ${textPrimary}`}>Recent attempts</h2>
               {quizAttempts.length === 0 ? (
                 <EmptyState title="No quizzes taken yet" description="Try an untimed quiz on a topic you studied to see what clicked." />
               ) : (
                 quizAttempts.map((att) => (
-                  <div key={att.id} className={`${cardClass} p-4 space-y-2`}>
+                  <div key={att.id} className={`${cardClass} p-5 space-y-3`}>
                     <div className="flex items-baseline justify-between gap-3">
                       <h4 className={`text-sm font-semibold ${textPrimary}`}>{att.quizTitle}</h4>
                       <span className={`font-display text-xl tabular-nums ${textPrimary}`}>{att.percentage}%</span>
@@ -2126,7 +2126,7 @@ export const LearningSection = ({
           </dl>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <div className={`${cardClass} p-6 space-y-3 lg:col-span-7`}>
+            <div className={`${cardClass} p-6 space-y-4 lg:col-span-7`}>
               <h2 className={`text-xl ${textPrimary}`}>Topics to revisit</h2>
               {needsRevisionTopics.length === 0 ? (
                 <p className={`text-xs leading-relaxed ${textSecondary}`}>
@@ -2138,7 +2138,7 @@ export const LearningSection = ({
                     <div key={item.topic.id} className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div className={`text-xs font-semibold ${textPrimary}`}>{item.topic.name}</div>
-                        <div className={`text-[11px] ${textSecondary}`}>Try a simpler explanation or a short revision quiz.</div>
+                        <div className={`text-xs ${textSecondary}`}>Try a simpler explanation or a short revision quiz.</div>
                       </div>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => onAskMentor(`Explain "${item.topic.name}" with a simple beginner example and a tiny practice prompt.`)} className={btnSecondary}>
@@ -2161,10 +2161,10 @@ export const LearningSection = ({
               )}
             </div>
 
-            <div className={`${cardClass} p-6 space-y-3 lg:col-span-5`}>
+            <div className={`${cardClass} p-6 space-y-4 lg:col-span-5`}>
               <h2 className={`text-xl ${textPrimary}`}>Weekly report</h2>
               {aiWeeklyReport ? (
-                <div className="space-y-2.5 text-xs">
+                <div className="space-y-3 text-xs">
                   <div><strong className={textPrimary}>What you learned:</strong> <span className={textSecondary}>{aiWeeklyReport.whatYouLearned}</span></div>
                   <div><strong className={textPrimary}>What you built:</strong> <span className={textSecondary}>{aiWeeklyReport.whatYouBuilt}</span></div>
                   <div><strong className={textPrimary}>Understood well:</strong> <span className={textSecondary}>{(aiWeeklyReport.understoodWell || []).join(', ')}</span></div>

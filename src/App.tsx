@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase, CLOUD, DEMO_ALLOWED } from './lib/supabase';
 import { SetupRequired } from './components/SetupRequired';
+import { Landing } from './components/Landing';
 import { detectMemberMilestones } from './lib/milestones';
 import { computeIndependence } from './lib/independence';
 import {
@@ -102,7 +103,7 @@ export default function App() {
   const saved = loadSaved();
 
   // Theme, Role & Navigation State
-  const [darkMode, setDarkMode] = useState<boolean>(saved?.darkMode ?? true);
+  const [darkMode, setDarkMode] = useState<boolean>(saved?.darkMode ?? (typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches));
   const [role, setRole] = useState<'member' | 'admin'>(ADMIN_SITE ? 'admin' : 'member');
   const [activeTab, setActiveTab] = useState<string>(
     ADMIN_SITE ? 'admin-dashboard' : saved?.activeTab && saved.activeTab !== 'studio-3d' ? saved.activeTab : 'dashboard'
@@ -115,6 +116,9 @@ export default function App() {
   const [loadError, setLoadError] = useState(false);
   const [onboarded, setOnboarded] = useState<boolean>(saved?.onboarded ?? false);
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [authView, setAuthView] = useState<null | 'in' | 'up'>(() =>
+    typeof window !== 'undefined' && /[?&#](error|error_description)=/.test(window.location.search + window.location.hash) ? 'in' : null
+  );
   const [syncStatus, setSyncStatus] = useState<'saved' | 'saving' | 'offline' | 'error'>(() =>
     typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'saved'
   );
@@ -617,12 +621,12 @@ export default function App() {
   const borderClass = 'border-[var(--border-hairline)]';
   const textPrimary = 'text-[var(--ink-primary)]';
   const textSecondary = 'text-[var(--ink-secondary)]';
-  const inputClass = `w-full px-3.5 py-2 text-sm rounded-lg border ${borderClass} ${
+  const inputClass = `w-full px-4 py-2.5 text-base rounded-[10px] border ${borderClass} ${
     'bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)]'
   } focus:outline-none focus:border-[var(--accent-600)] focus:ring-2 focus:ring-[var(--accent-500)]/20 transition-colors`;
   const btnPrimary =
-    'inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer bg-[var(--accent-600)] text-white hover:bg-[var(--accent-700)] disabled:opacity-60';
-  const btnSecondary = `inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg border ${borderClass} transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer ${
+    'inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer bg-[var(--accent-600)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] disabled:opacity-60';
+  const btnSecondary = `inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-[10px] border border-[var(--border-strong)] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer ${
     'bg-[var(--surface-elevated)] text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)]'
   }`;
 
@@ -800,7 +804,16 @@ export default function App() {
   // ============================================================================
   if (!CLOUD && !DEMO_ALLOWED) return <SetupRequired />;
   if (CLOUD && !authReady) return <LoadingScreen />;
-  if (!user) return CLOUD ? <AuthScreen /> : <LoginScreen onLogin={(u) => setUser(u)} />;
+  if (!user) {
+    if (ADMIN_SITE || authView) {
+      return CLOUD ? (
+        <AuthScreen initialMode={authView ?? 'in'} onBack={ADMIN_SITE ? undefined : () => setAuthView(null)} />
+      ) : (
+        <LoginScreen onLogin={(u) => setUser(u)} />
+      );
+    }
+    return <Landing onSignIn={() => setAuthView('in')} onJoin={() => setAuthView('up')} />;
+  }
   if (CLOUD && ADMIN_SITE && !user.isAdmin) return <NotAuthorized onSignOut={signOut} />;
   if (CLOUD && !hydrated) return <LoadingScreen error={loadError} onSignOut={signOut} />;
 
@@ -844,24 +857,25 @@ export default function App() {
     <DarkCtx.Provider value={darkMode}>
       <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-screen ${bgClass} ${textPrimary}`}>
         <div className="min-h-screen flex flex-col lg:flex-row">
+          <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop Sidebar (248px fixed) */}
-          <aside className="hidden lg:flex lg:w-[248px] lg:flex-col lg:fixed lg:inset-y-0 border-r studio-sidebar">
-            <div className={`h-16 px-5 flex items-center justify-between border-b ${borderClass}`}>
+          <aside className="hidden lg:flex lg:w-[280px] lg:flex-col lg:fixed lg:inset-y-0 border-r studio-sidebar">
+            <div className={`h-[72px] px-6 flex items-center justify-between border-b ${borderClass}`}>
               <button
                 type="button"
                 onClick={() => setActiveTab(role === 'admin' ? 'admin-dashboard' : 'dashboard')}
                 className="flex items-center gap-2.5 cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-lg rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
-                  <Code2 className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+                  <Code2 className="w-[18px] h-[18px]" />
                 </div>
-                <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap">
+                <span className="font-display text-lg font-semibold tracking-tight whitespace-nowrap">
                   {role === 'admin' ? 'Dev Hub · Admin' : 'Dev Hub'}
                 </span>
               </button>
             </div>
 
-            <nav aria-label="Main navigation" className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            <nav aria-label="Main navigation" className="flex-1 px-4 py-5 space-y-1 overflow-y-auto">
               {(role === 'admin' ? adminNav : mainNav).map((item, idx, arr) => {
                 const Icon = item.icon;
                 const active = item.match.includes(activeTab);
@@ -870,7 +884,7 @@ export default function App() {
                 return (
                   <React.Fragment key={item.id}>
                   {group && group !== prevGroup && (
-                    <div className="ds-group px-3.5 pt-4 pb-1 text-xs font-semibold text-[var(--ink-muted)]">{group}</div>
+                    <div className="ds-group px-3 pt-6 pb-2 text-sm font-semibold text-[var(--ink-muted)]">{group}</div>
                   )}
                   <button
                     key={item.id}
@@ -879,13 +893,14 @@ export default function App() {
                       setShowOnboardingWizard(false);
                       setActiveTab(item.id);
                     }}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    aria-current={active ? 'page' : undefined}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[10px] text-[0.9375rem] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                       active
-                        ? 'nav-active bg-[var(--accent-600)] text-white'
-                        : `${textSecondary} hover:bg-[var(--surface-subtle)]`
+                        ? 'nav-active font-semibold'
+                        : `${textSecondary} hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-primary)]`
                     }`}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
+                    <Icon className="w-5 h-5 shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </button>
                   </React.Fragment>
@@ -901,52 +916,52 @@ export default function App() {
                       setRole(nextRole);
                       setActiveTab(nextRole === 'admin' ? 'admin-dashboard' : 'dashboard');
                     }}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold border ${borderClass} ${textPrimary} cursor-pointer whitespace-nowrap`}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[10px] text-sm font-semibold border ${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
                   >
-                    <Shield className="w-4 h-4 text-[var(--accent-600)] shrink-0" />
+                    <Shield className="w-5 h-5 text-[var(--accent-600)] shrink-0" />
                     <span className="truncate">{role === 'admin' ? 'Member View' : 'Admin Console'}</span>
                   </button>
                 </div>
               )}
             </nav>
             {!CLOUD && (
-              <div className="mx-3 mb-2 px-3 py-2 rounded-lg border border-[var(--warning-border,var(--border-hairline))] bg-[var(--warning-bg,var(--surface-subtle))] text-[11px] leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
+              <div className="mx-4 mb-3 px-3.5 py-3 rounded-[10px] border border-[var(--warning-border,var(--border-hairline))] bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
                 <strong>Demo mode.</strong> Data stays in this browser only. Connect Supabase to go live.
               </div>
             )}
 
-            <div className={`p-3 border-t ${borderClass} space-y-1`}>
+            <div className={`p-4 border-t ${borderClass} space-y-1`}>
               <button
                 type="button"
                 onClick={() => {
                   setShowOnboardingWizard(false);
                   setActiveTab('profile');
                 }}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-medium cursor-pointer ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-12 rounded-[10px] text-sm font-medium cursor-pointer ${
                   activeTab === 'profile'
-                    ? 'bg-[var(--accent-600)] text-white'
+                    ? 'nav-active'
                     : `${textSecondary} hover:bg-[var(--surface-subtle)]`
                 }`}
               >
-                <Settings className="w-4 h-4 shrink-0" />
+                <Settings className="w-5 h-5 shrink-0" />
                 <div className="text-left min-w-0">
                   <div className="truncate font-semibold">{user.name || 'Profile & Settings'}</div>
-                  <div className="truncate opacity-75 text-[11px]">Profile & Settings</div>
+                  <div className="truncate opacity-80 text-xs">Profile & settings</div>
                 </div>
               </button>
               <button
                 type="button"
                 onClick={signOut}
-                className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-lg text-xs ${textSecondary} hover:text-[var(--danger-ink)] cursor-pointer whitespace-nowrap`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[10px] text-sm ${textSecondary} hover:text-[var(--danger-ink)] hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
               >
-                <LogOut className="w-4 h-4 shrink-0" />
+                <LogOut className="w-5 h-5 shrink-0" />
                 <span>Sign out</span>
               </button>
             </div>
           </aside>
 
           {/* Mobile Top Header */}
-          <header className={`lg:hidden sticky top-0 z-30 h-14 px-4 flex items-center justify-between border-b ${borderClass} ${'bg-[var(--canvas-bg)]/95'} backdrop-blur`}>
+          <header className={`lg:hidden sticky top-0 z-30 h-16 px-4 flex items-center justify-between border-b ${borderClass} ${'bg-[var(--surface-bg)]/95'} backdrop-blur`}>
             <button
               type="button"
               onClick={() => {
@@ -955,15 +970,15 @@ export default function App() {
               }}
               className="flex items-center gap-2 cursor-pointer"
             >
-              <div className="w-7 h-7 rounded-lg rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
-                <Code2 className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-[9px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+                <Code2 className="w-[17px] h-[17px]" />
               </div>
-              <span className="font-display text-sm font-semibold">Dev Hub</span>
+              <span className="font-display text-lg font-semibold">Dev Hub</span>
             </button>
             <div className="flex items-center gap-2">
               <span
                 aria-live="polite"
-                className={`inline-flex items-center gap-1 text-[11px] font-medium whitespace-nowrap ${
+                className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap ${
                   syncStatus === 'offline' || syncStatus === 'error'
                     ? 'text-[var(--warning-ink)]'
                     : textSecondary
@@ -991,24 +1006,24 @@ export default function App() {
                 type="button"
                 aria-label="Toggle dark mode"
                 onClick={() => setDarkMode((v) => !v)}
-                className={`p-2 rounded-lg border ${borderClass} ${textSecondary} cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
-                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
               <button
                 type="button"
                 aria-label="Open menu"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className={`p-2 rounded-lg border ${borderClass} ${textSecondary} cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
-                {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </header>
 
           {/* Mobile Drawer */}
           {mobileMenuOpen && (
-            <div className="lg:hidden fixed inset-0 top-14 z-20 p-4 space-y-2 overflow-y-auto studio-canvas">
+            <div className="lg:hidden fixed inset-0 top-14 z-20 p-4 space-y-3 overflow-y-auto studio-canvas">
               {(role === 'admin' ? adminNav : mainNav).map((item) => {
                 const Icon = item.icon;
                 const active = item.match.includes(activeTab);
@@ -1067,10 +1082,10 @@ export default function App() {
           )}
 
           {/* Main Workspace Container */}
-          <div className="flex-1 lg:pl-[248px] flex flex-col min-w-0">
+          <div className="flex-1 lg:pl-[280px] flex flex-col min-w-0">
             {/* Desktop Workspace Context Top Bar */}
-            <header className={`hidden lg:flex sticky top-0 z-20 h-16 px-8 items-center justify-between border-b ${borderClass} ${'bg-[var(--canvas-bg)]/90'} backdrop-blur`}>
-              <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs">
+            <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-12 items-center justify-between border-b ${borderClass} ${'bg-[var(--canvas-bg)]/90'} backdrop-blur`}>
+              <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
                 <span className={textSecondary}>Dev Hub</span>
                 <span className={textSecondary}>/</span>
                 <span className={breadcrumbParts.secondary ? textSecondary : `font-semibold ${textPrimary}`}>
@@ -1120,7 +1135,7 @@ export default function App() {
                   type="button"
                   aria-label="Toggle dark mode"
                   onClick={() => setDarkMode((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border ${borderClass} text-xs font-medium ${textSecondary} ${'hover:text-[var(--ink-primary)]'} cursor-pointer transition-colors`}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-[10px] border ${borderClass} text-sm font-medium ${textSecondary} ${'hover:text-[var(--ink-primary)]'} cursor-pointer transition-colors`}
                 >
                   {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
                   <span>{darkMode ? 'Light' : 'Dark'}</span>
@@ -1128,13 +1143,13 @@ export default function App() {
               </div>
             </header>
 
-            <main className="flex-1 pb-20 lg:pb-12">
+            <main id="main" tabIndex={-1} className="flex-1 pb-24 lg:pb-16 focus:outline-none">
               <motion.div
                 key={showOnboardingWizard ? 'onboarding' : activeTab}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-6 sm:py-10"
+                className="max-w-6xl mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12 space-y-10"
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard
@@ -1335,7 +1350,7 @@ export default function App() {
           </div>
 
           {/* Compact Mobile Bottom Nav */}
-          <nav aria-label="Mobile navigation" className={`lg:hidden fixed bottom-0 inset-x-0 z-30 h-16 border-t ${borderClass} ${'bg-[var(--canvas-bg)]/95'} backdrop-blur grid grid-cols-6`}>
+          <nav aria-label="Mobile navigation" className={`lg:hidden fixed bottom-0 inset-x-0 z-30 h-[68px] border-t ${borderClass} ${'bg-[var(--surface-bg)]/95'} backdrop-blur grid grid-cols-6`}>
             {mainNav.map((item) => {
               const Icon = item.icon;
               const active = item.match.includes(activeTab);
@@ -1348,12 +1363,13 @@ export default function App() {
                     setActiveTab(item.id);
                     setMobileMenuOpen(false);
                   }}
-                  className={`flex flex-col items-center justify-center gap-0.5 min-h-[44px] text-[10px] font-medium cursor-pointer ${
-                    active ? 'text-[var(--accent-600)] font-semibold' : textSecondary
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex flex-col items-center justify-center gap-1 min-h-[48px] text-xs font-medium cursor-pointer ${
+                    active ? 'text-[var(--accent-700)] font-semibold' : textSecondary
                   }`}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate max-w-[54px]">{item.label.replace('My ', '')}</span>
+                  <Icon className="w-5 h-5 shrink-0" />
+                  <span className="truncate max-w-[58px]">{item.label.replace('My ', '')}</span>
                 </button>
               );
             })}
@@ -1365,7 +1381,7 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               role="status"
-              className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 px-4 py-2.5 rounded-lg bg-[var(--panel-deep)] text-white text-xs font-medium shadow-lg border border-[var(--border-strong)]"
+              className="fixed bottom-24 lg:bottom-8 right-4 sm:right-8 z-40 max-w-[calc(100vw-2rem)] px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
             >
               {toastMessage}
             </motion.div>

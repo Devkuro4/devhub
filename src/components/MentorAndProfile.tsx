@@ -117,7 +117,7 @@ const FormattedMessageText = ({ text, isUser, subtleBgClass, borderClass, textPr
 
   const segments = text.split(/(```[\s\S]*?```)/g);
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {segments.map((seg, idx) => {
         if (!seg) return null;
         if (seg.startsWith('```') && seg.endsWith('```')) {
@@ -128,7 +128,7 @@ const FormattedMessageText = ({ text, isUser, subtleBgClass, borderClass, textPr
           return (
             <div key={idx} className={`rounded-lg border ${borderClass} ${subtleBgClass} overflow-hidden`}>
               {lang && (
-                <div className={`px-3 py-1 border-b ${borderClass} text-[10px] font-mono uppercase tracking-wide opacity-70`}>
+                <div className={`px-3 py-1 border-b ${borderClass} text-xs font-mono tracking-wide opacity-70`}>
                   {lang}
                 </div>
               )}
@@ -342,7 +342,7 @@ export const MentorSection = ({
   ];
   const showSpinner = busyChatId !== null && busyChatId === activeChat?.id;
   const pill = (active: boolean) =>
-    `px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer border transition-colors ${
+    `px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer border transition-colors ${
       active ? 'bg-[var(--accent-600)] text-white border-transparent' : `${borderClass} ${textSecondary} hover:border-[var(--accent-500)]`
     }`;
 
@@ -374,7 +374,7 @@ export const MentorSection = ({
             {groups.length === 0 && <p className={`px-2 text-xs ${textSecondary}`}>Your chats will show up here, so you can come back to them any time.</p>}
             {groups.map((g) => (
               <div key={g.label}>
-                <div className={`px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide ${textSecondary}`}>{g.label}</div>
+                <div className={`px-2 pb-1 text-xs font-semibold tracking-wide ${textSecondary}`}>{g.label}</div>
                 <ul className="space-y-0.5">
                   {g.items.map((c) => {
                     const active = c.id === store.activeId;
@@ -418,12 +418,12 @@ export const MentorSection = ({
               >
                 <PanelLeft className="w-4 h-4" />
               </button>
-              <div className="w-8 h-8 rounded-lg rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className={`font-display text-base truncate ${textPrimary}`}>{activeChat?.title || 'New chat'}</div>
-                <div className={`text-[11px] truncate ${textSecondary}`}>Private · {currentTopic}</div>
+                <div className={`text-xs truncate ${textSecondary}`}>Private · {currentTopic}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -441,7 +441,7 @@ export const MentorSection = ({
                 onClick={() => setContextOpen((v) => !v)}
                 aria-expanded={contextOpen}
                 title="What your mentor knows about you"
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium cursor-pointer ${borderClass} ${contextOpen ? 'text-[var(--accent-600)]' : textSecondary}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium cursor-pointer ${borderClass} ${contextOpen ? 'text-[var(--accent-600)]' : textSecondary}`}
               >
                 <Compass className="w-3.5 h-3.5" /> <span className="hidden sm:inline">What I know</span>
               </button>
@@ -454,7 +454,7 @@ export const MentorSection = ({
               <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
                 {ctx.map(([k, v]) => (
                   <div key={k}>
-                    <dt className={`text-[11px] ${textSecondary}`}>{k}</dt>
+                    <dt className={`text-xs ${textSecondary}`}>{k}</dt>
                     <dd className={`text-sm font-medium ${textPrimary}`}>{v}</dd>
                   </div>
                 ))}
@@ -466,10 +466,10 @@ export const MentorSection = ({
             <div className="max-w-3xl mx-auto space-y-5">
               {messages.length === 0 && !showSpinner && (
                 <div className="pt-4 sm:pt-10 text-center space-y-5">
-                  <div className="w-11 h-11 mx-auto rounded-xl rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+                  <div className="w-11 h-11 mx-auto rounded-xl bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
                     <Bot className="w-5 h-5" />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <h2 className={`text-xl ${textPrimary}`}>Hi {firstName}, what are we learning?</h2>
                     <p className={`text-sm max-w-md mx-auto ${textSecondary}`}>
                       You’re learning {profile.field || selectedRoadmap.field} at the {profile.skillLevel || 'Beginner'} level
@@ -495,7 +495,7 @@ export const MentorSection = ({
               {messages.map((m) =>
                 m.sender === 'user' ? (
                   <div key={m.id} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm bg-[var(--panel-deep)] text-white">
+                    <div className="max-w-[85%] rounded-[20px] px-4 py-2.5 text-sm bg-[var(--panel-deep)] text-white">
                       <FormattedMessageText text={m.text} isUser subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
                     </div>
                   </div>
@@ -506,9 +506,9 @@ export const MentorSection = ({
                       <FormattedMessageText text={m.text} isUser={false} subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
                       {m.sources && m.sources.length > 0 && (
                         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                          <span className={`text-[11px] ${textSecondary}`}>Sources</span>
+                          <span className={`text-xs ${textSecondary}`}>Sources</span>
                           {m.sources.map((src, idx) => (
-                            <a key={idx} href={src.uri} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border ${borderClass} text-[11px] text-[var(--accent-600)] hover:underline`}>
+                            <a key={idx} href={src.uri} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border ${borderClass} text-xs text-[var(--accent-600)] hover:underline`}>
                               <span className="truncate max-w-[200px]">{src.title}</span>
                               <ExternalLink className="w-3 h-3 shrink-0" />
                             </a>
@@ -563,7 +563,7 @@ export const MentorSection = ({
                 />
                 <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
                   <div className="flex items-center gap-1.5 flex-wrap min-w-0" role="radiogroup" aria-label="How much help do you want?">
-                    <span className={`text-[11px] pl-1.5 pr-0.5 ${textSecondary}`}>Help</span>
+                    <span className={`text-xs pl-1.5 pr-0.5 ${textSecondary}`}>Help</span>
                     {HELP_LEVELS.map((h) => (
                       <button
                         key={h.level}
@@ -597,7 +597,7 @@ export const MentorSection = ({
                   </button>
                 </div>
               </div>
-              <p className={`mt-1.5 text-center text-[11px] ${textSecondary}`}>
+              <p className={`mt-1.5 text-center text-xs ${textSecondary}`}>
                 {level?.description} Smaller help counts more toward your independence score.
               </p>
             </form>
@@ -628,10 +628,10 @@ const SettingsField = ({
   textSecondary: string;
   children: React.ReactNode;
 }) => (
-  <label className="block space-y-1.5">
+  <label className="block space-y-2">
     <span className={`block text-sm font-medium ${textPrimary}`}>{label}</span>
     {children}
-    {hint && <span className={`block text-[13px] ${textSecondary}`}>{hint}</span>}
+    {hint && <span className={`block text-sm ${textSecondary}`}>{hint}</span>}
   </label>
 );
 
@@ -665,7 +665,7 @@ const SettingsCheck = ({
     />
     <span className="min-w-0">
       <span className={`block text-sm font-medium ${textPrimary}`}>{title}</span>
-      {description && <span className={`block text-[13px] leading-relaxed ${textSecondary}`}>{description}</span>}
+      {description && <span className={`block text-sm leading-relaxed ${textSecondary}`}>{description}</span>}
     </span>
   </label>
 );
@@ -793,7 +793,7 @@ export const ProfileSection = ({
           <section id="settings-profile" aria-labelledby="settings-profile-title" className="space-y-4 scroll-mt-24">
             <div id="settings-profile-title">{sectionHead('Profile', 'How other members see you, and where to find your work.')}</div>
 
-            <div className={`${cardClass} p-5 sm:p-8 space-y-5`}>
+            <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <SettingsField label="Full name" {...fieldProps}>
                   <input value={draft.fullName} onChange={(e) => setDraft({ ...draft, fullName: e.target.value })} className={field} />
@@ -846,7 +846,7 @@ export const ProfileSection = ({
           <section id="settings-goals" aria-labelledby="settings-goals-title" className="space-y-4 scroll-mt-24">
             <div id="settings-goals-title">{sectionHead('Learning goals', 'Your mentor and roadmap use these to suggest the right next step.')}</div>
 
-            <div className={`${cardClass} p-5 sm:p-8 space-y-5`}>
+            <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <SettingsField label="What you're learning" {...fieldProps}>
                   <input value={draft.field} onChange={(e) => setDraft({ ...draft, field: e.target.value })} className={field} placeholder="e.g., Frontend Development" />
@@ -876,7 +876,7 @@ export const ProfileSection = ({
           <section id="settings-appearance" aria-labelledby="settings-appearance-title" className="space-y-4 scroll-mt-24">
             <div id="settings-appearance-title">{sectionHead('Appearance', 'Choose how much of Dev Hub you see and which theme you use.')}</div>
 
-            <div className={`${cardClass} p-5 sm:p-8 space-y-5`}>
+            <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
               <SettingsCheck
                 checked={!!draft.showAdvancedTools}
                 onChange={(v) => setDraft({ ...draft, showAdvancedTools: v })}
@@ -896,8 +896,8 @@ export const ProfileSection = ({
           <section id="settings-account" aria-labelledby="settings-account-title" className="space-y-4 scroll-mt-24">
             <div id="settings-account-title">{sectionHead('Account', 'Reminders we send you, and your setup.')}</div>
 
-            <div className={`${cardClass} p-5 sm:p-8 space-y-6`}>
-              <fieldset className="space-y-2.5">
+            <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
+              <fieldset className="space-y-3">
                 <legend className={`text-lg mb-2.5 ${textPrimary}`}>Notifications</legend>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {[

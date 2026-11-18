@@ -33,72 +33,66 @@ export const IndependenceCard = ({
   ];
 
   return (
-    <section className={`${cardClass} p-5 space-y-4`} aria-label="Independence">
+    <section className={`${cardClass} p-6 space-y-6`} aria-label="Your independence">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className={`font-display text-lg flex items-center gap-2 ${textPrimary}`}>
-            <Compass className="w-4 h-4 text-[var(--accent-600)]" /> Your independence
-          </h2>
-          <p className={`text-xs mt-1 ${textSecondary}`}>
-            Dev Hub measures whether you can do it yourself, not how many videos you watched. Last 30 days.
+        <div className="min-w-0 space-y-2">
+          <h2 className={`font-display text-xl ${textPrimary}`}>Your independence</h2>
+          <p className={`text-sm ${textSecondary}`}>
+            Can you do it yourself? Based on your last 30 days.
           </p>
         </div>
         <div className="text-right shrink-0">
-          <div className={`font-display text-3xl font-bold leading-none ${textPrimary}`}>{score === null ? '–' : score}</div>
-          <div className={`text-xs mt-1 ${textSecondary}`}>{label}</div>
+          <div className="font-display text-4xl font-bold leading-none tabular-nums text-[var(--signal-ink)] dark:text-[var(--signal)]">
+            {score === null ? '–' : score}
+          </div>
+          <div className={`text-sm mt-1.5 ${textSecondary}`}>{label}</div>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <ul className="space-y-5">
         {rows.map((r) => (
-          <div key={r.name} className={`rounded-xl border ${borderClass} ${subtleBgClass} p-3 space-y-2`}>
-            <div className="flex items-center justify-between text-xs">
-              <span className={`font-medium ${textPrimary}`}>{r.name}</span>
-              <span className={textSecondary}>{r.value === null ? 'No data yet' : `${r.value}%`}</span>
+          <li key={r.name} className="space-y-3">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span className={`font-semibold ${textPrimary}`}>{r.name}</span>
+              <span className={`tabular-nums ${textSecondary}`}>{r.value === null ? 'No data yet' : `${r.value}%`}</span>
             </div>
             <ProgressBar value={r.value ?? 0} />
-            <p className={`text-[11px] leading-snug ${textSecondary}`}>{r.note}</p>
-          </div>
+            <p className={`text-sm leading-snug ${textSecondary}`}>{r.note}</p>
+          </li>
         ))}
-      </div>
+      </ul>
 
-      <div>
-        <p className={`text-xs font-medium mb-2 ${textPrimary}`}>Your journey</p>
-        <ol className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className={`pt-5 border-t ${borderClass}`}>
+        <h3 className={`text-base font-semibold mb-3 ${textPrimary}`}>Your journey</h3>
+        <ol className="grid grid-cols-2 gap-x-4 gap-y-2.5">
           {stages.map((s) => (
-            <li
-              key={s.id}
-              className={`rounded-lg border ${borderClass} px-2.5 py-2 text-xs flex items-start gap-1.5 ${
-                s.reached ? subtleBgClass : ''
-              }`}
-              title={s.hint}
-            >
+            <li key={s.id} className="flex items-center gap-2.5 text-sm" title={s.hint}>
               {s.reached ? (
-                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--success-ink)]" />
+                <CheckCircle2 className="w-[18px] h-[18px] shrink-0 text-[var(--success-ink)]" aria-label="Reached" />
               ) : (
-                <Circle className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${textSecondary}`} />
+                <Circle className={`w-[18px] h-[18px] shrink-0 ${textSecondary}`} aria-label="Not yet" />
               )}
-              <span className={s.reached ? textPrimary : textSecondary}>{s.label}</span>
+              <span className={s.reached ? `font-medium ${textPrimary}` : textSecondary}>{s.label}</span>
             </li>
           ))}
         </ol>
         {nextStage && (
-          <p className={`text-xs mt-2 ${textSecondary}`}>
-            Next: <span className={textPrimary}>{nextStage.label}</span>. {nextStage.hint}.
+          <p className={`text-sm mt-4 ${textSecondary}`}>
+            Next: <span className={`font-medium ${textPrimary}`}>{nextStage.label}</span>. {nextStage.hint}.
           </p>
         )}
       </div>
 
-      <div className={`rounded-xl border ${borderClass} ${subtleBgClass} p-3 text-xs ${textSecondary}`}>
+      <div className={`rounded-[12px] ${subtleBgClass} p-4 text-sm leading-relaxed ${textSecondary} space-y-3`}>
         <p className={textPrimary}>{tip}</p>
-        <p className="mt-1.5">
+        <p>
           This month: {workDone} finished {workDone === 1 ? 'task' : 'tasks'}. Mentor help: {helpByLevel[1]} nudge
           {helpByLevel[1] === 1 ? '' : 's'}, {helpByLevel[2]} hint{helpByLevel[2] === 1 ? '' : 's'},{' '}
           {helpByLevel[3]} walkthrough{helpByLevel[3] === 1 ? '' : 's'}.
           {onOpenMentor && (
             <>
               {' '}
-              <button type="button" onClick={onOpenMentor} className="text-[var(--accent-600)] hover:underline cursor-pointer">
+              <button type="button" onClick={onOpenMentor} className="font-medium text-[var(--accent-700)] dark:text-[var(--accent-600)] underline underline-offset-4 cursor-pointer">
                 Open mentor
               </button>
             </>

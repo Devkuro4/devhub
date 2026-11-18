@@ -412,7 +412,7 @@ export const ProjectsSection = ({
             <div className={`border-t ${borderClass} p-5 flex flex-wrap items-end gap-2.5`}>
             <div className="flex flex-wrap items-end gap-2.5">
               <div>
-                <label className={`block text-[11px] font-medium mb-1 ${textSecondary}`}>Project Style</label>
+                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Project Style</label>
                 <select value={tierDraft} onChange={(e) => setTierDraft(e.target.value)} className={inputClass}>
                   <option>Guided Beginner Project</option>
                   <option>Independent Project</option>
@@ -420,7 +420,7 @@ export const ProjectsSection = ({
                 </select>
               </div>
               <div>
-                <label className={`block text-[11px] font-medium mb-1 ${textSecondary}`}>Language</label>
+                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Language</label>
                 <input value={langDraft} onChange={(e) => setLangDraft(e.target.value)} className={`${inputClass} w-36`} placeholder="JavaScript" />
               </div>
               <button type="button" onClick={handleGenerateWeeklyProject} disabled={genBusy} className={btnPrimary}>
@@ -482,9 +482,9 @@ export const ProjectsSection = ({
                     <p className={`text-xs leading-relaxed ${textSecondary}`}>{activeWp.whatItShouldDo}</p>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className={`text-xs font-semibold ${textPrimary}`}>Requirements</div>
-                    <ul className={`space-y-1.5 text-xs ${textSecondary}`}>
+                    <ul className={`space-y-2 text-xs ${textSecondary}`}>
                       {activeWp.requirements.map((r, i) => (
                         <li key={i} className="flex items-start gap-2">
                           <span className="text-[var(--accent-600)] font-semibold tabular-nums">{i + 1}.</span>
@@ -494,7 +494,7 @@ export const ProjectsSection = ({
                     </ul>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div className={`text-xs font-semibold ${textPrimary}`}>Concepts practised</div>
                     <p className={`text-xs ${textSecondary}`}>{activeWp.conceptsToUse.join(' · ')}</p>
                   </div>
@@ -510,7 +510,7 @@ export const ProjectsSection = ({
                         {showHints ? 'Hide hints' : 'Need a hint? Reveal optional hints'}
                       </button>
                       {showHints && (
-                        <ul className={`mt-2 p-3.5 rounded-lg ${subtleBgClass} space-y-1.5 text-xs ${textSecondary}`}>
+                        <ul className={`mt-2 p-3.5 rounded-lg ${subtleBgClass} space-y-2 text-xs ${textSecondary}`}>
                           {activeWp.optionalHints.map((h, i) => (
                             <li key={i}>• {h}</li>
                           ))}
@@ -533,7 +533,7 @@ export const ProjectsSection = ({
 
               <div className="lg:col-span-5 space-y-5">
                 {activeWp.milestones?.length > 0 && (
-                  <section className={`${cardClass} p-5 space-y-3`}>
+                  <section className={`${cardClass} p-6 space-y-4`}>
                     <div className="flex items-baseline justify-between">
                       <h3 className={`text-lg ${textPrimary}`}>Build checklist</h3>
                       <span className={`text-xs tabular-nums ${textSecondary}`}>{activeWp.milestones.filter((m) => m.done).length}/{activeWp.milestones.length} done</span>
@@ -584,12 +584,12 @@ export const ProjectsSection = ({
                   )}
 
                   {wpUploadFeedback && (wpUploadFeedback.acceptedCount > 0 || wpUploadFeedback.warnings.length > 0) && (
-                    <div className={`p-3 rounded-lg border ${borderClass} ${subtleBgClass} text-xs space-y-1.5`}>
+                    <div className={`p-3 rounded-lg border ${borderClass} ${subtleBgClass} text-xs space-y-2`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className={`font-semibold ${textPrimary}`}>
                           Upload summary ({wpUploadFeedback.acceptedCount} loaded{wpUploadFeedback.warnings.length ? `, ${wpUploadFeedback.warnings.length} warning` : ''})
                         </span>
-                        <button type="button" onClick={() => setWpUploadFeedback(null)} className={`text-[11px] ${textSecondary} hover:underline cursor-pointer`}>
+                        <button type="button" onClick={() => setWpUploadFeedback(null)} className={`text-xs ${textSecondary} hover:underline cursor-pointer`}>
                           Dismiss
                         </button>
                       </div>
@@ -612,16 +612,16 @@ export const ProjectsSection = ({
 
                   <div>
                     <input value={wpRepo} onChange={(e) => setWpRepo(e.target.value)} placeholder="GitHub repository link (optional)" className={inputClass} />
-                    {wpRepoError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{wpRepoError}</p>}
+                    {wpRepoError && <p className="text-xs text-[var(--danger-ink)] mt-1">{wpRepoError}</p>}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
                       <input value={wpDemo} onChange={(e) => setWpDemo(e.target.value)} placeholder="Live demo link (optional)" className={inputClass} />
-                      {wpDemoError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{wpDemoError}</p>}
+                      {wpDemoError && <p className="text-xs text-[var(--danger-ink)] mt-1">{wpDemoError}</p>}
                     </div>
                     <div>
                       <input value={wpShot} onChange={(e) => setWpShot(e.target.value)} placeholder="Screenshot URL (optional)" className={inputClass} />
-                      {wpShotError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{wpShotError}</p>}
+                      {wpShotError && <p className="text-xs text-[var(--danger-ink)] mt-1">{wpShotError}</p>}
                     </div>
                   </div>
                   <textarea
@@ -669,7 +669,7 @@ export const ProjectsSection = ({
                     )}
 
                     {activeWp.review.understandingQuestion && (
-                      <div className={`p-3.5 rounded-lg ${subtleBgClass} space-y-2`}>
+                      <div className={`p-3.5 rounded-lg ${subtleBgClass} space-y-3`}>
                         <div className={`text-xs font-semibold ${textPrimary}`}>Understanding Check</div>
                         <p className={`text-xs ${textSecondary}`}>{activeWp.review.understandingQuestion}</p>
                         {activeWp.review.learnerResponse ? (
@@ -742,7 +742,7 @@ export const ProjectsSection = ({
                 </div>
 
                 {profile.showAdvancedTools && (
-                  <div className={`pt-3 border-t ${borderClass} space-y-2`}>
+                  <div className={`pt-3 border-t ${borderClass} space-y-3`}>
                     <div className={`text-xs font-semibold ${textPrimary}`}>Development Stage (SDLC)</div>
                     <div className="flex flex-wrap gap-1.5">
                       {SDLC_STAGES.map((stage) => (
@@ -750,7 +750,7 @@ export const ProjectsSection = ({
                           key={stage}
                           type="button"
                           onClick={() => setProjects(projects.map((p) => (p.id === activeGroupProj.id ? { ...p, sdlcStage: stage } : p)))}
-                          className={`px-2.5 py-1 rounded text-[11px] font-medium border cursor-pointer ${
+                          className={`px-2.5 py-1 rounded text-xs font-medium border cursor-pointer ${
                             activeGroupProj.sdlcStage === stage
                               ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)]'
                               : `${borderClass} ${textSecondary}`
@@ -774,23 +774,23 @@ export const ProjectsSection = ({
                 {['To Do', 'In Progress', 'In Review', 'Completed'].map((col) => {
                   const colTasks = (activeGroupProj.tasks || []).filter((t: any) => t.status === col);
                   return (
-                    <div key={col} className={`rounded-xl bg-[var(--surface-subtle)] p-3 space-y-3 border-t-4 ${col === 'Completed' ? 'border-[var(--success-ink)]' : col === 'In Review' ? 'border-[var(--spark)]' : col === 'In Progress' ? 'border-[var(--accent-500)]' : 'border-[var(--border-strong)]'}`}>
+                    <div key={col} className={`rounded-xl bg-[var(--surface-subtle)] p-3 space-y-4 border-t-4 ${col === 'Completed' ? 'border-[var(--success-ink)]' : col === 'In Review' ? 'border-[var(--spark)]' : col === 'In Progress' ? 'border-[var(--accent-500)]' : 'border-[var(--border-strong)]'}`}>
                       <div className="flex items-center justify-between text-sm font-semibold px-1">
                         <span className={textPrimary}>{col}</span>
                         <span className={`tabular-nums ${textSecondary}`}>{colTasks.length}</span>
                       </div>
-                      <div className="space-y-2.5">
+                      <div className="space-y-3">
                         {colTasks.length === 0 && <p className={`text-xs px-1 py-2 ${textSecondary}`}>Nothing here yet.</p>}
                         {colTasks.map((t: any) => (
-                          <div key={t.id} className={`rounded-lg border-[1.5px] ${borderClass} bg-[var(--surface-elevated)] p-3 space-y-2`}>
+                          <div key={t.id} className={`rounded-lg border ${borderClass} bg-[var(--surface-elevated)] p-3 space-y-3`}>
                             <div className={`text-sm font-medium leading-snug ${textPrimary}`}>{t.title}</div>
-                            <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <div className="flex items-center justify-between gap-2 text-xs">
                               <span className={textSecondary}>{t.assignee}</span>
                               <div className="flex items-center gap-1">
                                 <select
                                   value={t.status}
                                   onChange={(e) => moveGroupTask(activeGroupProj.id, t.id, e.target.value)}
-                                  className={`px-1.5 py-0.5 rounded border ${borderClass} bg-transparent ${textPrimary} text-[11px]`}
+                                  className={`px-1.5 py-0.5 rounded border ${borderClass} bg-transparent ${textPrimary} text-xs`}
                                 >
                                   <option value="To Do">To Do</option>
                                   <option value="In Progress">In Progress</option>
@@ -859,12 +859,12 @@ export const ProjectsSection = ({
                       <span className="font-display text-4xl leading-none text-[var(--ink-primary)] opacity-80" aria-hidden="true">{item.title.slice(0, 2)}</span>
                       <span className="flex flex-wrap justify-end gap-1">
                         {item.technologies.slice(0, 4).map((t) => (
-                          <span key={t} className="px-2 py-0.5 rounded-full bg-[var(--surface-elevated)] border border-[var(--border-hairline)] text-[11px] font-mono text-[var(--ink-primary)]">{t}</span>
+                          <span key={t} className="px-2 py-0.5 rounded-full bg-[var(--surface-elevated)] border border-[var(--border-hairline)] text-xs font-mono text-[var(--ink-primary)]">{t}</span>
                         ))}
                       </span>
                     </div>
                     <div className="p-5 flex flex-col gap-3 flex-1">
-                      <div className="space-y-1.5 flex-1">
+                      <div className="space-y-2 flex-1">
                         <p className={`text-xs ${textSecondary}`}>{item.author} · {item.field} · {item.createdAt}</p>
                         <h2 className={`text-xl ${textPrimary}`}>{item.title}</h2>
                         <p className={`text-sm leading-relaxed ${textSecondary}`}>{item.summary}</p>
@@ -900,11 +900,11 @@ export const ProjectsSection = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <input value={scRepo} onChange={(e) => setScRepo(e.target.value)} placeholder="GitHub repo link (optional)" className={inputClass} />
-                  {scRepoError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{scRepoError}</p>}
+                  {scRepoError && <p className="text-xs text-[var(--danger-ink)] mt-1">{scRepoError}</p>}
                 </div>
                 <div>
                   <input value={scDemo} onChange={(e) => setScDemo(e.target.value)} placeholder="Live demo URL (optional)" className={inputClass} />
-                  {scDemoError && <p className="text-[11px] text-[var(--danger-ink)] mt-1">{scDemoError}</p>}
+                  {scDemoError && <p className="text-xs text-[var(--danger-ink)] mt-1">{scDemoError}</p>}
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -919,22 +919,22 @@ export const ProjectsSection = ({
       {/* 4. GIT & AI SKILLS */}
       {subTab === 'devtools' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          <section aria-labelledby="git-track-title" className={`${cardClass} p-5 sm:p-8 space-y-5`}>
-            <div className="space-y-1.5">
+          <section aria-labelledby="git-track-title" className={`${cardClass} p-6 sm:p-8 space-y-5`}>
+            <div className="space-y-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h2 id="git-track-title" className={`text-xl ${textPrimary}`}>Git and GitHub track</h2>
                 <span className={`text-sm tabular-nums ${textSecondary}`}>
                   {gitLevels.filter((g) => g.completed).length}/{gitLevels.length} completed
                 </span>
               </div>
-              <p className={`text-[15px] leading-relaxed max-w-[52ch] ${textSecondary}`}>Tap a level when you have done it. Tap again to undo.</p>
+              <p className={`text-base leading-relaxed max-w-[52ch] ${textSecondary}`}>Tap a level when you have done it. Tap again to undo.</p>
             </div>
             <div className="flex gap-1" role="img" aria-label={`${gitLevels.filter((g) => g.completed).length} of ${gitLevels.length} Git levels completed`}>
               {gitLevels.map((g) => (
                 <span key={g.level} className={`h-2 flex-1 rounded-sm ${g.completed ? 'bg-[var(--spark)]' : 'bg-[var(--border-hairline)]'}`} />
               ))}
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {gitLevels.map((g) => (
                 <li key={g.level}>
                   <button
@@ -954,7 +954,7 @@ export const ProjectsSection = ({
                     )}
                     <span className="min-w-0 space-y-1">
                       <span className={`block text-base font-semibold leading-snug ${textPrimary}`}>Level {g.level}: {g.title}</span>
-                      <span className={`block text-[15px] leading-relaxed ${textSecondary}`}>{g.desc}</span>
+                      <span className={`block text-base leading-relaxed ${textSecondary}`}>{g.desc}</span>
                     </span>
                   </button>
                 </li>
@@ -962,22 +962,22 @@ export const ProjectsSection = ({
             </ul>
           </section>
 
-          <section aria-labelledby="ai-habits-title" className={`${cardClass} p-5 sm:p-8 space-y-5`}>
-            <div className="space-y-1.5">
+          <section aria-labelledby="ai-habits-title" className={`${cardClass} p-6 sm:p-8 space-y-5`}>
+            <div className="space-y-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h2 id="ai-habits-title" className={`text-xl ${textPrimary}`}>Healthy AI learning habits</h2>
                 <span className={`text-sm tabular-nums ${textSecondary}`}>
                   {aiLiteracy.filter((a) => a.completed).length}/{aiLiteracy.length} practised
                 </span>
               </div>
-              <p className={`text-[15px] leading-relaxed max-w-[52ch] ${textSecondary}`}>Tap a habit once you have tried it. Tap again to undo.</p>
+              <p className={`text-base leading-relaxed max-w-[52ch] ${textSecondary}`}>Tap a habit once you have tried it. Tap again to undo.</p>
             </div>
             <div className="flex gap-1" role="img" aria-label={`${aiLiteracy.filter((a) => a.completed).length} of ${aiLiteracy.length} AI habits practised`}>
               {aiLiteracy.map((a) => (
                 <span key={a.id} className={`h-2 flex-1 rounded-sm ${a.completed ? 'bg-[var(--spark)]' : 'bg-[var(--border-hairline)]'}`} />
               ))}
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {aiLiteracy.map((a) => (
                 <li key={a.id}>
                   <button
@@ -997,7 +997,7 @@ export const ProjectsSection = ({
                     )}
                     <span className="min-w-0 space-y-1">
                       <span className={`block text-base font-semibold leading-snug ${textPrimary}`}>{a.stage}</span>
-                      <span className={`block text-[15px] leading-relaxed ${textSecondary}`}>{a.desc}</span>
+                      <span className={`block text-base leading-relaxed ${textSecondary}`}>{a.desc}</span>
                     </span>
                   </button>
                 </li>

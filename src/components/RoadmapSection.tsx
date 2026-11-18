@@ -307,7 +307,7 @@ export const RoadmapSection = ({
 
       {/* Collapsible Roadmap Finder / Switcher */}
       {showSwitcher && (
-        <div className={`${cardClass} p-5 space-y-4`}>
+        <div className={`${cardClass} p-6 space-y-4`}>
           <form onSubmit={handleLookup} className="flex flex-col sm:flex-row gap-2.5">
             <div className="relative flex-1">
               <Search className={`w-4 h-4 absolute left-3.5 top-3 ${textSecondary}`} />
@@ -325,7 +325,7 @@ export const RoadmapSection = ({
           </form>
 
           {lookupResult && (
-            <div className={`p-4 rounded-xl border ${borderClass} ${subtleBgClass} space-y-3`}>
+            <div className={`p-4 rounded-xl border ${borderClass} ${subtleBgClass} space-y-4`}>
               {lookupResult.found ? (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -410,7 +410,7 @@ export const RoadmapSection = ({
                       : `${subtleBgClass} ${borderClass} ${textPrimary} hover:border-[var(--accent-500)]/40`
                   }`}
                 >
-                  <div className="text-[11px] opacity-80">{rm.source === 'ai' ? 'AI Custom Path' : rm.source === 'custom' ? 'Customized' : 'roadmap.sh'}</div>
+                  <div className="text-xs opacity-80">{rm.source === 'ai' ? 'AI Custom Path' : rm.source === 'custom' ? 'Customized' : 'roadmap.sh'}</div>
                   <div className="text-sm font-semibold mt-0.5 truncate">{rm.title}</div>
                 </button>
               );
@@ -422,7 +422,7 @@ export const RoadmapSection = ({
       {/* Active Roadmap Overview + Stage List */}
       <div className={`${cardClass} p-6 space-y-5`}>
         <div className={`flex flex-col md:flex-row md:items-start justify-between gap-4 pb-5 border-b ${borderClass}`}>
-          <div className="space-y-1.5 max-w-2xl">
+          <div className="space-y-2 max-w-2xl">
             <div className={`flex flex-wrap items-center gap-2 text-xs ${textSecondary}`}>
               <span className="font-semibold text-[var(--accent-600)]">{selectedRoadmap.field}</span>
               <span>·</span>
@@ -464,13 +464,13 @@ export const RoadmapSection = ({
             <h2 className={`font-display text-2xl ${textPrimary}`}>{selectedRoadmap.title}</h2>
             <p className={`text-xs leading-relaxed ${textSecondary}`}>{selectedRoadmap.summary}</p>
           </div>
-          <div className="shrink-0 min-w-[180px] space-y-1.5">
+          <div className="shrink-0 min-w-[180px] space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className={textSecondary}>Overall progress</span>
               <span className={`font-semibold tabular-nums ${textPrimary}`}>{pct}%</span>
             </div>
             <ProgressBar value={pct} />
-            <div className={`text-[11px] tabular-nums ${textSecondary}`}>
+            <div className={`text-xs tabular-nums ${textSecondary}`}>
               {demonstratedCount} of {selectedRoadmap.topics.length} topics demonstrated
             </div>
           </div>
@@ -510,7 +510,7 @@ export const RoadmapSection = ({
                 >
                   {stageDone === stage.topics.length && stage.topics.length > 0 ? '✓' : sIdx + 1}
                 </span>
-              <div className={`relative rounded-xl border-[1.5px] overflow-hidden bg-[var(--surface-elevated)] ${isCurrentStage ? 'border-[var(--ink-primary)] shadow-[4px_4px_0_var(--spark)]' : borderClass}`}>
+              <div className={`relative rounded-xl border overflow-hidden bg-[var(--surface-elevated)] ${isCurrentStage ? 'border-[var(--ink-primary)] shadow-[var(--shadow-md)]' : borderClass}`}>
                 <span
                   aria-hidden="true"
                   className={`absolute left-[-1px] top-0 bottom-0 w-1 ${stageDone === stage.topics.length && stage.topics.length > 0 ? 'bg-[var(--success-ink)]' : isCurrentStage ? 'bg-[var(--spark)]' : 'bg-transparent'}`}
@@ -526,7 +526,7 @@ export const RoadmapSection = ({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`text-sm font-semibold ${textPrimary}`}>{stage.title}</span>
                         {isCurrentStage && (
-                          <span className="text-[11px] font-semibold text-[var(--accent-600)]">· Current Focus</span>
+                          <span className="text-xs font-semibold text-[var(--accent-600)]">· Current Focus</span>
                         )}
                       </div>
                       {stage.description && <div className={`text-xs truncate mt-0.5 ${textSecondary}`}>{stage.description}</div>}
@@ -571,7 +571,7 @@ export const RoadmapSection = ({
                         const toolsOpen = openTopicTools[topic.id] ?? false;
 
                         return (
-                          <div key={topic.id} className="py-4 first:pt-1 last:pb-1 space-y-3">
+                          <div key={topic.id} className="py-4 first:pt-1 last:pb-1 space-y-4">
                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                               <div className="space-y-1 min-w-0">
                                 <div className="flex flex-wrap items-center gap-2.5">
@@ -602,7 +602,7 @@ export const RoadmapSection = ({
                                   </select>
                                   <span className={`text-sm font-semibold ${textPrimary}`}>{topic.name}</span>
                                   {(state.notes || links.length > 0) && (
-                                    <span className={`text-[11px] ${textSecondary}`}>
+                                    <span className={`text-xs ${textSecondary}`}>
                                       · {links.length ? `${links.length} link${links.length > 1 ? 's' : ''}` : 'Notes saved'}
                                     </span>
                                   )}
@@ -630,7 +630,7 @@ export const RoadmapSection = ({
                             </div>
 
                             {toolsOpen && (
-                              <div className={`p-4 rounded-xl ${subtleBgClass} space-y-3`}>
+                              <div className={`p-4 rounded-xl ${subtleBgClass} space-y-4`}>
                                 <div>
                                   <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Personal notes & key takeaways</label>
                                   <input
@@ -647,7 +647,7 @@ export const RoadmapSection = ({
                                   />
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                   {links.length > 0 && (
                                     <div className="flex flex-wrap gap-3">
                                       {links.map((lnk, idx) => (
@@ -699,7 +699,7 @@ export const RoadmapSection = ({
                                     </button>
                                   </div>
                                   {linkErrors[topic.id] && (
-                                    <p className="text-[11px] text-[var(--danger-ink)]">{linkErrors[topic.id]}</p>
+                                    <p className="text-xs text-[var(--danger-ink)]">{linkErrors[topic.id]}</p>
                                   )}
                                 </div>
 
@@ -732,7 +732,7 @@ export const RoadmapSection = ({
                                 </div>
 
                                 {skipTopicId === topic.id && (
-                                  <div className={`p-3 rounded-lg border ${borderClass} space-y-2`}>
+                                  <div className={`p-3 rounded-lg border ${borderClass} space-y-3`}>
                                     <p className={`text-xs font-medium ${textPrimary}`}>
                                       Quick check before skipping “{topic.name}”: explain in 1 sentence what it does or share an example.
                                     </p>

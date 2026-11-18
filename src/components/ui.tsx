@@ -32,19 +32,13 @@ export const PageHeader = ({
   description: string;
   action?: React.ReactNode;
 }) => {
-  const dark = useContext(DarkCtx);
   return (
-    <header className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-2 max-w-2xl">
-          <h1 className={`font-display [text-wrap:balance] ${'text-[var(--ink-primary)]'}`}>{title}</h1>
-          <p className={`text-[15px] leading-relaxed max-w-[62ch] ${'text-[var(--ink-secondary)]'}`}>{description}</p>
-        </div>
-        {action && <div className="flex flex-wrap items-center gap-2 shrink-0">{action}</div>}
+    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 pb-2">
+      <div className="space-y-4 max-w-2xl">
+        <h1 className="font-display text-[var(--ink-primary)]">{title}</h1>
+        <p className="text-base leading-relaxed max-w-[62ch] text-[var(--ink-secondary)]">{description}</p>
       </div>
-      <div aria-hidden="true" className={`flex h-[3px] ${'bg-[var(--border-hairline)]'}`}>
-        <span className="w-16 bg-[var(--spark)]" />
-      </div>
+      {action && <div className="flex flex-wrap items-center gap-3 shrink-0">{action}</div>}
     </header>
   );
 };
@@ -58,13 +52,10 @@ export const SectionTabs = <T extends string>({
   active: T;
   onChange: (id: T) => void;
 }) => {
-  const dark = useContext(DarkCtx);
   return (
     <div
       role="tablist"
-      className={`flex items-center gap-1 overflow-x-auto no-scrollbar p-1 rounded-xl border-[1.5px] w-full sm:w-fit max-w-full ${
-        'bg-[var(--surface-subtle)] border-[var(--border-hairline)]'
-      }`}
+      className="flex items-center gap-1 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)]"
     >
       {tabs.map((tab) => {
         const isActive = tab.id === active;
@@ -75,18 +66,19 @@ export const SectionTabs = <T extends string>({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            className={`px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap shrink-0 cursor-pointer min-h-[44px] flex items-center gap-1.5 rounded-lg border-[1.5px] transition-[transform,box-shadow] duration-150 ${
+            className={`relative px-4 py-3 text-[0.9375rem] font-medium whitespace-nowrap shrink-0 cursor-pointer min-h-[48px] flex items-center gap-2 transition-colors ${
               isActive
-                ? `bg-[var(--surface-elevated)] text-[var(--ink-primary)] border-[var(--ink-primary)] shadow-[2px_2px_0_var(--spark)] -translate-y-px`
-                : 'border-transparent text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
+                ? 'text-[var(--ink-primary)] font-semibold'
+                : 'text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
             }`}
           >
             <span>{tab.label}</span>
             {tab.badge !== undefined && tab.badge !== 0 && (
-              <span className="text-[11px] font-mono tabular-nums min-w-[1.4em] text-center rounded-full px-1 bg-[var(--spark)] text-[var(--on-spark)]">
+              <span className="text-xs font-semibold tabular-nums min-w-[1.5rem] text-center rounded-full px-1.5 py-0.5 leading-none bg-[var(--accent-50)] text-[var(--accent-700)]">
                 {tab.badge}
               </span>
             )}
+            {isActive && <span aria-hidden="true" className="absolute left-3 right-3 -bottom-px h-[3px] rounded-t-full bg-[var(--spark)]" />}
           </button>
         );
       })}
@@ -122,11 +114,11 @@ export const Modal = ({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto overscroll-contain"
+      className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-4 overflow-y-auto overscroll-contain"
       onClick={onClose}
     >
       <div
-        className={`studio-card w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto space-y-4 ${
+        className={`studio-card w-full max-w-xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto space-y-5 shadow-[var(--shadow-lg)] ${
           'text-[var(--ink-primary)]'
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -162,16 +154,15 @@ export const Badge = ({
   children: React.ReactNode;
   variant?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 }) => {
-  const dark = useContext(DarkCtx);
   const styles = {
-    neutral: 'text-[var(--ink-secondary)]',
-    success: 'text-[var(--success-ink)]',
-    warning: 'text-[var(--warning-ink)]',
-    danger: 'text-[var(--danger-ink)]',
-    info: 'text-[var(--accent-600)]',
+    neutral: 'bg-[var(--surface-subtle)] text-[var(--ink-secondary)]',
+    success: 'bg-[var(--success-bg)] text-[var(--success-ink)]',
+    warning: 'bg-[var(--warning-bg)] text-[var(--warning-ink)]',
+    danger: 'bg-[var(--danger-bg)] text-[var(--danger-ink)]',
+    info: 'bg-[var(--accent-50)] text-[var(--accent-700)]',
   };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${styles[variant]}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium leading-none whitespace-nowrap shrink-0 ${styles[variant]}`}>
       {variant === 'success' && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
       {variant === 'warning' && <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
       {variant === 'danger' && <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
@@ -181,13 +172,16 @@ export const Badge = ({
 };
 
 export const ProgressBar = ({ value }: { value: number }) => {
-  const dark = useContext(DarkCtx);
+  const pct = Math.min(100, Math.max(0, value));
   return (
-    <div className={`w-full h-1.5 rounded-full overflow-hidden ${'bg-[var(--border-hairline)]'}`}>
-      <div
-        className="h-full rounded-full transition-all duration-500 bg-[var(--spark)]"
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-      />
+    <div
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="w-full h-2 rounded-full overflow-hidden bg-[var(--surface-subtle)]"
+    >
+      <div className="h-full rounded-full transition-all duration-500 bg-[var(--signal)]" style={{ width: `${pct}%` }} />
     </div>
   );
 };
@@ -203,22 +197,21 @@ export const EmptyState = ({
   actionLabel?: string;
   onAction?: () => void;
 }) => {
-  const dark = useContext(DarkCtx);
   return (
-    <div className="studio-card p-8 sm:p-10 text-center space-y-3 border-dashed">
-      <div className={`w-11 h-11 rounded-xl rounded-bl-sm mx-auto flex items-center justify-center bg-[var(--spark)] text-[var(--on-spark)]`}>
-        <Compass className="w-5 h-5" />
+    <div className="studio-card p-8 sm:p-12 text-center space-y-4 border-dashed">
+      <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center bg-[var(--accent-50)] text-[var(--accent-700)]">
+        <Compass className="w-6 h-6" aria-hidden="true" />
       </div>
-      <div className="max-w-md mx-auto space-y-1">
-        <h3 className={`font-display text-lg ${'text-[var(--ink-primary)]'}`}>{title}</h3>
-        <p className={`text-sm leading-relaxed ${'text-[var(--ink-secondary)]'}`}>{description}</p>
+      <div className="max-w-md mx-auto space-y-3">
+        <h3 className="font-display text-lg text-[var(--ink-primary)]">{title}</h3>
+        <p className="text-base leading-relaxed text-[var(--ink-secondary)] mx-auto">{description}</p>
       </div>
       {actionLabel && onAction && (
-        <div className="pt-1">
+        <div className="pt-2">
           <button
             type="button"
             onClick={onAction}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-white text-xs font-semibold cursor-pointer whitespace-nowrap active:scale-[0.985] transition-transform"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-sm font-semibold cursor-pointer whitespace-nowrap active:scale-[0.985] transition-transform"
           >
             {actionLabel}
           </button>
@@ -234,7 +227,7 @@ export const EmptyState = ({
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 const authInputCls = (invalid: boolean) =>
-  `w-full h-11 px-3.5 rounded-lg border bg-[var(--surface-elevated)] text-[var(--ink-primary)] text-[15px] placeholder:text-[var(--ink-muted)] focus:outline-none transition-colors ${
+  `w-full h-12 px-4 rounded-[10px] border bg-[var(--surface-elevated)] text-[var(--ink-primary)] text-base placeholder:text-[var(--ink-muted)] focus:outline-none transition-colors ${
     invalid ? 'border-[var(--danger-ink)]' : 'border-[var(--border-strong)] focus:border-[var(--accent-600)]'
   }`;
 
@@ -252,7 +245,7 @@ const AuthField = ({
   children: React.ReactNode;
 }) => (
   <div>
-    <label htmlFor={id} className="block text-sm font-medium text-[var(--ink-primary)] mb-1.5">
+    <label htmlFor={id} className="block text-sm font-semibold text-[var(--ink-primary)] mb-2">
       {label}
     </label>
     {children}
@@ -285,26 +278,42 @@ const AuthNotice = ({ tone, children }: { tone: 'danger' | 'success' | 'warning'
 };
 
 const primaryBtn =
-  'w-full min-h-11 px-4 rounded-lg bg-[var(--accent-600)] hover:bg-[var(--accent-700)] disabled:opacity-60 text-white text-[15px] font-semibold cursor-pointer';
+  'w-full min-h-12 px-4 rounded-[10px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] disabled:opacity-60 text-[var(--on-spark)] text-base font-semibold cursor-pointer transition-colors';
 const secondaryBtn =
-  'min-h-11 px-4 rounded-lg border border-[var(--border-strong)] bg-transparent hover:bg-[var(--surface-subtle)] disabled:opacity-50 text-[var(--ink-primary)] text-sm font-medium cursor-pointer whitespace-nowrap';
+  'min-h-12 px-4 rounded-[10px] border border-[var(--border-strong)] bg-transparent hover:bg-[var(--surface-subtle)] disabled:opacity-50 text-[var(--ink-primary)] text-sm font-medium cursor-pointer whitespace-nowrap';
 
 const MEMBER_TRAIL = [
-  { name: 'Learn', note: 'Short lessons from the courses you already follow' },
-  { name: 'Practise', note: 'One daily exercise, with a mentor on hand' },
-  { name: 'Submit', note: 'Share your code and how you solved it' },
-  { name: 'Review', note: 'Clear, kind feedback on what to fix next' },
-  { name: 'Quiz', note: 'Check what stuck before you move on' },
+  { name: 'Learn', note: 'Short lessons from the courses you already follow.' },
+  { name: 'Practise', note: 'One daily exercise, with a mentor on hand.' },
+  { name: 'Submit', note: 'Share your code and how you solved it.' },
+  { name: 'Review', note: 'Clear, kind feedback on what to fix next.' },
+  { name: 'Quiz', note: 'Check what stuck before you move on.' },
 ];
 const ADMIN_TRAIL = [
-  { name: 'Support', note: 'Answer members and keep the community friendly' },
-  { name: 'Organise', note: 'Publish challenges and study sessions' },
-  { name: 'Monitor', note: 'Keep an eye on the AI learning tools' },
+  { name: 'Support', note: 'Answer members and keep the community friendly.' },
+  { name: 'Organise', note: 'Publish challenges and study sessions.' },
+  { name: 'Monitor', note: 'Keep an eye on the AI learning tools.' },
 ];
 
-export const AuthShell = ({ children }: { children: React.ReactNode }) => {
+/** True when the visitor's device prefers a dark theme. Used on screens that render before sign-in. */
+export const useSystemDark = () => {
+  const [dark, setDark] = useState(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return;
+    const on = (e: MediaQueryListEvent) => setDark(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return dark;
+};
+
+export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onBack?: () => void }) => {
   const [imgFailed, setImgFailed] = useState(false);
-  const brand = ADMIN_SITE ? 'Dev Hub · Admin' : 'Dev Hub';
+  const dark = useSystemDark();
+  const brand = ADMIN_SITE ? 'Dev Hub Admin' : 'Dev Hub';
   const trail = ADMIN_SITE ? ADMIN_TRAIL : MEMBER_TRAIL;
   const backdrop = !imgFailed ? (
     <img
@@ -312,52 +321,43 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
       alt=""
       referrerPolicy="no-referrer"
       onError={() => setImgFailed(true)}
-      className="absolute inset-0 w-full h-full object-cover object-center opacity-50 mix-blend-luminosity"
+      className="absolute inset-0 w-full h-full object-cover object-center opacity-40 mix-blend-luminosity"
     />
   ) : null;
 
   return (
-    <div className={`hub-root ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen grid grid-cols-1 lg:grid-cols-12 studio-canvas text-[var(--ink-primary)]`}>
-      {/* Desktop: the welcome panel */}
-      <div className="relative hidden lg:flex lg:col-span-6 xl:col-span-7 flex-col justify-between p-10 xl:p-14 bg-[var(--shadow-offset)] text-white overflow-hidden">
+    <div className={`hub-root ${dark ? 'dark' : ''} ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen grid grid-cols-1 lg:grid-cols-12 text-[var(--ink-primary)]`}>
+      {/* Desktop: the story panel */}
+      <div className="relative hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col justify-between p-12 xl:p-16 bg-[#0B2F29] text-white overflow-hidden">
         {backdrop}
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--shadow-offset)] via-[var(--shadow-offset)]/70 to-[var(--shadow-offset)]/40" aria-hidden="true" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B2F29] via-[#0B2F29]/80 to-[#0B2F29]/55" aria-hidden="true" />
 
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-[11px] bg-[#34C7A0] text-[#04201A] flex items-center justify-center shrink-0">
             <Code2 className="w-5 h-5" aria-hidden="true" />
           </div>
-          <span className="font-display text-xl whitespace-nowrap">{brand}</span>
+          <span className="font-display text-xl font-semibold whitespace-nowrap">{brand}</span>
         </div>
 
-        <div className="relative z-10 max-w-xl space-y-8">
-          <div className="space-y-4">
-            <div aria-hidden="true" className="h-[3px] w-16 bg-[var(--spark)]" />
-            <h2 className="font-display text-4xl xl:text-5xl leading-[1.08] [text-wrap:balance]">
-              {ADMIN_SITE ? 'Support members consistently, one week at a time.' : 'Turn courses into real coding skills, one step at a time.'}
+        <div className="relative z-10 max-w-xl space-y-10">
+          <div className="space-y-5">
+            <h2 className="font-display text-4xl xl:text-5xl font-semibold leading-[1.08] tracking-tight [text-wrap:balance] text-white">
+              {ADMIN_SITE ? 'Support members consistently, one week at a time.' : 'Turn the courses you follow into skills you can use.'}
             </h2>
-            <p className="text-base text-white/80 leading-relaxed max-w-[48ch]">
+            <p className="text-lg text-white/80 leading-relaxed max-w-[46ch]">
               {ADMIN_SITE
                 ? 'Keep the community friendly, publish challenges and study sessions, and monitor the AI learning tools.'
-                : 'Follow any course you already use, practise every day, get clear feedback on your code, and build real projects with supportive peers.'}
+                : 'Practise every day, get clear feedback on your code, and build real projects alongside people who are learning too.'}
             </p>
           </div>
 
-          <ol className="relative space-y-3.5 pl-9">
-            <span aria-hidden="true" className="absolute left-[11px] top-2 bottom-2 w-px bg-white/25" />
-            {trail.map((t, i) => (
-              <li key={t.name} className="relative">
-                <span
-                  aria-hidden="true"
-                  className={`absolute -left-9 top-0.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold tabular-nums ${
-                    i === 0 ? 'bg-[var(--spark)] text-[var(--on-spark)]' : 'bg-[var(--shadow-offset)] border border-white/40 text-white'
-                  }`}
-                >
-                  {i + 1}
-                </span>
-                <div className="text-[15px] leading-snug">
-                  <span className="font-medium text-white">{t.name}</span>
-                  <span className="text-white/70"> · {t.note}</span>
+          <ol className="space-y-5">
+            {trail.map((t) => (
+              <li key={t.name} className="flex gap-4">
+                <span aria-hidden="true" className="mt-2.5 w-2 h-2 rounded-full bg-[#F5BE4F] shrink-0" />
+                <div className="text-base leading-snug">
+                  <span className="font-semibold text-white">{t.name}.</span>{' '}
+                  <span className="text-white/75">{t.note}</span>
                 </div>
               </li>
             ))}
@@ -366,27 +366,37 @@ export const AuthShell = ({ children }: { children: React.ReactNode }) => {
       </div>
 
       {/* Form side */}
-      <div className="lg:col-span-6 xl:col-span-5 flex flex-col">
-        {/* Phones and tablets: a short welcome band instead of the panel */}
-        <div className="relative lg:hidden overflow-hidden bg-[var(--shadow-offset)] text-white px-5 sm:px-10 py-6">
-          {backdrop}
-          <div className="absolute inset-0 bg-gradient-to-r from-[var(--shadow-offset)] via-[var(--shadow-offset)]/80 to-[var(--shadow-offset)]/50" aria-hidden="true" />
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
-              <Code2 className="w-4 h-4" aria-hidden="true" />
+      <div className="lg:col-span-6 flex flex-col bg-[var(--canvas-bg)]">
+        {/* Phones and tablets: a compact brand bar instead of the panel */}
+        <div className="lg:hidden flex items-center justify-between gap-3 px-5 sm:px-10 py-4 border-b border-[var(--border-hairline)] bg-[var(--surface-bg)]">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+              <Code2 className="w-[18px] h-[18px]" aria-hidden="true" />
             </div>
-            <div className="min-w-0">
-              <div className="font-display text-lg whitespace-nowrap">{brand}</div>
-              <p className="text-sm text-white/80 truncate">
-                {ADMIN_SITE ? 'Support members, one week at a time' : 'Real coding skills, one step at a time'}
-              </p>
-            </div>
+            <span className="font-display text-lg font-semibold whitespace-nowrap">{brand}</span>
           </div>
+          {onBack && (
+            <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] cursor-pointer">
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back
+            </button>
+          )}
         </div>
 
-        <div className="flex-1 flex items-center justify-center px-4 sm:px-10 xl:px-14 py-8 sm:py-12">
-          <div className="w-full max-w-md">
-            <div className="studio-card p-6 sm:p-8">{children}</div>
+        <div className="flex-1 flex flex-col px-5 sm:px-10 xl:px-16 py-8 sm:py-12">
+          {onBack && (
+            <div className="hidden lg:block mb-8">
+              <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-medium text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] cursor-pointer">
+                <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to home
+              </button>
+            </div>
+          )}
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-full max-w-[440px]">
+              <div className="studio-card p-6 sm:p-9 shadow-[var(--shadow-md)]">{children}</div>
+              <p className="mt-6 text-sm text-center text-[var(--ink-muted)]">
+                Learn together. Build together. Grow together.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -429,7 +439,7 @@ export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: s
     <AuthShell>
       <div className="mb-6">
         <h1 className="font-display text-[var(--ink-primary)]">{ADMIN_SITE ? 'Sign in to the admin console' : 'Welcome to Dev Hub'}</h1>
-        <p className="text-[15px] text-[var(--ink-secondary)] mt-2 leading-relaxed">
+        <p className="text-base text-[var(--ink-secondary)] mt-2 leading-relaxed">
           {ADMIN_SITE ? 'Enter your name, email and team lead code.' : 'Tell us who you are and we’ll open your learning workspace.'}
         </p>
       </div>
@@ -487,12 +497,12 @@ export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: s
 export const NotAuthorized = ({ onSignOut }: { onSignOut: () => void }) => (
   <AuthShell>
     <div className="space-y-5">
-      <div className="w-11 h-11 rounded-xl rounded-bl-sm bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-ink)] flex items-center justify-center">
+      <div className="w-11 h-11 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-ink)] flex items-center justify-center">
         <Shield className="w-5 h-5" aria-hidden="true" />
       </div>
       <div>
         <h1 className="font-display text-[var(--ink-primary)]">Team lead access needed</h1>
-        <p className="text-[15px] text-[var(--ink-secondary)] mt-2 leading-relaxed">
+        <p className="text-base text-[var(--ink-secondary)] mt-2 leading-relaxed">
           This account doesn’t have admin permissions yet. Ask a community admin to promote your profile, or go to the member hub instead.
         </p>
       </div>
@@ -517,12 +527,12 @@ export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut
   <div className={`hub-root ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen flex items-center justify-center studio-canvas text-[var(--ink-primary)] p-6`}>
     {error ? (
       <div className="studio-card max-w-md w-full p-7 sm:p-8 space-y-5">
-        <div className="w-11 h-11 rounded-xl rounded-bl-sm bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] flex items-center justify-center">
+        <div className="w-11 h-11 rounded-xl bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] flex items-center justify-center">
           <AlertCircle className="w-5 h-5" aria-hidden="true" />
         </div>
         <div role="alert">
           <h1 className="font-display text-[var(--ink-primary)]">We couldn’t load your workspace</h1>
-          <p className="text-[15px] text-[var(--ink-secondary)] mt-2 leading-relaxed">
+          <p className="text-base text-[var(--ink-secondary)] mt-2 leading-relaxed">
             Check your internet connection and try again. If it keeps happening, sign out and sign back in.
           </p>
         </div>
@@ -543,13 +553,13 @@ export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut
       </div>
     ) : (
       <div role="status" className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 rounded-xl rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+        <div className="w-12 h-12 rounded-xl bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
           <Code2 className="w-6 h-6" aria-hidden="true" />
         </div>
         <div className="w-28 h-[3px] bg-[var(--border-hairline)] overflow-hidden" aria-hidden="true">
           <span className="block h-full w-1/3 bg-[var(--spark)] motion-safe:animate-pulse" />
         </div>
-        <p className="text-[15px] text-[var(--ink-secondary)]">Opening your workspace…</p>
+        <p className="text-base text-[var(--ink-secondary)]">Opening your workspace…</p>
       </div>
     )}
   </div>
@@ -565,8 +575,8 @@ const formatAuthError = (msg?: string) => {
   return msg;
 };
 
-export const AuthScreen = () => {
-  const [mode, setMode] = useState<'in' | 'up'>('in');
+export const AuthScreen = ({ initialMode = 'in', onBack }: { initialMode?: 'in' | 'up'; onBack?: () => void }) => {
+  const [mode, setMode] = useState<'in' | 'up'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -661,21 +671,19 @@ export const AuthScreen = () => {
   };
 
   const tabCls = (active: boolean) =>
-    `relative min-h-11 px-3 text-sm font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-      active ? 'bg-[var(--surface-elevated)] text-[var(--ink-primary)] border border-[var(--border-hairline)]' : 'text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] border border-transparent'
+    `relative min-h-11 px-3 text-sm font-semibold rounded-[8px] transition-colors cursor-pointer whitespace-nowrap ${
+      active ? 'bg-[var(--surface-elevated)] text-[var(--ink-primary)] shadow-[var(--shadow-sm)] border border-[var(--border-hairline)]' : 'text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] border border-transparent'
     }`;
 
   return (
-    <AuthShell>
+    <AuthShell onBack={onBack}>
       {!ADMIN_SITE && (
-        <div role="tablist" aria-label="Sign in or create an account" className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[var(--surface-subtle)] mb-6">
+        <div role="tablist" aria-label="Sign in or create an account" className="grid grid-cols-2 gap-1 p-1 rounded-[10px] bg-[var(--surface-subtle)] mb-7">
           <button type="button" role="tab" aria-selected={mode === 'in'} onClick={() => switchMode('in')} className={tabCls(mode === 'in')}>
-            {mode === 'in' && <span aria-hidden="true" className="absolute left-2 right-2 bottom-0 h-[3px] rounded-t bg-[var(--spark)]" />}
-            Sign in
+                        Sign in
           </button>
           <button type="button" role="tab" aria-selected={mode === 'up'} onClick={() => switchMode('up')} className={tabCls(mode === 'up')}>
-            {mode === 'up' && <span aria-hidden="true" className="absolute left-2 right-2 bottom-0 h-[3px] rounded-t bg-[var(--spark)]" />}
-            Create account
+                        Create account
           </button>
         </div>
       )}
@@ -684,12 +692,12 @@ export const AuthScreen = () => {
         <h1 className="font-display text-[var(--ink-primary)]">
           {ADMIN_SITE ? 'Community admin' : mode === 'in' ? 'Welcome back' : 'Join Dev Hub'}
         </h1>
-        <p className="text-[15px] text-[var(--ink-secondary)] mt-2 leading-relaxed">
+        <p className="text-base text-[var(--ink-secondary)] mt-2 leading-relaxed">
           {ADMIN_SITE
             ? 'Sign in to support members and manage activities.'
             : mode === 'in'
               ? 'Pick up your learning where you left off.'
-              : 'Three fields, then a one-minute setup for your learning plan.'}
+              : 'Name, email and a password. Then a one-minute setup builds your learning plan.'}
         </p>
       </div>
 
@@ -742,7 +750,7 @@ export const AuthScreen = () => {
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-0 top-0 h-11 w-11 flex items-center justify-center text-[var(--ink-muted)] hover:text-[var(--ink-primary)] cursor-pointer"
+              className="absolute right-0 top-0 h-12 w-12 flex items-center justify-center text-[var(--ink-muted)] hover:text-[var(--ink-primary)] cursor-pointer"
             >
               {showPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
             </button>
@@ -1025,7 +1033,7 @@ export const OnboardingWizard = ({
     6: studyTime,
   };
   const heading = 'font-display text-2xl sm:text-[1.75rem] text-[var(--ink-primary)] outline-none';
-  const sub = 'text-[15px] mt-2 leading-relaxed max-w-[60ch] text-[var(--ink-secondary)]';
+  const sub = 'text-base mt-2 leading-relaxed max-w-[60ch] text-[var(--ink-secondary)]';
 
   return (
     <div className="max-w-4xl mx-auto py-2 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
@@ -1056,7 +1064,7 @@ export const OnboardingWizard = ({
                   {done ? <Check className="w-3.5 h-3.5" /> : num}
                 </span>
                 <span className="min-w-0">
-                  <span className={`block text-[15px] leading-6 ${current ? 'font-semibold' : ''}`}>{n}</span>
+                  <span className={`block text-base leading-6 ${current ? 'font-semibold' : ''}`}>{n}</span>
                   {done && answers[num] && <span className="block text-sm text-[var(--ink-secondary)] truncate">{answers[num]}</span>}
                 </span>
               </li>
@@ -1066,7 +1074,7 @@ export const OnboardingWizard = ({
       </nav>
 
       <section className="lg:col-span-8 studio-card p-6 sm:p-8 space-y-6" aria-labelledby="onboarding-heading">
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 text-sm">
             <p className="font-semibold tabular-nums text-[var(--ink-primary)]">
               Step {step} of {totalSteps}
@@ -1110,7 +1118,7 @@ export const OnboardingWizard = ({
                 Answer a few quick questions and we’ll shape a learning plan around your goals. It takes about a minute, one question at a time.
               </p>
             </div>
-            <ul className="space-y-2 text-[15px] text-[var(--ink-secondary)]">
+            <ul className="space-y-3 text-base text-[var(--ink-secondary)]">
               {['Pick what you want to learn', 'Tell us where you are today', 'Choose a pace that feels realistic', 'Get a roadmap to follow'].map((t) => (
                 <li key={t} className="flex items-center gap-2.5">
                   <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--spark)] shrink-0" />
@@ -1121,7 +1129,7 @@ export const OnboardingWizard = ({
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="inline-flex items-center justify-center gap-2 min-h-11 px-6 rounded-lg bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-white text-[15px] font-semibold cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 min-h-11 px-6 rounded-lg bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-white text-base font-semibold cursor-pointer"
             >
               Get started <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </button>
@@ -1137,7 +1145,7 @@ export const OnboardingWizard = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {ONBOARDING_FIELDS.map((field) => (
                 <OnboardingOption key={field} active={selectedField === field} onClick={() => setSelectedField(field)}>
-                  <span className="text-[15px] font-medium">{field}</span>
+                  <span className="text-base font-medium">{field}</span>
                 </OnboardingOption>
               ))}
             </div>
@@ -1169,10 +1177,10 @@ export const OnboardingWizard = ({
               <h2 id="onboarding-heading" ref={headingRef} tabIndex={-1} className={heading}>What is your current level?</h2>
               <p className={sub}>Be honest. Dev Hub adjusts exercises and explanations to meet you where you are.</p>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {ONBOARDING_LEVELS.map((lvl) => (
                 <OnboardingOption key={lvl.value} active={skillLevel === lvl.value} onClick={() => setSkillLevel(lvl.value)}>
-                  <div className="text-[15px] font-semibold">{lvl.value}</div>
+                  <div className="text-base font-semibold">{lvl.value}</div>
                   <div className="text-sm mt-0.5 text-[var(--ink-secondary)]">{lvl.desc}</div>
                 </OnboardingOption>
               ))}
@@ -1221,10 +1229,10 @@ export const OnboardingWizard = ({
               <h2 id="onboarding-heading" ref={headingRef} tabIndex={-1} className={heading}>What is your goal?</h2>
               <p className={sub}>Knowing what you’re aiming for helps us pick practical exercises and projects.</p>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {ONBOARDING_GOALS.map((g) => (
                 <OnboardingOption key={g} active={goal === g} onClick={() => setGoal(g)}>
-                  <span className="text-[15px] font-medium">{g}</span>
+                  <span className="text-base font-medium">{g}</span>
                 </OnboardingOption>
               ))}
             </div>
@@ -1237,10 +1245,10 @@ export const OnboardingWizard = ({
               <h2 id="onboarding-heading" ref={headingRef} tabIndex={-1} className={heading}>How much time can you learn?</h2>
               <p className={sub}>A small steady habit beats cramming. Pick what feels realistic right now.</p>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {ONBOARDING_TIMES.map((t) => (
                 <OnboardingOption key={t} active={studyTime === t} onClick={() => setStudyTime(t)}>
-                  <span className="text-[15px] font-medium">{t}</span>
+                  <span className="text-base font-medium">{t}</span>
                 </OnboardingOption>
               ))}
             </div>
@@ -1259,7 +1267,7 @@ export const OnboardingWizard = ({
             </div>
 
             {lookupBusy ? (
-              <div role="status" className="py-6 flex items-center gap-3 text-[15px] text-[var(--ink-secondary)]">
+              <div role="status" className="py-6 flex items-center gap-3 text-base text-[var(--ink-secondary)]">
                 <Loader2 className="w-4 h-4 motion-safe:animate-spin text-[var(--accent-600)]" aria-hidden="true" />
                 <span>Looking for a matching roadmap…</span>
               </div>
@@ -1267,8 +1275,8 @@ export const OnboardingWizard = ({
               <div className={`${resultPanel} border-l-[var(--spark)]`}>
                 <Badge variant="info">AI-generated learning path</Badge>
                 <h3 className="font-display text-lg text-[var(--ink-primary)]">{aiGeneratedRoadmap.title}</h3>
-                <p className="text-[15px] leading-relaxed text-[var(--ink-secondary)] max-w-[60ch]">{aiGeneratedRoadmap.summary}</p>
-                <ul className="space-y-1.5 text-[15px]">
+                <p className="text-base leading-relaxed text-[var(--ink-secondary)] max-w-[60ch]">{aiGeneratedRoadmap.summary}</p>
+                <ul className="space-y-2 text-base">
                   {(aiGeneratedRoadmap.stages || []).map((s) => (
                     <li key={s.id} className="flex gap-2.5">
                       <span aria-hidden="true" className="w-1.5 h-1.5 mt-2.5 rounded-full bg-[var(--spark)] shrink-0" />
@@ -1300,10 +1308,10 @@ export const OnboardingWizard = ({
                 </div>
                 <div>
                   <h3 className="font-display text-lg text-[var(--ink-primary)]">{roadmapResult.title}</h3>
-                  <p className="text-[15px] mt-1.5 leading-relaxed text-[var(--ink-secondary)] max-w-[60ch]">{roadmapResult.summary}</p>
+                  <p className="text-base mt-1.5 leading-relaxed text-[var(--ink-secondary)] max-w-[60ch]">{roadmapResult.summary}</p>
                 </div>
                 {roadmapResult.whatYouWillLearn?.length > 0 && (
-                  <div className="space-y-1.5 text-[15px]">
+                  <div className="space-y-2 text-base">
                     <div className="font-semibold">What you will learn</div>
                     <ul className="space-y-1">
                       {roadmapResult.whatYouWillLearn.map((item: string, idx: number) => (
@@ -1316,7 +1324,7 @@ export const OnboardingWizard = ({
                   </div>
                 )}
                 {roadmapResult.stages?.length > 0 && (
-                  <div className="space-y-2 text-[15px]">
+                  <div className="space-y-3 text-base">
                     <div className="font-semibold">Main stages</div>
                     <div className="flex flex-wrap gap-2">
                       {roadmapResult.stages.map((st: any) => (
@@ -1343,7 +1351,7 @@ export const OnboardingWizard = ({
             ) : (
               <div className={`${resultPanel} border-l-[var(--spark)]`}>
                 <h3 className="font-display text-lg text-[var(--ink-primary)]">We don’t have a roadmap for this field yet</h3>
-                <p className="text-[15px] leading-relaxed text-[var(--ink-secondary)] max-w-[60ch]">
+                <p className="text-base leading-relaxed text-[var(--ink-secondary)] max-w-[60ch]">
                   We won’t pretend an unrelated roadmap matches “{effectiveField}”. Let AI draft a learning path around the skills you need, or begin with a starter path you can change at any time.
                 </p>
                 <div className="flex flex-wrap gap-2.5 pt-1">

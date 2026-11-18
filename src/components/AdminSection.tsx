@@ -249,7 +249,7 @@ export const AdminSection = ({
           </dl>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <section className={`${cardClass} p-5 lg:col-span-7 space-y-3`}>
+            <section className={`${cardClass} p-6 lg:col-span-7 space-y-4`}>
               <h2 className={`text-lg ${textPrimary}`}>Questions to answer</h2>
               {openHelp.length === 0 ? (
                 <p className={`text-sm ${textSecondary}`}>Every help question is resolved.</p>
@@ -265,7 +265,7 @@ export const AdminSection = ({
               )}
             </section>
 
-            <section className={`${cardClass} p-5 lg:col-span-5 space-y-3`}>
+            <section className={`${cardClass} p-6 lg:col-span-5 space-y-4`}>
               <div className="flex items-center justify-between">
                 <h2 className={`text-lg ${textPrimary}`}>This week</h2>
                 <button type="button" onClick={() => setSubTab('admin-support')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Manage</button>
@@ -348,14 +348,14 @@ export const AdminSection = ({
       {subTab === 'admin-support' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-5 lg:order-2 space-y-5">
-            <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-5 space-y-3`}>
+            <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-6 space-y-4`}>
               <h2 className={`font-display text-base ${textPrimary}`}>Publish Community Announcement</h2>
               <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="Title" className={inputClass} required />
               <textarea rows={2} value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Share a friendly weekly note or reminder..." className={inputClass} required />
               <button type="submit" className={btnPrimary}>Publish Announcement</button>
             </form>
 
-            <div className={`${cardClass} p-5 space-y-3`}>
+            <div className={`${cardClass} p-6 space-y-4`}>
               <h2 className={`font-display text-base ${textPrimary}`}>Weekly Community Rhythm</h2>
               <div className={`divide-y ${borderClass}`}>
                 {weeklyActivities.map((wa) => (
@@ -383,20 +383,20 @@ export const AdminSection = ({
           </div>
 
           <div className="lg:col-span-7 lg:order-1">
-            <div className={`${cardClass} p-5 space-y-3`}>
+            <div className={`${cardClass} p-6 space-y-4`}>
               <div className="flex items-center gap-2">
                 <HelpCircle className="w-4 h-4 text-[var(--accent-600)]" />
                 <h2 className={`font-display text-base ${textPrimary}`}>Member Help Queue ({openHelp.length} open)</h2>
               </div>
               <div className={`divide-y ${borderClass}`}>
                 {[...helpRequests].sort((x, y) => Number(x.status === 'Resolved') - Number(y.status === 'Resolved')).map((h) => (
-                  <div key={h.id} className={`py-3 first:pt-0 last:pb-0 space-y-2 ${h.status === 'Resolved' ? 'opacity-60' : 'pl-3 border-l-4 border-l-[var(--spark)]'}`}>
+                  <div key={h.id} className={`py-3 first:pt-0 last:pb-0 space-y-3 ${h.status === 'Resolved' ? 'opacity-60' : 'pl-3 border-l-4 border-l-[var(--spark)]'}`}>
                     <div className="flex items-center justify-between text-xs">
                       <span className={textPrimary}><strong>{h.author}</strong> · {h.field}</span>
                       <Badge variant={h.status === 'Resolved' ? 'success' : 'warning'}>{h.status}</Badge>
                     </div>
                     <div className={`text-base font-medium ${textPrimary}`}>{h.helpNeeded}</div>
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center justify-between text-xs">
                       <span className={textSecondary}>{(h.responses || []).length} peer responses</span>
                       <button
                         type="button"
@@ -423,7 +423,7 @@ export const AdminSection = ({
       {/* 4. ACTIVITIES & QUIZ BANK */}
       {subTab === 'admin-activities' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <form onSubmit={handleCreateQuiz} className={`lg:col-span-5 lg:order-2 lg:sticky lg:top-6 self-start ${cardClass} p-5 space-y-3`}>
+          <form onSubmit={handleCreateQuiz} className={`lg:col-span-5 lg:order-2 lg:sticky lg:top-6 self-start ${cardClass} p-6 space-y-4`}>
             <h2 className={`font-display text-base ${textPrimary}`}>Add Starter Quiz</h2>
             <input value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="Quiz title" className={inputClass} required />
             <div className="grid grid-cols-2 gap-2">
@@ -442,7 +442,7 @@ export const AdminSection = ({
           </form>
 
           <div className={`lg:col-span-7 lg:order-1 space-y-5`}>
-            <div className={`${cardClass} p-5 space-y-3`}>
+            <div className={`${cardClass} p-6 space-y-4`}>
               <h2 className={`font-display text-base ${textPrimary}`}>Quiz Bank ({quizzes.length})</h2>
               <div className={`divide-y ${borderClass}`}>
                 {quizzes.map((q) => (
@@ -465,7 +465,7 @@ export const AdminSection = ({
               </div>
             </div>
 
-            <div className={`${cardClass} p-5 space-y-2 text-xs`}>
+            <div className={`${cardClass} p-6 space-y-3 text-xs`}>
               <div className={`font-semibold ${textPrimary}`}>Active Community Summary</div>
               <p className={textSecondary}>
                 {presentations.length} study sessions/events · {challenges.length} weekly challenges · {projects.length} collaborative projects.
@@ -515,17 +515,17 @@ export const AdminSection = ({
           {aiStatus && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className={`${cardClass} p-4 space-y-1.5`}>
+                <div className={`${cardClass} p-5 space-y-2`}>
                   <div className={`text-xs ${textSecondary}`}>Server Key Status</div>
                   <Badge variant={aiStatus.configured ? 'success' : 'warning'}>
                     {aiStatus.configured ? 'Configured on Server' : 'Not Configured Yet'}
                   </Badge>
-                  <p className={`text-[11px] ${textSecondary}`}>
+                  <p className={`text-xs ${textSecondary}`}>
                     Set <code>GROQ_API_KEY</code> in the server environment variables (Railway Variables).
                   </p>
                 </div>
 
-                <div className={`${cardClass} p-4 space-y-2`}>
+                <div className={`${cardClass} p-5 space-y-3`}>
                   <label className={`block text-xs font-medium ${textSecondary}`}>Active Groq Model</label>
                   <select
                     value={aiStatus.settings?.model || 'openai/gpt-oss-120b'}
@@ -541,7 +541,7 @@ export const AdminSection = ({
                   </select>
                 </div>
 
-                <div className={`${cardClass} p-4 space-y-2`}>
+                <div className={`${cardClass} p-5 space-y-3`}>
                   <label className={`block text-xs font-medium ${textSecondary}`}>Daily Limit Per Member</label>
                   <div className="flex items-center gap-2">
                     <select
@@ -568,19 +568,19 @@ export const AdminSection = ({
               {aiStats && (
                 <>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className={`${cardClass} p-4`}>
+                    <div className={`${cardClass} p-5`}>
                       <div className={`text-xs ${textSecondary}`}>AI Calls Today</div>
                       <div className={`font-display text-2xl tabular-nums mt-1 ${textPrimary}`}>{aiStats.callsToday ?? 0}</div>
                     </div>
-                    <div className={`${cardClass} p-4`}>
+                    <div className={`${cardClass} p-5`}>
                       <div className={`text-xs ${textSecondary}`}>Total Calls (Uptime)</div>
                       <div className={`font-display text-2xl tabular-nums mt-1 ${textPrimary}`}>{aiStats.totalCalls ?? 0}</div>
                     </div>
-                    <div className={`${cardClass} p-4`}>
+                    <div className={`${cardClass} p-5`}>
                       <div className={`text-xs ${textSecondary}`}>Estimated Tokens</div>
                       <div className={`font-display text-2xl tabular-nums mt-1 ${textPrimary}`}>{aiStats.estimatedTokens ?? 0}</div>
                     </div>
-                    <div className={`${cardClass} p-4`}>
+                    <div className={`${cardClass} p-5`}>
                       <div className={`text-xs ${textSecondary}`}>Estimated Cost</div>
                       <div className={`font-display text-2xl tabular-nums mt-1 ${textPrimary}`}>
                         ${Number(aiStats.estimatedCostUsd || 0).toFixed(4)}
@@ -589,7 +589,7 @@ export const AdminSection = ({
                   </div>
 
                   {Object.keys(aiStats.byOperation || {}).length > 0 && (
-                    <div className={`${cardClass} p-4 space-y-2`}>
+                    <div className={`${cardClass} p-5 space-y-3`}>
                       <div className={`text-xs font-semibold ${textPrimary}`}>Calls by Feature</div>
                       <div className={`flex flex-wrap gap-3 text-xs ${textSecondary}`}>
                         {Object.entries(aiStats.byOperation).map(([op, count]: [string, any]) => (
@@ -602,9 +602,9 @@ export const AdminSection = ({
                   )}
 
                   {aiStats.errors?.length > 0 && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className={`text-xs font-semibold ${textPrimary}`}>Recent AI Errors</div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {aiStats.errors.map((err: any, i: number) => (
                           <div key={err.id || i} className="p-2.5 rounded-lg border border-[var(--danger-border)] text-xs text-[var(--danger-ink)]">
                             <strong>{err.operation}</strong> ({err.timestamp ? new Date(err.timestamp).toLocaleTimeString() : 'recent'}): {err.message}
