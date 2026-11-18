@@ -43,3 +43,13 @@ Black, white and one blue. Blue marks what you can act on and what is progress: 
 - Every primary and outlined button is a pill (rule in `index.css`). Default border colour is a hairline, not black.
 - Landing, sign-in and the setup screen use the same round logo, black banner and blue sparkles (`Sparkle`, `LogoMark` in `ui.tsx`).
 - Stat tiles in Admin and Progress are soft cards. Left-edge accent bars (feedback, quotes) stay because they carry meaning.
+
+## Compete: XP, streaks, leaderboards and badges
+- Lives in the sidebar under Community as **Compete** (Overview, Leaderboard, Badges). Same shell, tabs, soft cards and black banner as the rest of the app. No new colours: earned = blue tint, locked = neutral with a lock icon, rank and status always carry text.
+- Logic is in `src/lib/gamification.ts`; the screen is `src/components/CompeteSection.tsx`. Badges are the existing milestones (`src/lib/milestones.ts`), now grouped into Consistency, Learning, Building and Community.
+- XP rules: lesson 20, quiz pass 30, new exercise 50, project 100, helpful reply 15 (max 20), daily check-in 5 (once a day), streak bonuses at 7/14/30 days. Every reward has a unique key, so repeating the same task never earns more.
+- Levels: Rookie 0, Apprentice 100, Developer 300, Specialist 700, Expert 1400, Elite 2500.
+- First run counts existing progress as a starting balance (not weekly XP, not a streak).
+- Weekly leaderboard resets itself every Monday (rows from older weeks count as 0).
+- Competing is optional: "Show me on leaderboards" removes the member's row; XP, streak and badges stay.
+- Storage: `xpLedger` is private per member (`member_state`); `leaderboard` is a shared key in `shared_state`. No SQL change needed.

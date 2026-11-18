@@ -29,14 +29,17 @@ export const Sparkle = ({ className }: { className?: string }) => (
   </svg>
 );
 
-/** The round blue logo mark */
+/** The Dev Hub logo mark: a black rounded square with the code brackets */
 export const LogoMark = ({ size = 40 }: { size?: number }) => (
   <span
     aria-hidden="true"
-    style={{ width: size, height: size }}
-    className="rounded-full bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0"
+    style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
+    className="bg-[var(--panel-deep)] text-white flex items-center justify-center shrink-0 dark:border dark:border-[var(--border-strong)]"
   >
-    <Sparkles style={{ width: size * 0.5, height: size * 0.5 }} />
+    <svg viewBox="0 0 24 24" style={{ width: size * 0.5, height: size * 0.5 }} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.5 7.5 4 12l4.5 4.5M15.5 7.5 20 12l-4.5 4.5" />
+      <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
   </span>
 );
 

@@ -15,8 +15,8 @@ import {
   Moon,
   Settings,
   Shield,
-  Sparkles,
   Sun,
+  Trophy,
   Users,
   WifiOff,
   X,
@@ -26,6 +26,16 @@ import { SetupRequired } from './components/SetupRequired';
 import { Landing } from './components/Landing';
 import { detectMemberMilestones } from './lib/milestones';
 import { computeIndependence } from './lib/independence';
+import {
+  buildLeaderboardEntry,
+  collectAwards,
+  levelFor,
+  sameEntry,
+  seedLeaderboard,
+  summarize,
+  syncLedger,
+  weekKeyFor,
+} from './lib/gamification';
 import {
   ADMIN_SITE,
   INITIAL_AI_LITERACY,
@@ -59,12 +69,14 @@ import {
 import {
   AuthScreen,
   DarkCtx,
+  LogoMark,
   LoadingScreen,
   LoginScreen,
   NotAuthorized,
   OnboardingWizard,
 } from './components/ui';
 import { HomeDashboard } from './components/HomeDashboard';
+import { CompeteSection } from './components/CompeteSection';
 import { RoadmapSection } from './components/RoadmapSection';
 import { LearningSection } from './components/LearningSection';
 import { ProjectsSection } from './components/ProjectsSection';
@@ -80,7 +92,9 @@ import type {
   CommunityPost,
   CourseItem,
   DailyTarget,
+  LeaderboardMap,
   LearningPlan,
+  LedgerEntry,
   OnboardingProfile,
   QuizAttempt,
   QuizItem,
@@ -160,6 +174,8 @@ export default function App() {
     ]
   );
   const [weeklyReports, setWeeklyReports] = useState<any[]>(saved?.weeklyReports ?? []);
+  // XP history: one entry per thing that earned XP. Private to the member.
+  const [xpLedger, setXpLedger] = useState<LedgerEntry[]>(saved?.xpLedger ?? []);
   const [savedPostIds, setSavedPostIds] = useState<string[]>(saved?.savedPostIds ?? []);
   const [diagnosticResult, setDiagnosticResult] = useState<any>(
     saved?.diagnosticResult ?? {
@@ -212,6 +228,10 @@ export default function App() {
   // In the database this only stores admin choices such as a member's role; the real member list
   // is built from sign-ups (see members below).
   const [teamRoster, setTeamRoster] = useState<any[]>(saved?.teamRoster ?? (CLOUD ? [] : TEAM_ROSTER));
+  // Public leaderboard rows (one per member who chose to be listed). Shared with the community.
+  const [leaderboard, setLeaderboard] = useState<LeaderboardMap>(
+    saved?.leaderboard ?? (CLOUD ? {} : seedLeaderboard(TEAM_ROSTER, weekKeyFor(new Date())))
+  );
   // Everyone who has signed up (names only). Read from the profiles table.
   const [signedUpProfiles, setSignedUpProfiles] = useState<any[] | null>(null);
 
@@ -281,6 +301,8 @@ export default function App() {
           teamRoster,
           dailyLogs,
           weeklyReports,
+          xpLedger,
+          leaderboard,
           savedPostIds,
           diagnosticResult,
           pairingState,
@@ -324,6 +346,8 @@ export default function App() {
     teamRoster,
     dailyLogs,
     weeklyReports,
+    xpLedger,
+    leaderboard,
     savedPostIds,
     diagnosticResult,
     pairingState,
@@ -378,6 +402,7 @@ export default function App() {
     mentorChat: [mentorChat, setMentorChat],
     dailyLogs: [dailyLogs, setDailyLogs],
     weeklyReports: [weeklyReports, setWeeklyReports],
+    xpLedger: [xpLedger, setXpLedger],
     savedPostIds: [savedPostIds, setSavedPostIds],
     diagnosticResult: [diagnosticResult, setDiagnosticResult],
     pairingState: [pairingState, setPairingState],
@@ -393,6 +418,7 @@ export default function App() {
     helpRequests: [helpRequests, setHelpRequests],
     showcaseProjects: [showcaseProjects, setShowcaseProjects],
     teamRoster: [teamRoster, setTeamRoster],
+    leaderboard: [leaderboard, setLeaderboard],
   };
   const stateRef = useRef(stateMap);
   stateRef.current = stateMap;
@@ -649,6 +675,59 @@ export default function App() {
   const allRoadmaps: RoadmapItem[] = [...ROADMAPS_CATALOG, ...customRoadmaps];
   const selectedRoadmap = allRoadmaps.find((r) => r.id === selectedRoadmapId) || allRoadmaps[0];
 
+  // ============================================================================
+  // XP, LEVELS, STREAKS AND LEADERBOARD
+  // ============================================================================
+  const isMemberView = Boolean(user) && !user?.isAdmin && !ADMIN_SITE;
+
+  // Award XP for anything new the member has done. Each reward has a unique key, so repeats earn nothing.
+  useEffect(() => {
+    if (!isMemberView || (CLOUD && !hydrated)) return;
+    const awards = collectAwards({
+      user,
+      profile,
+      dailyLogs,
+      codeSubmissions,
+      quizAttempts,
+      weeklyProjects,
+      roadmapProgress,
+      posts,
+      helpRequests,
+      showcaseProjects,
+    });
+    const next = syncLedger(xpLedger, awards, new Date());
+    if (!next) return;
+    setXpLedger(next);
+    if (xpLedger.length === 0) return; // first run: existing progress becomes the starting balance quietly
+    const gained = next.slice(xpLedger.length).reduce((sum, e) => sum + e.xp, 0);
+    if (gained > 0) {
+      const before = levelFor(xpLedger.reduce((sum, e) => sum + e.xp, 0));
+      const after = levelFor(next.reduce((sum, e) => sum + e.xp, 0));
+      notify(after.index > before.index ? `+${gained} XP · You reached ${after.name}!` : `+${gained} XP earned`);
+    }
+  }, [
+    isMemberView,
+    hydrated,
+    user,
+    profile,
+    dailyLogs,
+    codeSubmissions,
+    quizAttempts,
+    weeklyProjects,
+    roadmapProgress,
+    posts,
+    helpRequests,
+    showcaseProjects,
+    xpLedger,
+  ]);
+
+  const gamification = useMemo(
+    () => summarize(xpLedger, quizAttempts, codeSubmissions.length, new Date()),
+    // the day matters too, so streaks and weekly XP roll over at midnight
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [xpLedger, quizAttempts, codeSubmissions.length, new Date().toDateString()]
+  );
+
   const milestoneSummary = useMemo(
     () =>
       detectMemberMilestones({
@@ -663,8 +742,12 @@ export default function App() {
         posts,
         helpRequests,
         showcaseProjects,
+        longestStreak: gamification.longestStreak,
+        nightOwl: gamification.nightOwl,
+        totalXp: gamification.totalXp,
       }),
     [
+      gamification,
       user,
       profile,
       dailyLogs,
@@ -678,6 +761,22 @@ export default function App() {
       showcaseProjects,
     ]
   );
+
+  // Publish this member's row to the shared leaderboard (or take it down if they opted out).
+  const joinedLeaderboard = profile.joinLeaderboard !== false;
+  useEffect(() => {
+    if (!isMemberView || !user || (CLOUD && !hydrated)) return;
+    const uid = user.id || user.email || 'me';
+    const mine = buildLeaderboardEntry(uid, user.name || profile.fullName, gamification, milestoneSummary.earnedCount);
+    setLeaderboard((prev) => {
+      if (!joinedLeaderboard) {
+        if (!prev[uid]) return prev;
+        const { [uid]: _gone, ...rest } = prev;
+        return rest;
+      }
+      return sameEntry(prev[uid], mine) ? prev : { ...prev, [uid]: mine };
+    });
+  }, [isMemberView, hydrated, user, profile.fullName, joinedLeaderboard, gamification, milestoneSummary.earnedCount]);
 
   const independence = useMemo(
     () =>
@@ -720,6 +819,7 @@ export default function App() {
     { id: 'today', label: 'My Learning', icon: BookOpen, match: ['today', 'courses', 'submissions', 'quizzes', 'progress'], group: 'Workspace' },
     { id: 'roadmaps', label: 'My Roadmap', icon: MapIcon, match: ['roadmaps'], group: 'Workspace' },
     { id: 'weekly-project', label: 'Projects', icon: FolderGit2, match: ['weekly-project', 'projects', 'showcase', 'devtools'], group: 'Workspace' },
+    { id: 'compete', label: 'Compete', icon: Trophy, match: ['compete', 'leaderboard', 'badges'], group: 'Community' },
     { id: 'community-home', label: 'Community', icon: Users, match: ['community-home', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'], group: 'Community' },
     { id: 'ai-mentor', label: 'AI Mentor', icon: Bot, match: ['ai-mentor'], group: 'Tools' },
   ];
@@ -821,6 +921,7 @@ export default function App() {
   const isLearningSubTab = ['today', 'courses', 'submissions', 'quizzes', 'progress'].includes(activeTab);
   const isCommunitySubTab = ['community-home', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
   const isProjectsSubTab = ['weekly-project', 'projects', 'showcase', 'devtools'].includes(activeTab);
+  const isCompeteSubTab = ['compete', 'leaderboard', 'badges'].includes(activeTab);
   const isAdminSubTab = ['admin-dashboard', 'admin-members', 'admin-support', 'admin-activities', 'admin-ai'].includes(activeTab);
 
   const breadcrumbParts: { primary: string; secondary?: string } = (() => {
@@ -843,6 +944,9 @@ export default function App() {
     if (activeTab === 'projects') return { primary: 'Projects', secondary: 'Group Projects' };
     if (activeTab === 'showcase') return { primary: 'Projects', secondary: 'Project Showcase' };
     if (activeTab === 'devtools') return { primary: 'Projects', secondary: 'Git & AI Skills' };
+    if (activeTab === 'compete') return { primary: 'Compete', secondary: 'Overview' };
+    if (activeTab === 'leaderboard') return { primary: 'Compete', secondary: 'Leaderboard' };
+    if (activeTab === 'badges') return { primary: 'Compete', secondary: 'Badges' };
     if (activeTab === 'ai-mentor') return { primary: 'AI Mentor' };
     if (activeTab === 'profile') return { primary: 'Profile & Settings' };
     if (activeTab === 'admin-dashboard') return { primary: 'Admin Console', secondary: 'Overview' };
@@ -891,9 +995,7 @@ export default function App() {
                 onClick={() => setActiveTab(role === 'admin' ? 'admin-dashboard' : 'dashboard')}
                 className="flex items-center gap-3 cursor-pointer"
               >
-                <span className="w-10 h-10 rounded-full bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
-                  <Sparkles className="w-5 h-5" aria-hidden="true" />
-                </span>
+                <LogoMark size={36} />
                 <span className="font-display text-lg font-bold tracking-tight whitespace-nowrap">
                   Dev Hub
                 </span>
@@ -1026,9 +1128,7 @@ export default function App() {
               }}
               className="flex items-center gap-2 cursor-pointer"
             >
-              <div className="w-8 h-8 rounded-[9px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
-                <Code2 className="w-[17px] h-[17px]" />
-              </div>
+              <LogoMark size={32} />
               <span className="font-display text-lg font-semibold">Dev Hub</span>
             </button>
             <div className="flex items-center gap-2">
@@ -1202,6 +1302,7 @@ export default function App() {
                         onQuickCheckIn={handleQuickCheckIn}
                         onNavigate={(tab) => setActiveTab(tab)}
                         milestones={milestoneSummary}
+                        gamification={gamification}
                         independence={independence}
                         teamRoster={teamRoster}
                         userName={user.name || ''}
@@ -1235,6 +1336,22 @@ export default function App() {
                         setWeeklyReports={setWeeklyReports}
                         onAskMentor={handleAskMentor}
                         onNotify={notify}
+                        styles={styles}
+                      />
+                    )}
+
+                    {isCompeteSubTab && (
+                      <CompeteSection
+                        subTab={activeTab as any}
+                        setSubTab={(t) => setActiveTab(t)}
+                        userId={user.id || user.email || 'me'}
+                        userName={user.name || ''}
+                        profile={profile}
+                        setProfile={setProfile}
+                        summary={gamification}
+                        milestones={milestoneSummary}
+                        board={leaderboard}
+                        onNavigate={(tab) => setActiveTab(tab)}
                         styles={styles}
                       />
                     )}

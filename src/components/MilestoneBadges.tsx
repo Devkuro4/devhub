@@ -5,10 +5,16 @@ import {
   ClipboardCheck,
   Code2,
   Compass,
+  Flame,
+  GraduationCap,
   HeartHandshake,
   Library,
+  Moon,
+  Puzzle,
   Rocket,
   Sprout,
+  TrendingUp,
+  Users,
 } from 'lucide-react';
 import type { MemberMilestone, MilestoneSummary, MilestoneTone } from '../types';
 
@@ -49,6 +55,18 @@ export function MilestoneIcon({
       return <ClipboardCheck className={className} />;
     case 'project':
       return <Rocket className={className} />;
+    case 'streak':
+      return <Flame className={className} />;
+    case 'night':
+      return <Moon className={className} />;
+    case 'quiz-master':
+      return <GraduationCap className={className} />;
+    case 'solver':
+      return <Puzzle className={className} />;
+    case 'team':
+      return <Users className={className} />;
+    case 'level':
+      return <TrendingUp className={className} />;
     default:
       return <Award className={className} />;
   }

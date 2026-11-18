@@ -742,6 +742,7 @@ export const PERSONAL_KEYS = [
   'pairingState',
   'hackathon',
   'onboarded',
+  'xpLedger',
 ];
 
 export const SHARED_KEYS = [
@@ -755,6 +756,7 @@ export const SHARED_KEYS = [
   'helpRequests',
   'showcaseProjects',
   'teamRoster',
+  'leaderboard',
 ];
 
 export function blankPersonal(name = '', hk: any = { checklist: [] }) {
@@ -806,5 +808,6 @@ export function blankPersonal(name = '', hk: any = { checklist: [] }) {
     pairingState: { partnerName: '', partnerField: '', assignedMentor: '', joinedGroups: [], pairExercise: '' },
     hackathon: { ...hk, teamName: '', idea: '', repoUrl: '', checklist: (hk.checklist || []).map((c: any) => ({ ...c, done: false })) },
     onboarded: false,
+    xpLedger: [],
   };
 }

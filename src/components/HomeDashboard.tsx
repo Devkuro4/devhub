@@ -20,6 +20,8 @@ import {
 import { ProgressBar, Sparkle } from './ui';
 import { DashboardMilestoneStrip } from './MilestoneBadges';
 import { IndependenceCard } from './IndependenceCard';
+import { HomeLevelCard } from './CompeteSection';
+import type { GamificationSummary } from '../lib/gamification';
 import type { IndependenceSummary } from '../lib/independence';
 import type {
   CodeSubmission,
@@ -73,6 +75,7 @@ export const HomeDashboard = ({
   onQuickCheckIn,
   onNavigate,
   milestones,
+  gamification,
   independence,
   teamRoster,
   userName,
@@ -103,6 +106,7 @@ export const HomeDashboard = ({
   onQuickCheckIn: (e: React.FormEvent) => void;
   onNavigate: (tab: string) => void;
   milestones: MilestoneSummary;
+  gamification: GamificationSummary;
   independence: IndependenceSummary;
   teamRoster: any[];
   userName: string;
@@ -443,7 +447,10 @@ export const HomeDashboard = ({
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
+          <div className="space-y-6 min-w-0">
+            <HomeLevelCard summary={gamification} onOpen={() => onNavigate('compete')} textPrimary={textPrimary} textSecondary={textSecondary} />
+            <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
+          </div>
           <section className="soft-card p-6">
             <DashboardMilestoneStrip summary={milestones} borderClass={borderClass} subtleBgClass={subtleBgClass} textPrimary={textPrimary} textSecondary={textSecondary} onOpenProfile={() => onNavigate('profile')} />
           </section>

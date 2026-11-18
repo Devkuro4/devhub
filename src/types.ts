@@ -28,6 +28,8 @@ export interface OnboardingProfile {
   portfolioUrl: string;
   linkedinUrl: string;
   streakDays: number;
+  /** Show me on community leaderboards (default on). Turning it off removes the member's row. */
+  joinLeaderboard?: boolean;
   showAdvancedTools: boolean;
   notifications: {
     announcements: boolean;
@@ -287,6 +289,7 @@ export interface CommunityEvent {
   reminders?: string[];
 }
 
+export type BadgeCategory = 'Consistency' | 'Learning' | 'Building' | 'Community';
 export type MilestoneTone = 'emerald' | 'amber' | 'sky' | 'violet' | 'rose';
 
 export interface MemberMilestone {
@@ -294,7 +297,22 @@ export interface MemberMilestone {
   title: string;
   requirementLabel: string;
   encouragement: string;
-  icon: 'seedling' | 'logs' | 'resources' | 'peer' | 'code' | 'roadmap' | 'quiz' | 'project';
+  icon:
+    | 'seedling'
+    | 'logs'
+    | 'resources'
+    | 'peer'
+    | 'code'
+    | 'roadmap'
+    | 'quiz'
+    | 'project'
+    | 'streak'
+    | 'night'
+    | 'quiz-master'
+    | 'solver'
+    | 'team'
+    | 'level';
+  category?: BadgeCategory;
   tone: MilestoneTone;
   current: number;
   target: number;
@@ -345,3 +363,39 @@ export interface MentorChatStore {
   activeId: string | null; // null = a fresh chat that has not been started yet
   chats: MentorConversation[];
 }
+
+// ---------------------------------------------------------------------------
+// XP, levels, streaks and leaderboards
+// ---------------------------------------------------------------------------
+export type XpKind = 'start' | 'lesson' | 'quiz' | 'code' | 'project' | 'help' | 'checkin' | 'streak';
+
+/** One thing a member did that earned XP (or counted as activity). Stored privately per member. */
+export interface LedgerEntry {
+  /** Unique per rewarded thing, so the same exercise or quiz can only earn XP once. */
+  key: string;
+  kind: XpKind;
+  xp: number;
+  label: string;
+  /** Local calendar day, YYYY-MM-DD */
+  day: string;
+  /** Local hour 0-23, used for the Night Owl badge */
+  hour: number;
+  skill?: string;
+  /** Existing progress counted when XP was switched on. Not part of streaks or weekly XP. */
+  backfill?: boolean;
+}
+
+/** A member's public row on the leaderboards (shared with the community). */
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  totalXp: number;
+  weekXp: number;
+  /** The Monday (YYYY-MM-DD) that weekXp belongs to. Older weeks count as 0, so weekly boards reset themselves. */
+  weekKey: string;
+  level: string;
+  streak: number;
+  badges: number;
+  skills: Record<string, number>;
+}
+export type LeaderboardMap = Record<string, LeaderboardEntry>;
