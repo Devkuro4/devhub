@@ -325,7 +325,7 @@ export const RoadmapSection = ({
           </form>
 
           {lookupResult && (
-            <div className={`p-4 rounded-xl border ${borderClass} ${subtleBgClass} space-y-4`}>
+            <div className={`p-4 rounded-lg border ${borderClass} ${subtleBgClass} space-y-4`}>
               {lookupResult.found ? (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -404,7 +404,7 @@ export const RoadmapSection = ({
                     setSelectedRoadmapId(rm.id);
                     setExpandedStages({ '0': true });
                   }}
-                  className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
+                  className={`p-3.5 rounded-lg border text-left transition cursor-pointer ${
                     active
                       ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)]'
                       : `${subtleBgClass} ${borderClass} ${textPrimary} hover:border-[var(--accent-500)]/40`
@@ -510,7 +510,7 @@ export const RoadmapSection = ({
                 >
                   {stageDone === stage.topics.length && stage.topics.length > 0 ? '✓' : sIdx + 1}
                 </span>
-              <div className={`relative rounded-xl border overflow-hidden bg-[var(--surface-elevated)] ${isCurrentStage ? 'border-[var(--ink-primary)] shadow-[var(--shadow-md)]' : borderClass}`}>
+              <div className={`relative rounded-lg border overflow-hidden bg-[var(--surface-elevated)] ${isCurrentStage ? 'border-[var(--ink-primary)] shadow-[var(--shadow-md)]' : borderClass}`}>
                 <span
                   aria-hidden="true"
                   className={`absolute left-[-1px] top-0 bottom-0 w-1 ${stageDone === stage.topics.length && stage.topics.length > 0 ? 'bg-[var(--success-ink)]' : isCurrentStage ? 'bg-[var(--spark)]' : 'bg-transparent'}`}
@@ -540,7 +540,7 @@ export const RoadmapSection = ({
                 {isOpen && (
                   <div className={`p-5 space-y-4 border-t ${borderClass}`}>
                     {/* Beginner stage clarity: What you'll learn / Why it matters / What you'll be able to do */}
-                    <div className={`p-4 rounded-xl ${subtleBgClass} grid grid-cols-1 md:grid-cols-3 gap-4 text-xs`}>
+                    <div className={`p-4 rounded-lg ${subtleBgClass} grid grid-cols-1 md:grid-cols-3 gap-4 text-xs`}>
                       <div>
                         <div className={`font-semibold ${textPrimary}`}>What you’ll learn</div>
                         <p className={`mt-1 leading-relaxed ${textSecondary}`}>
@@ -630,7 +630,7 @@ export const RoadmapSection = ({
                             </div>
 
                             {toolsOpen && (
-                              <div className={`p-4 rounded-xl ${subtleBgClass} space-y-4`}>
+                              <div className={`p-4 rounded-lg ${subtleBgClass} space-y-4`}>
                                 <div>
                                   <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Personal notes & key takeaways</label>
                                   <input

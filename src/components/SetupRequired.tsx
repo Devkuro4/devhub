@@ -9,7 +9,7 @@ export const SetupRequired = () => (
   <div className="hub-root min-h-screen flex items-center justify-center px-5 py-10 bg-[var(--canvas-bg)] text-[var(--ink-primary)]">
     <main className="w-full max-w-lg space-y-5">
       <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+        <div className="w-9 h-9 rounded-[6px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
           <Code2 className="w-5 h-5" aria-hidden="true" />
         </div>
         <span className="font-display text-lg font-semibold">Dev Hub</span>

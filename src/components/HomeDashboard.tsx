@@ -214,7 +214,7 @@ export const HomeDashboard = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
             {/* MAIN: one clear next step, today's trail, check-in, recent work */}
             <div className="lg:col-span-8 space-y-8 min-w-0">
-              <section className="rounded-[20px] bg-[var(--panel-deep)] text-white p-6 sm:p-8 border border-[var(--border-hairline)] shadow-[var(--shadow-lg)]">
+              <section className="rounded-[8px] bg-[var(--panel-deep)] text-white p-6 sm:p-8 border border-[var(--border-hairline)] shadow-[var(--shadow-lg)]">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/70">
                   <span>{latestCourse ? latestCourse.platform : selectedRoadmap.title} · ~{dailyTarget.estimatedMinutes} min left today</span>
                   <span className="tabular-nums">{doneCount} of {todayChecklist.length} steps done</span>
@@ -224,7 +224,7 @@ export const HomeDashboard = ({
                   {nextActivity.detail}{currentStage ? ` · ${currentStage.title}` : ''}
                 </p>
                 <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={() => onNavigate(nextActivity.tab)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#F5BE4F] text-[#2A1A00] text-base font-semibold cursor-pointer hover:brightness-105 active:translate-y-px">
+                  <button type="button" onClick={() => onNavigate(nextActivity.tab)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-[#0A0A0A] text-base font-semibold cursor-pointer hover:brightness-105 active:translate-y-px">
                     {doneCount === 0 ? 'Start today' : 'Continue'} <ArrowRight className="w-4 h-4" />
                   </button>
                   <button type="button" onClick={() => onNavigate('ai-mentor')} className="text-sm text-white/80 underline-offset-4 hover:underline cursor-pointer">

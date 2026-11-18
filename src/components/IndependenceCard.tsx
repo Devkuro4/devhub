@@ -42,7 +42,7 @@ export const IndependenceCard = ({
           </p>
         </div>
         <div className="text-right shrink-0">
-          <div className="font-display text-4xl font-bold leading-none tabular-nums text-[var(--signal-ink)] dark:text-[var(--signal)]">
+          <div className="font-display text-4xl font-bold leading-none tabular-nums text-[var(--accent-700)]">
             {score === null ? '–' : score}
           </div>
           <div className={`text-sm mt-1.5 ${textSecondary}`}>{label}</div>

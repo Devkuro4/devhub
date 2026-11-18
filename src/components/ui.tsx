@@ -144,7 +144,7 @@ export const Modal = ({
 
 export const SkeletonBlock = ({ className = 'h-20 w-full' }: { className?: string }) => {
   const dark = useContext(DarkCtx);
-  return <div aria-hidden="true" className={`rounded-xl ${'bg-[var(--surface-subtle)]'} ${className}`} />;
+  return <div aria-hidden="true" className={`rounded-lg ${'bg-[var(--surface-subtle)]'} ${className}`} />;
 };
 
 export const Badge = ({
@@ -181,7 +181,7 @@ export const ProgressBar = ({ value }: { value: number }) => {
       aria-valuemax={100}
       className="w-full h-2 rounded-full overflow-hidden bg-[var(--surface-subtle)]"
     >
-      <div className="h-full rounded-full transition-all duration-500 bg-[var(--signal)]" style={{ width: `${pct}%` }} />
+      <div className="h-full rounded-full transition-all duration-500 bg-[var(--signal)] shadow-[0_0_10px_var(--signal)]" style={{ width: `${pct}%` }} />
     </div>
   );
 };
@@ -211,7 +211,7 @@ export const EmptyState = ({
           <button
             type="button"
             onClick={onAction}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-sm font-semibold cursor-pointer whitespace-nowrap active:scale-[0.985] transition-transform"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[6px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-sm font-semibold cursor-pointer whitespace-nowrap active:scale-[0.985] transition-transform"
           >
             {actionLabel}
           </button>
@@ -227,7 +227,7 @@ export const EmptyState = ({
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 const authInputCls = (invalid: boolean) =>
-  `w-full h-12 px-4 rounded-[10px] border bg-[var(--surface-elevated)] text-[var(--ink-primary)] text-base placeholder:text-[var(--ink-muted)] focus:outline-none transition-colors ${
+  `w-full h-12 px-4 rounded-[6px] border bg-[var(--surface-elevated)] text-[var(--ink-primary)] text-base placeholder:text-[var(--ink-muted)] focus:outline-none transition-colors ${
     invalid ? 'border-[var(--danger-ink)]' : 'border-[var(--border-strong)] focus:border-[var(--accent-600)]'
   }`;
 
@@ -278,9 +278,9 @@ const AuthNotice = ({ tone, children }: { tone: 'danger' | 'success' | 'warning'
 };
 
 const primaryBtn =
-  'w-full min-h-12 px-4 rounded-[10px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] disabled:opacity-60 text-[var(--on-spark)] text-base font-semibold cursor-pointer transition-colors';
+  'w-full min-h-12 px-4 rounded-[6px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] disabled:opacity-60 text-[var(--on-spark)] text-base font-semibold cursor-pointer transition-colors';
 const secondaryBtn =
-  'min-h-12 px-4 rounded-[10px] border border-[var(--border-strong)] bg-transparent hover:bg-[var(--surface-subtle)] disabled:opacity-50 text-[var(--ink-primary)] text-sm font-medium cursor-pointer whitespace-nowrap';
+  'min-h-12 px-4 rounded-[6px] border border-[var(--border-strong)] bg-transparent hover:bg-[var(--surface-subtle)] disabled:opacity-50 text-[var(--ink-primary)] text-sm font-medium cursor-pointer whitespace-nowrap';
 
 const MEMBER_TRAIL = [
   { name: 'Learn', note: 'Short lessons from the courses you already follow.' },
@@ -328,12 +328,12 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
   return (
     <div className={`hub-root ${dark ? 'dark' : ''} ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen grid grid-cols-1 lg:grid-cols-12 text-[var(--ink-primary)]`}>
       {/* Desktop: the story panel */}
-      <div className="relative hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col justify-between p-12 xl:p-16 bg-[#0B2F29] text-white overflow-hidden">
+      <div className="relative hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col justify-between p-12 xl:p-16 bg-[#0A0A0A] text-white overflow-hidden">
         {backdrop}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B2F29] via-[#0B2F29]/80 to-[#0B2F29]/55" aria-hidden="true" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/85 to-black/60" aria-hidden="true" />
 
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[11px] bg-[#34C7A0] text-[#04201A] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-[11px] bg-[#3B82F6] text-white flex items-center justify-center shrink-0">
             <Code2 className="w-5 h-5" aria-hidden="true" />
           </div>
           <span className="font-display text-xl font-semibold whitespace-nowrap">{brand}</span>
@@ -354,7 +354,7 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
           <ol className="space-y-5">
             {trail.map((t) => (
               <li key={t.name} className="flex gap-4">
-                <span aria-hidden="true" className="mt-2.5 w-2 h-2 rounded-full bg-[#F5BE4F] shrink-0" />
+                <span aria-hidden="true" className="mt-2.5 w-2 h-2 rounded-full bg-[#3B82F6] shrink-0" />
                 <div className="text-base leading-snug">
                   <span className="font-semibold text-white">{t.name}.</span>{' '}
                   <span className="text-white/75">{t.note}</span>
@@ -370,7 +370,7 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
         {/* Phones and tablets: a compact brand bar instead of the panel */}
         <div className="lg:hidden flex items-center justify-between gap-3 px-5 sm:px-10 py-4 border-b border-[var(--border-hairline)] bg-[var(--surface-bg)]">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-[6px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
               <Code2 className="w-[18px] h-[18px]" aria-hidden="true" />
             </div>
             <span className="font-display text-lg font-semibold whitespace-nowrap">{brand}</span>
@@ -497,7 +497,7 @@ export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: s
 export const NotAuthorized = ({ onSignOut }: { onSignOut: () => void }) => (
   <AuthShell>
     <div className="space-y-5">
-      <div className="w-11 h-11 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-ink)] flex items-center justify-center">
+      <div className="w-11 h-11 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning-ink)] flex items-center justify-center">
         <Shield className="w-5 h-5" aria-hidden="true" />
       </div>
       <div>
@@ -527,7 +527,7 @@ export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut
   <div className={`hub-root ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen flex items-center justify-center studio-canvas text-[var(--ink-primary)] p-6`}>
     {error ? (
       <div className="studio-card max-w-md w-full p-7 sm:p-8 space-y-5">
-        <div className="w-11 h-11 rounded-xl bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] flex items-center justify-center">
+        <div className="w-11 h-11 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] flex items-center justify-center">
           <AlertCircle className="w-5 h-5" aria-hidden="true" />
         </div>
         <div role="alert">
@@ -553,7 +553,7 @@ export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut
       </div>
     ) : (
       <div role="status" className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+        <div className="w-12 h-12 rounded-lg bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
           <Code2 className="w-6 h-6" aria-hidden="true" />
         </div>
         <div className="w-28 h-[3px] bg-[var(--border-hairline)] overflow-hidden" aria-hidden="true">
@@ -678,7 +678,7 @@ export const AuthScreen = ({ initialMode = 'in', onBack }: { initialMode?: 'in' 
   return (
     <AuthShell onBack={onBack}>
       {!ADMIN_SITE && (
-        <div role="tablist" aria-label="Sign in or create an account" className="grid grid-cols-2 gap-1 p-1 rounded-[10px] bg-[var(--surface-subtle)] mb-7">
+        <div role="tablist" aria-label="Sign in or create an account" className="grid grid-cols-2 gap-1 p-1 rounded-[6px] bg-[var(--surface-subtle)] mb-7">
           <button type="button" role="tab" aria-selected={mode === 'in'} onClick={() => switchMode('in')} className={tabCls(mode === 'in')}>
                         Sign in
           </button>
@@ -863,7 +863,7 @@ const OnboardingOption = ({
   </button>
 );
 
-const resultPanel = 'p-5 rounded-xl border border-[var(--border-hairline)] border-l-4 bg-[var(--surface-subtle)] space-y-3.5';
+const resultPanel = 'p-5 rounded-lg border border-[var(--border-hairline)] border-l-4 bg-[var(--surface-subtle)] space-y-3.5';
 const resultSecondaryBtn =
   'inline-flex items-center justify-center gap-1.5 min-h-11 px-4 rounded-lg border border-[var(--border-strong)] hover:bg-[var(--surface-elevated)] disabled:opacity-60 text-sm font-medium text-[var(--ink-primary)] cursor-pointer';
 const resultPrimaryBtn =

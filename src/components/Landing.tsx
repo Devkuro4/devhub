@@ -49,15 +49,15 @@ const Trail = () => (
           className="trail-line"
           fill="none"
           stroke="var(--spark)"
-          strokeWidth="3.5"
+          strokeWidth="2"
           strokeLinecap="round"
         />
         {POINTS.map(([x, y], i) => {
           const last = i === POINTS.length - 1;
           return (
             <g key={i} className="trail-dot" style={{ animationDelay: `${0.35 + i * 0.3}s`, transformOrigin: `${x}px ${y}px` }}>
-              <circle cx={x} cy={y} r={last ? 15 : 10} fill="var(--surface-bg)" stroke={last ? 'var(--signal)' : 'var(--spark)'} strokeWidth="4" />
-              {last && <circle cx={x} cy={y} r="6" fill="var(--signal)" />}
+              <circle cx={x} cy={y} r={last ? 15 : 10} fill="var(--surface-bg)" stroke={last ? 'var(--spark)' : 'var(--spark)'} strokeWidth="2.5" />
+              {last && <circle cx={x} cy={y} r="6" fill="var(--spark)" />}
             </g>
           );
         })}
@@ -69,7 +69,7 @@ const Trail = () => (
             className="absolute w-36 text-center"
             style={{ left: `${(POINTS[i][0] / W) * 100}%`, top: `${(POINTS[i][1] / H) * 100}%`, transform: 'translate(-50%, 26px)' }}
           >
-            <div className={`font-display text-base font-semibold ${i === STAGES.length - 1 ? 'text-[var(--signal-ink)]' : 'text-[var(--ink-primary)]'}`}>{s.name}</div>
+            <div className={`font-display text-base font-semibold ${i === STAGES.length - 1 ? 'text-[var(--spark)]' : 'text-[var(--ink-primary)]'}`}>{s.name}</div>
             <div className="text-sm text-[var(--ink-muted)] leading-snug">{s.note}</div>
           </li>
         ))}
@@ -85,9 +85,9 @@ const Trail = () => (
           <li key={s.name} className="relative">
             <span
               aria-hidden="true"
-              className={`absolute -left-9 top-1 w-6 h-6 rounded-full border-4 bg-[var(--surface-bg)] ${last ? 'border-[var(--signal)]' : 'border-[var(--spark)]'}`}
+              className={`absolute -left-9 top-1 w-6 h-6 rounded-full border-4 bg-[var(--surface-bg)] ${last ? 'border-[var(--spark)]' : 'border-[var(--spark)]'}`}
             />
-            <div className={`font-display text-lg font-semibold leading-tight ${last ? 'text-[var(--signal-ink)]' : ''}`}>{s.name}</div>
+            <div className={`font-display text-lg font-semibold leading-tight ${last ? 'text-[var(--spark)]' : ''}`}>{s.name}</div>
             <div className="text-base text-[var(--ink-secondary)]">{s.note}</div>
           </li>
         );
@@ -202,7 +202,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
       <header className="sticky top-0 z-30 border-b border-[var(--border-hairline)] bg-[var(--canvas-bg)]/90 backdrop-blur">
         <div className={`${wrap} h-[72px] flex items-center justify-between gap-4`}>
           <a href="#hero" className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+            <span className="w-9 h-9 rounded-[8px] bg-black text-white border border-[var(--border-strong)] flex items-center justify-center">
               <Code2 className="w-[18px] h-[18px]" aria-hidden="true" />
             </span>
             <span className="font-display text-xl font-semibold">Dev Hub</span>
@@ -213,20 +213,24 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
             <a href="#community" className="hover:text-[var(--ink-primary)]">Community</a>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
-            <button type="button" onClick={onSignIn} className="px-3 sm:px-4 min-h-11 text-[0.9375rem] font-medium text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] rounded-[10px] cursor-pointer">
+            <button type="button" onClick={onSignIn} className="px-3 sm:px-4 min-h-11 text-[0.9375rem] font-medium text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] rounded-[6px] cursor-pointer">
               Sign in
             </button>
-            <button type="button" onClick={onJoin} className="px-4 sm:px-5 min-h-11 rounded-[10px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-[0.9375rem] font-semibold cursor-pointer transition-colors whitespace-nowrap">
+            <button type="button" onClick={onJoin} className="px-4 sm:px-5 min-h-11 rounded-[6px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-[0.9375rem] font-semibold cursor-pointer transition-colors whitespace-nowrap">
               Join Dev Hub
             </button>
           </div>
         </div>
       </header>
 
-      <main id="hero">
+      <main id="hero" className="hero-bg">
         {/* Hero */}
         <section className={`${wrap} pt-16 sm:pt-24 pb-12 sm:pb-16`}>
           <div className="max-w-3xl">
+            <span className="inline-flex items-center gap-2 px-3.5 py-1 mb-7 rounded-full border border-[var(--border-strong)] bg-[var(--surface-bg)] text-sm text-[var(--ink-secondary)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--spark)] shadow-[0_0_8px_var(--spark)]" aria-hidden="true" />
+              An AI mentor that gives hints, not answers
+            </span>
             <h1 className="!font-display !text-[clamp(2.5rem,1.6rem_+_4.2vw,4.5rem)] !leading-[1.04] !tracking-[-0.035em] font-semibold">
               Stop following tutorials. Start building on your own.
             </h1>
@@ -324,7 +328,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
                 </button>
               </div>
             </div>
-            <p className="lg:col-span-5 font-display text-3xl sm:text-4xl font-semibold leading-[1.15] tracking-tight text-[var(--spark-ink)] dark:text-[var(--ink-primary)]">
+            <p className="lg:col-span-5 font-display text-3xl sm:text-4xl font-semibold leading-[1.15] tracking-tight text-[var(--ink-primary)]">
               Learn together.
               <br />
               Build together.

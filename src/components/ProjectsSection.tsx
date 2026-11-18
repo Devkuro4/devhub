@@ -774,7 +774,7 @@ export const ProjectsSection = ({
                 {['To Do', 'In Progress', 'In Review', 'Completed'].map((col) => {
                   const colTasks = (activeGroupProj.tasks || []).filter((t: any) => t.status === col);
                   return (
-                    <div key={col} className={`rounded-xl bg-[var(--surface-subtle)] p-3 space-y-4 border-t-4 ${col === 'Completed' ? 'border-[var(--success-ink)]' : col === 'In Review' ? 'border-[var(--spark)]' : col === 'In Progress' ? 'border-[var(--accent-500)]' : 'border-[var(--border-strong)]'}`}>
+                    <div key={col} className={`rounded-lg bg-[var(--surface-subtle)] p-3 space-y-4 border-t-4 ${col === 'Completed' ? 'border-[var(--success-ink)]' : col === 'In Review' ? 'border-[var(--spark)]' : col === 'In Progress' ? 'border-[var(--accent-500)]' : 'border-[var(--border-strong)]'}`}>
                       <div className="flex items-center justify-between text-sm font-semibold px-1">
                         <span className={textPrimary}>{col}</span>
                         <span className={`tabular-nums ${textSecondary}`}>{colTasks.length}</span>

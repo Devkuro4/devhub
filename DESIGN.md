@@ -1,20 +1,19 @@
 # Dev Hub design notes
 
-A calm, well-lit workshop for people learning to build. Light by default (follows the visitor's system), dark available.
+A minimal, calm workspace for people learning to build. Light by default (follows the visitor's system), dark available.
 
 ## Colour
 | Role | Light | Dark |
 |---|---|---|
-| Page | `#F5F7F6` | `#0C1210` |
-| Surface | `#FFFFFF` | `#101815` |
-| Ink | `#0F1720` | `#EEF4F1` |
-| Brand (deep teal) | `#0B7A66` | `#34C7A0` |
-| Signal (amber) | `#F2B134` | `#F5BE4F` |
+| Page | `#F6F6F7` | `#000000` |
+| Surface | `#FFFFFF` | `#050505` |
+| Ink | `#0A0A0A` | `#FAFAFA` |
+| Blue (the only accent, the only glow) | `#1F5BFF` | `#2F6BFF` |
 
-Teal is the only brand colour. Amber is reserved for progress and independence, the thing Dev Hub measures. Use it for progress bars, the independence score and the "Independent" end of the path, and nowhere else.
+Black, white and one blue. Blue marks what you can act on and what is progress: primary buttons, links, the active nav item, progress bars. Everything else stays neutral.
 
 ## Type
-- Headings: Bricolage Grotesque. Body: Instrument Sans. Code: JetBrains Mono.
+- One family, Instrument Sans, for headings and body. Code: JetBrains Mono.
 - Body is 16px with a 1.65 line height. Nothing in the app is smaller than 13px.
 - The scale lives in `src/index.css` under `@theme` (`--text-xs` to `--text-5xl`). Change it there and every `text-xs`, `text-sm` and so on follows.
 - Keep paragraphs under about 72 characters wide.
@@ -26,7 +25,7 @@ Teal is the only brand colour. Amber is reserved for progress and independence, 
 - Public landing page for signed-out visitors: `src/components/Landing.tsx`.
 
 ## Rules we follow
-- One primary action per area. Primary buttons are solid teal; secondary buttons are outlined.
+- One primary action per area. Primary buttons are solid blue; secondary buttons are outlined.
 - Cards are for things you act on. Lists, dividers and spacing group everything else.
 - Status is never colour alone: badges carry an icon or a word.
 - Motion is only used when the person does something, plus one moment on the landing page where the path draws itself. It is switched off for people who ask for reduced motion.

@@ -621,12 +621,12 @@ export default function App() {
   const borderClass = 'border-[var(--border-hairline)]';
   const textPrimary = 'text-[var(--ink-primary)]';
   const textSecondary = 'text-[var(--ink-secondary)]';
-  const inputClass = `w-full px-4 py-2.5 text-base rounded-[10px] border ${borderClass} ${
+  const inputClass = `w-full px-4 py-2.5 text-base rounded-[6px] border ${borderClass} ${
     'bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)]'
   } focus:outline-none focus:border-[var(--accent-600)] focus:ring-2 focus:ring-[var(--accent-500)]/20 transition-colors`;
   const btnPrimary =
-    'inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer bg-[var(--accent-600)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] disabled:opacity-60';
-  const btnSecondary = `inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-[10px] border border-[var(--border-strong)] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer ${
+    'inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-[6px] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer bg-[var(--accent-600)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] disabled:opacity-60';
+  const btnSecondary = `inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-[6px] border border-[var(--border-strong)] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer ${
     'bg-[var(--surface-elevated)] text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)]'
   }`;
 
@@ -859,14 +859,14 @@ export default function App() {
         <div className="min-h-screen flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop Sidebar (248px fixed) */}
-          <aside className="hidden lg:flex lg:w-[280px] lg:flex-col lg:fixed lg:inset-y-0 border-r studio-sidebar">
+          <aside className="hidden lg:flex lg:w-[248px] lg:flex-col lg:fixed lg:inset-y-0 border-r studio-sidebar">
             <div className={`h-[72px] px-6 flex items-center justify-between border-b ${borderClass}`}>
               <button
                 type="button"
                 onClick={() => setActiveTab(role === 'admin' ? 'admin-dashboard' : 'dashboard')}
                 className="flex items-center gap-2.5 cursor-pointer"
               >
-                <div className="w-9 h-9 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-[8px] bg-black text-white border border-[var(--border-strong)] flex items-center justify-center shrink-0">
                   <Code2 className="w-[18px] h-[18px]" />
                 </div>
                 <span className="font-display text-lg font-semibold tracking-tight whitespace-nowrap">
@@ -894,7 +894,7 @@ export default function App() {
                       setActiveTab(item.id);
                     }}
                     aria-current={active ? 'page' : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[10px] text-[0.9375rem] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[6px] text-[0.9375rem] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                       active
                         ? 'nav-active font-semibold'
                         : `${textSecondary} hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-primary)]`
@@ -916,7 +916,7 @@ export default function App() {
                       setRole(nextRole);
                       setActiveTab(nextRole === 'admin' ? 'admin-dashboard' : 'dashboard');
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[10px] text-sm font-semibold border ${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[6px] text-sm font-semibold border ${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
                   >
                     <Shield className="w-5 h-5 text-[var(--accent-600)] shrink-0" />
                     <span className="truncate">{role === 'admin' ? 'Member View' : 'Admin Console'}</span>
@@ -925,7 +925,7 @@ export default function App() {
               )}
             </nav>
             {!CLOUD && (
-              <div className="mx-4 mb-3 px-3.5 py-3 rounded-[10px] border border-[var(--warning-border,var(--border-hairline))] bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
+              <div className="mx-4 mb-3 px-3.5 py-3 rounded-[6px] border border-[var(--warning-border,var(--border-hairline))] bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
                 <strong>Demo mode.</strong> Data stays in this browser only. Connect Supabase to go live.
               </div>
             )}
@@ -937,7 +937,7 @@ export default function App() {
                   setShowOnboardingWizard(false);
                   setActiveTab('profile');
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-12 rounded-[10px] text-sm font-medium cursor-pointer ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-12 rounded-[6px] text-sm font-medium cursor-pointer ${
                   activeTab === 'profile'
                     ? 'nav-active'
                     : `${textSecondary} hover:bg-[var(--surface-subtle)]`
@@ -952,7 +952,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={signOut}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[10px] text-sm ${textSecondary} hover:text-[var(--danger-ink)] hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[6px] text-sm ${textSecondary} hover:text-[var(--danger-ink)] hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
               >
                 <LogOut className="w-5 h-5 shrink-0" />
                 <span>Sign out</span>
@@ -1006,7 +1006,7 @@ export default function App() {
                 type="button"
                 aria-label="Toggle dark mode"
                 onClick={() => setDarkMode((v) => !v)}
-                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-[6px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
                 {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
@@ -1014,7 +1014,7 @@ export default function App() {
                 type="button"
                 aria-label="Open menu"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-[6px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -1082,7 +1082,7 @@ export default function App() {
           )}
 
           {/* Main Workspace Container */}
-          <div className="flex-1 lg:pl-[280px] flex flex-col min-w-0">
+          <div className="flex-1 lg:pl-[248px] flex flex-col min-w-0">
             {/* Desktop Workspace Context Top Bar */}
             <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-12 items-center justify-between border-b ${borderClass} ${'bg-[var(--canvas-bg)]/90'} backdrop-blur`}>
               <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
@@ -1135,7 +1135,7 @@ export default function App() {
                   type="button"
                   aria-label="Toggle dark mode"
                   onClick={() => setDarkMode((v) => !v)}
-                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-[10px] border ${borderClass} text-sm font-medium ${textSecondary} ${'hover:text-[var(--ink-primary)]'} cursor-pointer transition-colors`}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-[6px] border ${borderClass} text-sm font-medium ${textSecondary} ${'hover:text-[var(--ink-primary)]'} cursor-pointer transition-colors`}
                 >
                   {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
                   <span>{darkMode ? 'Light' : 'Dark'}</span>
@@ -1381,7 +1381,7 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               role="status"
-              className="fixed bottom-24 lg:bottom-8 right-4 sm:right-8 z-40 max-w-[calc(100vw-2rem)] px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
+              className="fixed bottom-24 lg:bottom-8 right-4 sm:right-8 z-40 max-w-[calc(100vw-2rem)] px-5 py-3 rounded-[8px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
             >
               {toastMessage}
             </motion.div>

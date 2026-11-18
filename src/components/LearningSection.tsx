@@ -845,7 +845,7 @@ export const LearningSection = ({
                 ))}
               </div>
               <h2 className={`text-base font-semibold ${textPrimary}`}>{currentQ.prompt}</h2>
-              {currentQ.code && <pre className={`p-4 rounded-xl text-xs font-mono overflow-x-auto border ${borderClass} ${subtleBgClass} ${textPrimary}`}>{currentQ.code}</pre>}
+              {currentQ.code && <pre className={`p-4 rounded-lg text-xs font-mono overflow-x-auto border ${borderClass} ${subtleBgClass} ${textPrimary}`}>{currentQ.code}</pre>}
 
               {currentQ.options && currentQ.options.length > 0 ? (
                 <div className="space-y-3">
@@ -856,7 +856,7 @@ export const LearningSection = ({
                         key={i}
                         type="button"
                         onClick={() => setActiveQuizSession({ ...activeQuizSession, answers: { ...answers, [currentQ.id]: opt } })}
-                        className={`w-full text-left p-3.5 rounded-xl border text-sm transition cursor-pointer ${
+                        className={`w-full text-left p-3.5 rounded-lg border text-sm transition cursor-pointer ${
                           selected ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)] font-medium' : `${borderClass} ${subtleBgClass} ${textPrimary}`
                         }`}
                       >
@@ -1177,7 +1177,7 @@ export const LearningSection = ({
               {(submissionKind === 'files' || submissionKind === 'zip') && (
                 <div className="space-y-4">
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border-2 border-dashed ${borderClass} ${subtleBgClass} cursor-pointer focus-within:ring-2 focus-within:ring-[var(--spark)]`}
+                    className={`flex items-start gap-3 p-4 rounded-lg border-2 border-dashed ${borderClass} ${subtleBgClass} cursor-pointer focus-within:ring-2 focus-within:ring-[var(--spark)]`}
                   >
                     {submissionKind === 'zip' ? (
                       <FolderArchive className="w-5 h-5 mt-0.5 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
@@ -1271,7 +1271,7 @@ export const LearningSection = ({
               )}
 
               {/* Code and explanation live together in one panel */}
-              <div className={`rounded-xl border ${borderClass} divide-y ${borderClass} overflow-hidden`}>
+              <div className={`rounded-lg border ${borderClass} divide-y ${borderClass} overflow-hidden`}>
                 {submissionKind !== 'notes' && (
                   <div className="p-4 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1389,7 +1389,7 @@ export const LearningSection = ({
               </div>
 
               {topicQuizMatch ? (
-                <div className={`p-5 rounded-xl border ${borderClass} border-l-4 border-l-[var(--spark)] ${subtleBgClass} space-y-4`}>
+                <div className={`p-5 rounded-lg border ${borderClass} border-l-4 border-l-[var(--spark)] ${subtleBgClass} space-y-4`}>
                   <div className="space-y-1">
                     <h3 className={`text-lg ${textPrimary}`}>{topicQuizMatch.title}</h3>
                     <p className={`text-sm ${textSecondary}`}>
@@ -1765,7 +1765,7 @@ export const LearningSection = ({
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                          <div className={`p-3.5 rounded-xl ${subtleBgClass} space-y-2`}>
+                          <div className={`p-3.5 rounded-lg ${subtleBgClass} space-y-2`}>
                             <div className={`font-semibold ${textPrimary}`}>Roadmap topics covered</div>
                             {plan.coveredRoadmapTopics.length > 0 ? (
                               plan.coveredRoadmapTopics.map((t, i) => <div key={i} className="text-[var(--success-ink)]">✓ {t}</div>)
@@ -1773,7 +1773,7 @@ export const LearningSection = ({
                               <p className={textSecondary}>Add more module names so we can match more topics.</p>
                             )}
                           </div>
-                          <div className={`p-3.5 rounded-xl ${subtleBgClass} space-y-2`}>
+                          <div className={`p-3.5 rounded-lg ${subtleBgClass} space-y-2`}>
                             <div className={`font-semibold ${textPrimary}`}>Missing compared to {selectedRoadmap.title}</div>
                             {plan.missingRoadmapTopics.length > 0 ? (
                               plan.missingRoadmapTopics.map((t, i) => <div key={i} className="text-[var(--warning-ink)]">• {t}</div>)
@@ -1785,7 +1785,7 @@ export const LearningSection = ({
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {plan.dailyTargets.map((dt) => (
-                            <div key={dt.id} className={`p-3.5 rounded-xl border ${borderClass} space-y-3`}>
+                            <div key={dt.id} className={`p-3.5 rounded-lg border ${borderClass} space-y-3`}>
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-[var(--accent-600)]">{dt.dayLabel}</span>
                                 <span className={`tabular-nums ${textSecondary}`}>~{dt.estimatedMinutes}m</span>

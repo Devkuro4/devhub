@@ -418,7 +418,7 @@ export const MentorSection = ({
               >
                 <PanelLeft className="w-4 h-4" />
               </button>
-              <div className="w-8 h-8 rounded-[10px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-[6px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
               <div className="min-w-0">
@@ -466,7 +466,7 @@ export const MentorSection = ({
             <div className="max-w-3xl mx-auto space-y-5">
               {messages.length === 0 && !showSpinner && (
                 <div className="pt-4 sm:pt-10 text-center space-y-5">
-                  <div className="w-11 h-11 mx-auto rounded-xl bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+                  <div className="w-11 h-11 mx-auto rounded-lg bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
                     <Bot className="w-5 h-5" />
                   </div>
                   <div className="space-y-2">
@@ -483,7 +483,7 @@ export const MentorSection = ({
                         type="button"
                         onClick={() => sendMessage(qp.prompt)}
                         disabled={busy}
-                        className={`px-3.5 py-2.5 rounded-xl border ${borderClass} text-sm ${textPrimary} cursor-pointer hover:border-[var(--accent-500)] hover:bg-[var(--accent-50)] disabled:opacity-50`}
+                        className={`px-3.5 py-2.5 rounded-lg border ${borderClass} text-sm ${textPrimary} cursor-pointer hover:border-[var(--accent-500)] hover:bg-[var(--accent-50)] disabled:opacity-50`}
                       >
                         {qp.label}
                       </button>
@@ -495,7 +495,7 @@ export const MentorSection = ({
               {messages.map((m) =>
                 m.sender === 'user' ? (
                   <div key={m.id} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-[20px] px-4 py-2.5 text-sm bg-[var(--panel-deep)] text-white">
+                    <div className="max-w-[85%] rounded-[12px] px-4 py-2.5 text-sm bg-[var(--panel-deep)] text-white">
                       <FormattedMessageText text={m.text} isUser subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
                     </div>
                   </div>
@@ -544,7 +544,7 @@ export const MentorSection = ({
               }}
               className="max-w-3xl mx-auto"
             >
-              <div className={`rounded-2xl border ${borderClass} ${subtleBgClass} focus-within:border-[var(--accent-500)] transition-colors`}>
+              <div className={`rounded-lg border ${borderClass} ${subtleBgClass} focus-within:border-[var(--accent-500)] transition-colors`}>
                 <textarea
                   ref={textareaRef}
                   rows={1}
