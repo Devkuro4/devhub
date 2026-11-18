@@ -241,7 +241,7 @@ export const AdminSection = ({
               { label: 'Group projects', value: projects.length },
               { label: 'Challenges', value: challenges.length },
             ].map((stat) => (
-              <div key={stat.label} className={`border-t-4 border-[var(--border-hairline)] pt-2`}>
+              <div key={stat.label} className="soft-card px-5 py-4">
                 <dt className={`text-xs ${textSecondary}`}>{stat.label}</dt>
                 <dd className={`font-display text-4xl tabular-nums ${textPrimary}`}>{stat.value}</dd>
               </div>
@@ -286,9 +286,9 @@ export const AdminSection = ({
       {/* 2. MEMBERS & EXPANDABLE ROLES */}
       {subTab === 'admin-members' && (
         <div className="space-y-5">
-          <dl className="flex flex-wrap gap-x-8 gap-y-3">
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {['Member', 'Learning Coordinator', 'Field Lead', 'Community Admin'].map((r) => (
-              <div key={r} className="border-t-4 border-[var(--border-hairline)] pt-2 min-w-[8rem]">
+              <div key={r} className="soft-card px-5 py-4">
                 <dt className={`text-xs ${textSecondary}`}>{r === 'Member' ? 'Members' : `${r}s`}</dt>
                 <dd className={`font-display text-4xl tabular-nums ${textPrimary}`}>{teamRoster.filter((m) => (m.role || 'Member') === r).length}</dd>
               </div>

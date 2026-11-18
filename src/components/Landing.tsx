@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowRight, Code2 } from 'lucide-react';
-import { useSystemDark } from './ui';
+import { ArrowRight, Play } from 'lucide-react';
+import { LogoMark, Sparkle, useSystemDark } from './ui';
 
 /* Public front door for visitors who are not signed in.
    One memorable thing: the path from beginner to independent developer draws itself once on load.
@@ -49,14 +49,14 @@ const Trail = () => (
           className="trail-line"
           fill="none"
           stroke="var(--spark)"
-          strokeWidth="2"
+          strokeWidth="3.5"
           strokeLinecap="round"
         />
         {POINTS.map(([x, y], i) => {
           const last = i === POINTS.length - 1;
           return (
             <g key={i} className="trail-dot" style={{ animationDelay: `${0.35 + i * 0.3}s`, transformOrigin: `${x}px ${y}px` }}>
-              <circle cx={x} cy={y} r={last ? 15 : 10} fill="var(--surface-bg)" stroke={last ? 'var(--spark)' : 'var(--spark)'} strokeWidth="2.5" />
+              <circle cx={x} cy={y} r={last ? 15 : 10} fill="var(--surface-bg)" stroke={last ? 'var(--spark)' : 'var(--spark)'} strokeWidth="4" />
               {last && <circle cx={x} cy={y} r="6" fill="var(--spark)" />}
             </g>
           );
@@ -190,22 +190,30 @@ const COMMUNITY = [
 export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: () => void }) => {
   const dark = useSystemDark();
   const primary =
-    'inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-[12px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-base font-semibold cursor-pointer transition-colors';
+    'inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-full bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-base font-semibold cursor-pointer transition-colors';
   const secondary =
-    'inline-flex items-center justify-center min-h-12 px-6 rounded-[12px] border border-[var(--border-strong)] text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] text-base font-medium cursor-pointer transition-colors';
+    'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-[var(--border-strong)] text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] text-base font-medium cursor-pointer transition-colors';
   const wrap = 'max-w-6xl mx-auto px-5 sm:px-8 lg:px-12';
+  const onBlack =
+    'inline-flex items-center gap-3 pl-6 pr-1.5 min-h-12 rounded-full bg-white text-[#0A0A0A] text-base font-semibold cursor-pointer hover:bg-white/90';
+  const onBlackGhost =
+    'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-white/30 text-white text-base font-medium cursor-pointer hover:bg-white/10';
+  const playDot = (
+    <span className="w-9 h-9 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center">
+      <Play className="w-4 h-4 fill-current" aria-hidden="true" />
+    </span>
+  );
 
   return (
-    <div className={`hub-root ${dark ? 'dark' : ''} studio-canvas min-h-screen`}>
+    <div className={`hub-root ${dark ? 'dark' : ''} app-backdrop min-h-screen sm:p-6`}>
+      <div className="app-frame min-h-[calc(100vh-3rem)]">
       <a href="#hero" className="skip-link">Skip to main content</a>
 
-      <header className="sticky top-0 z-30 border-b border-[var(--border-hairline)] bg-[var(--canvas-bg)]/90 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-hairline)] bg-[var(--surface-bg)]/90 backdrop-blur sm:rounded-t-[28px]">
         <div className={`${wrap} h-[72px] flex items-center justify-between gap-4`}>
           <a href="#hero" className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-[8px] bg-black text-white border border-[var(--border-strong)] flex items-center justify-center">
-              <Code2 className="w-[18px] h-[18px]" aria-hidden="true" />
-            </span>
-            <span className="font-display text-xl font-semibold">Dev Hub</span>
+            <LogoMark size={36} />
+            <span className="font-display text-xl font-bold">Dev Hub</span>
           </a>
           <nav aria-label="Sections" className="hidden md:flex items-center gap-8 text-[0.9375rem] font-medium text-[var(--ink-secondary)]">
             <a href="#how" className="hover:text-[var(--ink-primary)]">How it works</a>
@@ -213,37 +221,38 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
             <a href="#community" className="hover:text-[var(--ink-primary)]">Community</a>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
-            <button type="button" onClick={onSignIn} className="px-3 sm:px-4 min-h-11 text-[0.9375rem] font-medium text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] rounded-[6px] cursor-pointer">
+            <button type="button" onClick={onSignIn} className="px-3 sm:px-4 min-h-11 text-[0.9375rem] font-medium text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] rounded-full cursor-pointer">
               Sign in
             </button>
-            <button type="button" onClick={onJoin} className="px-4 sm:px-5 min-h-11 rounded-[6px] bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-[0.9375rem] font-semibold cursor-pointer transition-colors whitespace-nowrap">
+            <button type="button" onClick={onJoin} className="px-4 sm:px-5 min-h-11 rounded-full bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-[0.9375rem] font-semibold cursor-pointer transition-colors whitespace-nowrap">
               Join Dev Hub
             </button>
           </div>
         </div>
       </header>
 
-      <main id="hero" className="hero-bg">
+      <main id="hero">
         {/* Hero */}
-        <section className={`${wrap} pt-16 sm:pt-24 pb-12 sm:pb-16`}>
-          <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 px-3.5 py-1 mb-7 rounded-full border border-[var(--border-strong)] bg-[var(--surface-bg)] text-sm text-[var(--ink-secondary)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--spark)] shadow-[0_0_8px_var(--spark)]" aria-hidden="true" />
-              An AI mentor that gives hints, not answers
-            </span>
-            <h1 className="!font-display !text-[clamp(2.5rem,1.6rem_+_4.2vw,4.5rem)] !leading-[1.04] !tracking-[-0.035em] font-semibold">
-              Stop following tutorials. Start building on your own.
-            </h1>
-            <p className="mt-6 text-lg sm:text-xl leading-relaxed text-[var(--ink-secondary)] max-w-[40ch] sm:max-w-[46ch]">
-              Dev Hub is a community for people learning to code. Follow the courses you already use, practise every day, and get an AI mentor that gives hints instead of answers, so what you build is really yours.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={onJoin} className={primary}>
-                Join Dev Hub <ArrowRight className="w-5 h-5" aria-hidden="true" />
-              </button>
-              <button type="button" onClick={onSignIn} className={secondary}>
-                Sign in
-              </button>
+        <section className={`${wrap} pt-8 sm:pt-12 pb-12 sm:pb-16`}>
+          <div className="relative overflow-hidden rounded-[24px] bg-[var(--panel-deep)] text-white px-7 py-14 sm:px-14 sm:py-24">
+            <Sparkle className="absolute -right-10 -bottom-16 w-[24rem] text-[#3B82F6] opacity-25" />
+            <Sparkle className="absolute right-40 top-10 w-28 text-[#3B82F6] opacity-30 hidden sm:block" />
+            <Sparkle className="absolute right-16 top-44 w-14 text-white opacity-10 hidden sm:block" />
+            <div className="relative max-w-3xl">
+              <h1 className="!text-white !font-display !text-[clamp(2.25rem,1.5rem_+_3.8vw,4.25rem)] !leading-[1.05] !tracking-[-0.035em] font-semibold">
+                Stop following tutorials. Start building on your own.
+              </h1>
+              <p className="mt-6 text-lg sm:text-xl leading-relaxed text-white/75 max-w-[40ch] sm:max-w-[46ch]">
+                Dev Hub is a community for people learning to code. Follow the courses you already use, practise every day, and get an AI mentor that gives hints instead of answers, so what you build is really yours.
+              </p>
+              <div className="mt-10 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={onJoin} className={onBlack}>
+                  Join Dev Hub {playDot}
+                </button>
+                <button type="button" onClick={onSignIn} className={onBlackGhost}>
+                  Sign in
+                </button>
+              </div>
             </div>
           </div>
 
@@ -254,7 +263,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
         </section>
 
         {/* How it works */}
-        <section id="how" className="border-t border-[var(--border-hairline)] bg-[var(--surface-bg)]">
+        <section id="how">
           <div className={`${wrap} py-20 sm:py-28 grid gap-12 lg:grid-cols-12`}>
             <div className="lg:col-span-5">
               <div className="lg:sticky lg:top-28 space-y-5">
@@ -264,7 +273,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
                 </p>
               </div>
             </div>
-            <ul className="lg:col-span-7 divide-y divide-[var(--border-hairline)] border-y border-[var(--border-hairline)]">
+            <ul className="lg:col-span-7 soft-card px-6 sm:px-8 divide-y divide-[var(--border-hairline)]">
               {LOOP.map((l) => (
                 <li key={l.title} className="py-7 sm:py-8">
                   <h3 className="text-xl">{l.title}</h3>
@@ -276,7 +285,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
         </section>
 
         {/* AI mentor */}
-        <section id="mentor" className="border-t border-[var(--border-hairline)]">
+        <section id="mentor">
           <div className={`${wrap} py-20 sm:py-28 grid gap-12 lg:grid-cols-2 lg:gap-16 items-center`}>
             <div className="space-y-5">
               <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">An AI mentor that makes you do the thinking</h2>
@@ -292,7 +301,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
         </section>
 
         {/* Community */}
-        <section id="community" className="border-t border-[var(--border-hairline)] bg-[var(--surface-bg)]">
+        <section id="community">
           <div className={`${wrap} py-20 sm:py-28`}>
             <div className="max-w-2xl space-y-5">
               <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">Learn with people, not alone</h2>
@@ -300,9 +309,9 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
                 Growing as a developer is easier when someone is a step ahead of you and someone else is a step behind.
               </p>
             </div>
-            <dl className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+            <dl className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {COMMUNITY.map((c) => (
-                <div key={c.title} className="border-t-2 border-[var(--spark)] pt-5">
+                <div key={c.title} className="soft-card p-6">
                   <dt className="font-display text-lg font-semibold">{c.title}</dt>
                   <dd className="mt-2 text-base leading-relaxed text-[var(--ink-secondary)]">{c.text}</dd>
                 </div>
@@ -311,24 +320,25 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
           </div>
         </section>
 
-        {/* Roadmaps + closing call */}
-        <section className="border-t border-[var(--border-hairline)]">
-          <div className={`${wrap} py-20 sm:py-28 grid gap-12 lg:grid-cols-12 items-center`}>
-            <div className="lg:col-span-7 space-y-5">
-              <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">Ready to build something that is yours?</h2>
-              <p className="text-lg text-[var(--ink-secondary)] leading-relaxed max-w-[50ch]">
+        {/* Closing call */}
+        <section className={`${wrap} pb-16 sm:pb-24`}>
+          <div className="relative overflow-hidden rounded-[24px] bg-[var(--panel-deep)] text-white px-7 py-14 sm:px-14 sm:py-16 grid gap-10 lg:grid-cols-12 items-center">
+            <Sparkle className="absolute -right-12 -bottom-20 w-80 text-[#3B82F6] opacity-25" />
+            <div className="relative lg:col-span-7 space-y-5">
+              <h2 className="!text-white !text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">Ready to build something that is yours?</h2>
+              <p className="text-lg text-white/75 leading-relaxed max-w-[50ch]">
                 Start from a Frontend, Backend, Full-Stack or AI Engineering roadmap, or describe what you want to learn and get a plan made for you. Setting up takes about a minute.
               </p>
               <div className="pt-3 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={onJoin} className={primary}>
-                  Join Dev Hub <ArrowRight className="w-5 h-5" aria-hidden="true" />
+                <button type="button" onClick={onJoin} className={onBlack}>
+                  Join Dev Hub {playDot}
                 </button>
-                <button type="button" onClick={onSignIn} className={secondary}>
+                <button type="button" onClick={onSignIn} className={onBlackGhost}>
                   I already have an account
                 </button>
               </div>
             </div>
-            <p className="lg:col-span-5 font-display text-3xl sm:text-4xl font-semibold leading-[1.15] tracking-tight text-[var(--ink-primary)]">
+            <p className="relative lg:col-span-5 font-display text-3xl sm:text-4xl font-semibold leading-[1.15] tracking-tight">
               Learn together.
               <br />
               Build together.
@@ -339,12 +349,10 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border-hairline)] bg-[var(--surface-bg)]">
+      <footer className="border-t border-[var(--border-hairline)] sm:rounded-b-[28px]">
         <div className={`${wrap} py-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-sm text-[var(--ink-muted)]`}>
           <div className="flex items-center gap-3">
-            <span className="w-7 h-7 rounded-[8px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
-              <Code2 className="w-4 h-4" aria-hidden="true" />
-            </span>
+            <LogoMark size={28} />
             <span>Dev Hub. A community for developers growing together.</span>
           </div>
           <button type="button" onClick={onSignIn} className="self-start sm:self-auto font-medium text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] underline underline-offset-4 cursor-pointer">
@@ -352,6 +360,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
           </button>
         </div>
       </footer>
+      </div>
     </div>
   );
 };

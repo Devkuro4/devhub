@@ -1300,7 +1300,7 @@ export const CommunitySection = ({
                       </h2>
                     </div>
                     {openHelpList.length === 0 ? (
-                      <p className={`p-5 rounded-lg border border-dashed ${borderClass} text-base ${textSecondary}`}>
+                      <p className={`p-5 rounded-xl border border-dashed ${borderClass} text-base ${textSecondary}`}>
                         Every question has been answered. Ask your own below, or check back later.
                       </p>
                     ) : (

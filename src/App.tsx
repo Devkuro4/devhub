@@ -15,6 +15,7 @@ import {
   Moon,
   Settings,
   Shield,
+  Sparkles,
   Sun,
   Users,
   WifiOff,
@@ -621,12 +622,12 @@ export default function App() {
   const borderClass = 'border-[var(--border-hairline)]';
   const textPrimary = 'text-[var(--ink-primary)]';
   const textSecondary = 'text-[var(--ink-secondary)]';
-  const inputClass = `w-full px-4 py-2.5 text-base rounded-[6px] border ${borderClass} ${
+  const inputClass = `w-full px-4 py-2.5 text-base rounded-[10px] border ${borderClass} ${
     'bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)]'
   } focus:outline-none focus:border-[var(--accent-600)] focus:ring-2 focus:ring-[var(--accent-500)]/20 transition-colors`;
   const btnPrimary =
-    'inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-[6px] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer bg-[var(--accent-600)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] disabled:opacity-60';
-  const btnSecondary = `inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-[6px] border border-[var(--border-strong)] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer ${
+    'inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer bg-[var(--accent-600)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] disabled:opacity-60';
+  const btnSecondary = `inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-[10px] border border-[var(--border-strong)] transition-all duration-150 active:scale-[0.985] whitespace-nowrap shrink-0 cursor-pointer ${
     'bg-[var(--surface-elevated)] text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)]'
   }`;
 
@@ -715,7 +716,7 @@ export default function App() {
   }, [user, hydrated, milestoneSummary]);
 
   const mainNav = [
-    { id: 'dashboard', label: 'Home', icon: LayoutDashboard, match: ['dashboard'], group: 'Workspace' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, match: ['dashboard'], group: 'Workspace' },
     { id: 'today', label: 'My Learning', icon: BookOpen, match: ['today', 'courses', 'submissions', 'quizzes', 'progress'], group: 'Workspace' },
     { id: 'roadmaps', label: 'My Roadmap', icon: MapIcon, match: ['roadmaps'], group: 'Workspace' },
     { id: 'weekly-project', label: 'Projects', icon: FolderGit2, match: ['weekly-project', 'projects', 'showcase', 'devtools'], group: 'Workspace' },
@@ -726,8 +727,8 @@ export default function App() {
   const adminNav = [
     { id: 'admin-dashboard', label: 'Overview', icon: Shield, match: ['admin-dashboard'] },
     { id: 'admin-members', label: 'Members', icon: Users, match: ['admin-members'] },
-    { id: 'admin-support', label: 'Announcements & Help', icon: BookOpen, match: ['admin-support'] },
-    { id: 'admin-activities', label: 'Activities & Quizzes', icon: FolderGit2, match: ['admin-activities'] },
+    { id: 'admin-support', label: 'Announcements', icon: BookOpen, match: ['admin-support'] },
+    { id: 'admin-activities', label: 'Activities', icon: FolderGit2, match: ['admin-activities'] },
     { id: 'admin-ai', label: 'AI Settings', icon: Code2, match: ['admin-ai'] },
   ];
 
@@ -824,7 +825,7 @@ export default function App() {
 
   const breadcrumbParts: { primary: string; secondary?: string } = (() => {
     if (showOnboardingWizard) return { primary: 'Getting Started', secondary: '1-Minute Setup' };
-    if (activeTab === 'dashboard') return { primary: 'Home' };
+    if (activeTab === 'dashboard') return { primary: 'Dashboard' };
     if (activeTab === 'today') return { primary: 'My Learning', secondary: 'Today’s Learning' };
     if (activeTab === 'courses') return { primary: 'My Learning', secondary: 'My Courses' };
     if (activeTab === 'submissions') return { primary: 'My Learning', secondary: 'Submissions & Feedback' };
@@ -852,63 +853,109 @@ export default function App() {
     return { primary: 'Workspace' };
   })();
 
+  const syncBadge = (
+    <span
+      aria-live="polite"
+      className={`inline-flex items-center gap-1.5 text-xs tabular-nums ${
+        syncStatus === 'offline' || syncStatus === 'error' ? 'text-[var(--warning-ink)]' : textSecondary
+      }`}
+    >
+      {syncStatus === 'offline' ? (
+        <><WifiOff className="w-3.5 h-3.5 shrink-0" /><span>Offline · saved locally</span></>
+      ) : syncStatus === 'error' ? (
+        <><AlertCircle className="w-3.5 h-3.5 shrink-0" /><span>Sync retry pending</span></>
+      ) : syncStatus === 'saving' ? (
+        <><Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" /><span>Saving…</span></>
+      ) : (
+        <><CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[var(--success-ink)]" /><span>{lastSavedAt ? `Saved ${lastSavedAt}` : 'Saved'}</span></>
+      )}
+    </span>
+  );
+
+  const onDashboardHome = activeTab === 'dashboard' && !showOnboardingWizard;
+  const sideLabel = 'px-3 pt-1 pb-2 text-xs font-semibold tracking-wider uppercase text-[var(--ink-primary)]';
+  const initialsOf = (n: string) => (n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'D';
+  const studyGroup = role === 'admin' ? [] : (teamRoster || []).filter((m: any) => m.name !== user.name).slice(0, 3);
+
   return (
     <MotionConfig reducedMotion="user">
     <DarkCtx.Provider value={darkMode}>
-      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-screen ${bgClass} ${textPrimary}`}>
-        <div className="min-h-screen flex flex-col lg:flex-row">
+      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-screen app-backdrop lg:p-6 ${textPrimary}`}>
+        <div className="app-frame min-h-screen lg:min-h-[calc(100vh-3rem)] flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
-          {/* Desktop Sidebar (248px fixed) */}
-          <aside className="hidden lg:flex lg:w-[248px] lg:flex-col lg:fixed lg:inset-y-0 border-r studio-sidebar">
-            <div className={`h-[72px] px-6 flex items-center justify-between border-b ${borderClass}`}>
+          {/* Desktop sidebar */}
+          <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-6 lg:self-start lg:h-[calc(100vh-3rem)] border-r studio-sidebar rounded-l-[28px]">
+            <div className="px-8 pt-8 pb-7">
               <button
                 type="button"
                 onClick={() => setActiveTab(role === 'admin' ? 'admin-dashboard' : 'dashboard')}
-                className="flex items-center gap-2.5 cursor-pointer"
+                className="flex items-center gap-3 cursor-pointer"
               >
-                <div className="w-9 h-9 rounded-[8px] bg-black text-white border border-[var(--border-strong)] flex items-center justify-center shrink-0">
-                  <Code2 className="w-[18px] h-[18px]" />
-                </div>
-                <span className="font-display text-lg font-semibold tracking-tight whitespace-nowrap">
-                  {role === 'admin' ? 'Dev Hub · Admin' : 'Dev Hub'}
+                <span className="w-10 h-10 rounded-full bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <span className="font-display text-lg font-bold tracking-tight whitespace-nowrap">
+                  Dev Hub
                 </span>
               </button>
             </div>
 
-            <nav aria-label="Main navigation" className="flex-1 px-4 py-5 space-y-1 overflow-y-auto">
-              {(role === 'admin' ? adminNav : mainNav).map((item, idx, arr) => {
-                const Icon = item.icon;
-                const active = item.match.includes(activeTab);
-                const group = (item as { group?: string }).group;
-                const prevGroup = idx > 0 ? (arr[idx - 1] as { group?: string }).group : undefined;
-                return (
-                  <React.Fragment key={item.id}>
-                  {group && group !== prevGroup && (
-                    <div className="ds-group px-3 pt-6 pb-2 text-sm font-semibold text-[var(--ink-muted)]">{group}</div>
-                  )}
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setShowOnboardingWizard(false);
-                      setActiveTab(item.id);
-                    }}
-                    aria-current={active ? 'page' : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[6px] text-[0.9375rem] font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                      active
-                        ? 'nav-active font-semibold'
-                        : `${textSecondary} hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-primary)]`
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                  </React.Fragment>
-                );
-              })}
+            <nav aria-label="Main navigation" className="flex-1 px-5 overflow-y-auto no-scrollbar pb-4">
+              <p className={sideLabel}>{role === 'admin' ? 'Admin' : 'Overview'}</p>
+              <div className="space-y-0.5">
+                {(role === 'admin' ? adminNav : mainNav).map((item) => {
+                  const Icon = item.icon;
+                  const active = item.match.includes(activeTab);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setShowOnboardingWizard(false);
+                        setActiveTab(item.id);
+                      }}
+                      aria-current={active ? 'page' : undefined}
+                      className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] transition-colors cursor-pointer whitespace-nowrap ${
+                        active ? 'nav-active font-semibold' : `${textSecondary} font-medium hover:text-[var(--ink-primary)]`
+                      }`}
+                    >
+                      <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {studyGroup.length > 0 && (
+                <div className="mt-9">
+                  <p className={sideLabel}>Study group</p>
+                  <ul className="space-y-0.5">
+                    {studyGroup.map((m: any) => (
+                      <li key={m.id || m.name}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowOnboardingWizard(false);
+                            setActiveTab('pairing-help');
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2 rounded-full text-left cursor-pointer hover:bg-[var(--surface-subtle)]"
+                        >
+                          <span aria-hidden="true" className="w-8 h-8 rounded-full bg-[var(--panel-deep)] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                            {initialsOf(m.name)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium leading-tight truncate">{m.name}</span>
+                            <span className={`block text-xs leading-tight truncate ${textSecondary}`}>{m.field}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {user.isAdmin && !ADMIN_SITE && (
-                <div className={`pt-4 mt-4 border-t ${borderClass}`}>
+                <div className="mt-6">
                   <button
                     type="button"
                     onClick={() => {
@@ -916,47 +963,56 @@ export default function App() {
                       setRole(nextRole);
                       setActiveTab(nextRole === 'admin' ? 'admin-dashboard' : 'dashboard');
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[6px] text-sm font-semibold border ${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
+                    className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-sm font-medium border ${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
                   >
-                    <Shield className="w-5 h-5 text-[var(--accent-600)] shrink-0" />
-                    <span className="truncate">{role === 'admin' ? 'Member View' : 'Admin Console'}</span>
+                    <Shield className="w-[18px] h-[18px] text-[var(--accent-600)] shrink-0" aria-hidden="true" />
+                    <span className="truncate">{role === 'admin' ? 'Member view' : 'Admin console'}</span>
                   </button>
                 </div>
               )}
             </nav>
+
             {!CLOUD && (
-              <div className="mx-4 mb-3 px-3.5 py-3 rounded-[6px] border border-[var(--warning-border,var(--border-hairline))] bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
+              <div className="mx-5 mb-3 px-3.5 py-3 rounded-xl bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
                 <strong>Demo mode.</strong> Data stays in this browser only. Connect Supabase to go live.
               </div>
             )}
 
-            <div className={`p-4 border-t ${borderClass} space-y-1`}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOnboardingWizard(false);
-                  setActiveTab('profile');
-                }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-12 rounded-[6px] text-sm font-medium cursor-pointer ${
-                  activeTab === 'profile'
-                    ? 'nav-active'
-                    : `${textSecondary} hover:bg-[var(--surface-subtle)]`
-                }`}
-              >
-                <Settings className="w-5 h-5 shrink-0" />
-                <div className="text-left min-w-0">
-                  <div className="truncate font-semibold">{user.name || 'Profile & Settings'}</div>
-                  <div className="truncate opacity-80 text-xs">Profile & settings</div>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={signOut}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-11 rounded-[6px] text-sm ${textSecondary} hover:text-[var(--danger-ink)] hover:bg-[var(--surface-subtle)] cursor-pointer whitespace-nowrap`}
-              >
-                <LogOut className="w-5 h-5 shrink-0" />
-                <span>Sign out</span>
-              </button>
+            <div className="px-5 pb-7 pt-2">
+              <p className={sideLabel}>Settings</p>
+              <div className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOnboardingWizard(false);
+                    setActiveTab('profile');
+                  }}
+                  aria-current={activeTab === 'profile' ? 'page' : undefined}
+                  className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] cursor-pointer whitespace-nowrap ${
+                    activeTab === 'profile' ? 'nav-active font-semibold' : `${textSecondary} font-medium hover:text-[var(--ink-primary)]`
+                  }`}
+                >
+                  <Settings className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                  <span>Settings</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDarkMode((v) => !v)}
+                  className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] font-medium ${textSecondary} hover:text-[var(--ink-primary)] cursor-pointer whitespace-nowrap`}
+                >
+                  {darkMode ? <Sun className="w-[18px] h-[18px] shrink-0" aria-hidden="true" /> : <Moon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />}
+                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] font-medium text-[var(--danger-ink)] cursor-pointer whitespace-nowrap hover:bg-[var(--danger-bg)]"
+                >
+                  <LogOut className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                  <span>Sign out</span>
+                </button>
+              </div>
+              <div className="px-3 pt-3">{syncBadge}</div>
             </div>
           </aside>
 
@@ -1006,7 +1062,7 @@ export default function App() {
                 type="button"
                 aria-label="Toggle dark mode"
                 onClick={() => setDarkMode((v) => !v)}
-                className={`p-2 rounded-[6px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
                 {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
@@ -1014,7 +1070,7 @@ export default function App() {
                 type="button"
                 aria-label="Open menu"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className={`p-2 rounded-[6px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -1082,74 +1138,33 @@ export default function App() {
           )}
 
           {/* Main Workspace Container */}
-          <div className="flex-1 lg:pl-[248px] flex flex-col min-w-0">
-            {/* Desktop Workspace Context Top Bar */}
-            <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-12 items-center justify-between border-b ${borderClass} ${'bg-[var(--canvas-bg)]/90'} backdrop-blur`}>
-              <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
-                <span className={textSecondary}>Dev Hub</span>
-                <span className={textSecondary}>/</span>
-                <span className={breadcrumbParts.secondary ? textSecondary : `font-semibold ${textPrimary}`}>
-                  {breadcrumbParts.primary}
-                </span>
-                {breadcrumbParts.secondary && (
-                  <>
-                    <span className={textSecondary}>/</span>
-                    <span className={`font-semibold ${textPrimary}`}>{breadcrumbParts.secondary}</span>
-                  </>
-                )}
-              </nav>
-
-              <div className="flex items-center gap-4">
-                <span
-                  aria-live="polite"
-                  className={`inline-flex items-center gap-1.5 text-xs tabular-nums ${
-                    syncStatus === 'offline' || syncStatus === 'error'
-                      ? 'text-[var(--warning-ink)]'
-                      : textSecondary
-                  }`}
-                >
-                  {syncStatus === 'offline' ? (
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Breadcrumb bar (the home screen has its own search bar instead) */}
+            {!onDashboardHome && (
+              <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-10 items-center border-b ${borderClass} bg-[var(--surface-bg)]/90 backdrop-blur rounded-tr-[28px]`}>
+                <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
+                  <span className={textSecondary}>Dev Hub</span>
+                  <span className={textSecondary}>/</span>
+                  <span className={breadcrumbParts.secondary ? textSecondary : `font-semibold ${textPrimary}`}>
+                    {breadcrumbParts.primary}
+                  </span>
+                  {breadcrumbParts.secondary && (
                     <>
-                      <WifiOff className="w-3.5 h-3.5 shrink-0" />
-                      <span>Offline · Saved locally</span>
-                    </>
-                  ) : syncStatus === 'error' ? (
-                    <>
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>Sync retry pending</span>
-                    </>
-                  ) : syncStatus === 'saving' ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
-                      <span>Saving…</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[var(--success-ink)]" />
-                      <span>{lastSavedAt ? `Saved ${lastSavedAt}` : 'Saved'}</span>
+                      <span className={textSecondary}>/</span>
+                      <span className={`font-semibold ${textPrimary}`}>{breadcrumbParts.secondary}</span>
                     </>
                   )}
-                </span>
+                </nav>
+              </header>
+            )}
 
-                <button
-                  type="button"
-                  aria-label="Toggle dark mode"
-                  onClick={() => setDarkMode((v) => !v)}
-                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-[6px] border ${borderClass} text-sm font-medium ${textSecondary} ${'hover:text-[var(--ink-primary)]'} cursor-pointer transition-colors`}
-                >
-                  {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                  <span>{darkMode ? 'Light' : 'Dark'}</span>
-                </button>
-              </div>
-            </header>
-
-            <main id="main" tabIndex={-1} className="flex-1 pb-24 lg:pb-16 focus:outline-none">
+            <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "pb-20 lg:pb-0" : "pb-24 lg:pb-16"}`}>
               <motion.div
                 key={showOnboardingWizard ? 'onboarding' : activeTab}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className="max-w-6xl mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12 space-y-10"
+                className={onDashboardHome ? 'w-full' : 'max-w-6xl mx-auto px-5 sm:px-8 lg:px-12 py-8 sm:py-12 space-y-10'}
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard
@@ -1188,6 +1203,8 @@ export default function App() {
                         onNavigate={(tab) => setActiveTab(tab)}
                         milestones={milestoneSummary}
                         independence={independence}
+                        teamRoster={teamRoster}
+                        userName={user.name || ''}
                         styles={styles}
                       />
                     )}
@@ -1381,7 +1398,7 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               role="status"
-              className="fixed bottom-24 lg:bottom-8 right-4 sm:right-8 z-40 max-w-[calc(100vw-2rem)] px-5 py-3 rounded-[8px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
+              className="fixed bottom-24 lg:bottom-8 right-4 sm:right-8 z-40 max-w-[calc(100vw-2rem)] px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
             >
               {toastMessage}
             </motion.div>

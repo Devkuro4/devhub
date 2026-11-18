@@ -1,17 +1,23 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  ArrowRight,
   BookOpen,
+  Bot,
   Calendar,
-  CheckCircle2,
-  Circle,
+  ChevronLeft,
+  ChevronRight,
   Code2,
   FolderGit2,
+  ListChecks,
+  Map as MapIcon,
   Megaphone,
   MessageSquare,
+  Play,
+  Search,
+  SlidersHorizontal,
   Trophy,
+  Users,
 } from 'lucide-react';
-import { ProgressBar } from './ui';
+import { ProgressBar, Sparkle } from './ui';
 import { DashboardMilestoneStrip } from './MilestoneBadges';
 import { IndependenceCard } from './IndependenceCard';
 import type { IndependenceSummary } from '../lib/independence';
@@ -29,6 +35,17 @@ import type {
   RoadmapTopicProgress,
   WeeklyProjectItem,
 } from '../types';
+
+const initialsOf = (n: string) =>
+  (n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'D';
+
+const TYPE_CHIP = 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-[var(--accent-50)] text-[var(--accent-700)] whitespace-nowrap';
+const ACTION_CHIP = 'inline-flex items-center justify-center rounded-md px-3 min-h-8 text-xs font-semibold bg-[var(--accent-50)] text-[var(--accent-700)] hover:bg-[var(--accent-100)] whitespace-nowrap cursor-pointer';
+const THUMBS = [
+  'bg-[var(--panel-deep)] text-white/70',
+  'bg-[var(--accent-50)] text-[var(--accent-700)]',
+  'bg-[var(--surface-subtle)] text-[var(--ink-secondary)]',
+];
 
 export const HomeDashboard = ({
   firstName,
@@ -57,6 +74,8 @@ export const HomeDashboard = ({
   onNavigate,
   milestones,
   independence,
+  teamRoster,
+  userName,
   styles,
 }: {
   firstName: string;
@@ -85,6 +104,8 @@ export const HomeDashboard = ({
   onNavigate: (tab: string) => void;
   milestones: MilestoneSummary;
   independence: IndependenceSummary;
+  teamRoster: any[];
+  userName: string;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -157,162 +178,349 @@ export const HomeDashboard = ({
 
   const rollup = latestCourse ? latestCourse.progress : Math.round((demonstratedCount / Math.max(1, selectedRoadmap.topics.length)) * 100);
   const doneCount = todayChecklist.filter((s) => s.done).length;
-  const row = (Icon: React.ElementType, kicker: string, title: string, tab: string, cta: string) => (
-    <button type="button" onClick={() => onNavigate(tab)} className="w-full py-4 flex items-start gap-4 text-left cursor-pointer group">
-      <Icon className="w-5 h-5 text-[var(--accent-600)] shrink-0 mt-0.5" />
-      <span className="min-w-0 flex-1">
-        <span className={`block text-xs ${textSecondary}`}>{kicker}</span>
-        <span className={`block text-sm font-semibold leading-snug ${textPrimary}`}>{title}</span>
-      </span>
-      <span className="text-xs font-medium text-[var(--accent-600)] shrink-0 group-hover:underline">{cta}</span>
-    </button>
-  );
-
   const isBrandNewMember = !onboarded && !latestCourse && codeSubmissions.length === 0 && dailyLogs.length === 0;
 
+  // --- search + filter over courses
+  const [query, setQuery] = useState('');
+  const [unfinishedOnly, setUnfinishedOnly] = useState(false);
+  const rail = useRef<HTMLDivElement>(null);
+  const q = query.trim().toLowerCase();
+  const visibleCourses = courses.filter(
+    (c) =>
+      (!unfinishedOnly || (c.progress || 0) < 100) &&
+      (!q || `${c.title} ${c.platform} ${c.field} ${c.instructor}`.toLowerCase().includes(q))
+  );
+  const scrollRail = (dir: 1 | -1) => rail.current?.scrollBy({ left: dir * 300, behavior: 'smooth' });
+
+  // --- right panel data
+  const fullName = userName || profile.fullName || firstName;
+  const ringC = 2 * Math.PI * 54;
+  const ringPct = Math.min(100, Math.max(0, rollup));
+  const recentScores = quizAttempts.slice(0, 5).reverse();
+  const people = (teamRoster || [])
+    .filter((m: any) => m.name !== fullName)
+    .sort((a: any, b: any) => (a.role === 'Member' ? 1 : 0) - (b.role === 'Member' ? 1 : 0))
+    .slice(0, 5);
+
+  // --- activity table (everything that used to be in "latest work" and "around the hub")
+  const activity: { icon: React.ElementType; title: string; sub: string; type: string; detail: string; cta: string; tab: string }[] = [
+    {
+      icon: Code2,
+      title: latestSubmission ? latestSubmission.exerciseTitle : 'Your first code review',
+      sub: latestSubmission ? latestSubmission.topic : 'Not started',
+      type: 'Code review',
+      detail: latestSubmission?.review?.nextStep || 'Submit today’s practice for a gentle review.',
+      cta: latestSubmission ? 'Feedback' : 'Start',
+      tab: 'submissions',
+    },
+    {
+      icon: BookOpen,
+      title: latestQuizAttempt ? latestQuizAttempt.quizTitle : 'Your first quiz',
+      sub: latestQuizAttempt ? `${latestQuizAttempt.score}/${latestQuizAttempt.total} correct` : 'Not started',
+      type: 'Quiz',
+      detail: latestQuizAttempt ? `You scored ${latestQuizAttempt.percentage}%.` : 'A short quiz shows what clicked.',
+      cta: 'Quizzes',
+      tab: 'quizzes',
+    },
+    {
+      icon: FolderGit2,
+      title: latestWeeklyProject ? latestWeeklyProject.title : 'Weekly project',
+      sub: latestWeeklyProject ? latestWeeklyProject.status : 'Not started',
+      type: 'Project',
+      detail: latestWeeklyProject ? `Due ${latestWeeklyProject.deadline}` : 'Pick a beginner-friendly project for this week.',
+      cta: 'Projects',
+      tab: 'weekly-project',
+    },
+    ...(importantAnnouncement
+      ? [{ icon: Megaphone, title: importantAnnouncement.title, sub: importantAnnouncement.author, type: importantAnnouncement.category, detail: 'Pinned for the community.', cta: 'Read', tab: 'announcements' }]
+      : []),
+    ...(nextEvent
+      ? [{ icon: Calendar, title: nextEvent.title, sub: nextEvent.type, type: 'Event', detail: nextEvent.dateTime, cta: 'Join', tab: 'events' }]
+      : []),
+    ...(openChallenge
+      ? [{ icon: Trophy, title: openChallenge.title, sub: openChallenge.difficulty, type: 'Challenge', detail: 'This week’s challenge.', cta: 'Try it', tab: 'challenges' }]
+      : []),
+    {
+      icon: MessageSquare,
+      title: 'Peer help',
+      sub: 'Help desk',
+      type: 'Community',
+      detail: `${openQuestionsCount} questions need an answer`,
+      cta: 'Help',
+      tab: 'pairing-help',
+    },
+  ];
+
+  const statCards = [
+    { icon: ListChecks, top: `${doneCount}/${todayChecklist.length} steps done`, label: 'Today’s learning', tab: nextActivity.tab },
+    { icon: MapIcon, top: `${demonstratedCount}/${selectedRoadmap.topics.length} topics`, label: 'Roadmap', tab: 'roadmaps' },
+    { icon: BookOpen, top: `${quizAttempts.length} taken`, label: 'Quizzes', tab: 'quizzes' },
+  ];
+
   return (
-    <div className="space-y-10">
-      {/* 1. Calm Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-        <div className="space-y-1">
-          <p className={`text-xs font-medium ${textSecondary}`}>
-            {greeting} · {profile.field || selectedRoadmap.field} · {profile.skillLevel || 'Beginner'}
-          </p>
-          <h1 className={`font-display text-2xl font-semibold tracking-tight [text-wrap:balance] ${textPrimary}`}>
-            {firstName ? `Welcome back, ${firstName}!` : 'Welcome back!'} Ready to make progress today?
-          </h1>
+    <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_340px]">
+      {/* ------------------------------------------------------------ MAIN */}
+      <div className="p-5 sm:p-8 xl:p-10 space-y-9 min-w-0">
+        {/* Search */}
+        <div className="flex items-center gap-4">
+          <label className="relative flex-1">
+            <span className="sr-only">Search your courses</span>
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-muted)]" aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your courses"
+              className="w-full !h-12 !pl-11 pr-4 !rounded-full text-sm !border-[var(--border-hairline)] bg-[var(--surface-elevated)] focus:!border-[var(--accent-600)]"
+            />
+          </label>
+          <button
+            type="button"
+            aria-label="Show courses still in progress"
+            aria-pressed={unfinishedOnly}
+            onClick={() => setUnfinishedOnly((v) => !v)}
+            className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+              unfinishedOnly ? 'bg-[var(--accent-50)] text-[var(--accent-700)]' : `${textSecondary} hover:bg-[var(--surface-subtle)]`
+            }`}
+          >
+            <SlidersHorizontal className="w-5 h-5" aria-hidden="true" />
+          </button>
         </div>
-        <div className={`text-xs font-medium tabular-nums shrink-0 ${textSecondary}`}>
-          {profile.streakDays}-day streak · {dailyLogs.length} check-ins
+
+        {/* Banner */}
+        <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-7 py-8 sm:px-10 sm:py-10">
+          <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
+          <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
+          <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
+          <div className="relative max-w-xl">
+            <p className="text-sm text-white/70">
+              {isBrandNewMember ? 'One-minute setup' : `${latestCourse ? latestCourse.platform : selectedRoadmap.title} · about ${dailyTarget.estimatedMinutes} min left today`}
+            </p>
+            <h1 className="mt-3 text-white font-semibold !text-[1.75rem] sm:!text-[2rem] leading-tight">
+              {isBrandNewMember ? 'Set up your learning path' : nextActivity.label}
+            </h1>
+            <p className="mt-2 text-sm text-white/75">
+              {isBrandNewMember
+                ? 'Tell us what you’re learning and how much time you have. We’ll build a step-by-step roadmap.'
+                : `${nextActivity.detail}${currentStage ? ` · ${currentStage.title}` : ''}`}
+            </p>
+            <button
+              type="button"
+              onClick={() => (isBrandNewMember ? onStartOnboarding() : onNavigate(nextActivity.tab))}
+              className="mt-6 inline-flex items-center gap-3 pl-5 pr-1.5 min-h-11 rounded-full bg-white text-[#0A0A0A] text-sm font-semibold cursor-pointer hover:bg-white/90 active:translate-y-px"
+            >
+              {isBrandNewMember ? 'Get started' : doneCount === 0 ? 'Start today' : 'Continue'}
+              <span className="w-8 h-8 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center">
+                <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+              </span>
+            </button>
+          </div>
+        </section>
+
+        {/* Three small stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {statCards.map((c) => {
+            const Icon = c.icon;
+            return (
+              <button key={c.label} type="button" onClick={() => onNavigate(c.tab)} className="soft-card soft-card-interactive px-5 py-4 flex items-center gap-4 text-left">
+                <span className="w-11 h-11 rounded-full bg-[var(--accent-50)] text-[var(--accent-700)] flex items-center justify-center shrink-0">
+                  <Icon className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className={`block text-xs tabular-nums ${textSecondary}`}>{c.top}</span>
+                  <span className={`block text-sm font-semibold truncate ${textPrimary}`}>{c.label}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Continue learning */}
+        <section aria-labelledby="continue-h" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 id="continue-h" className={`!text-base ${textPrimary}`}>Continue learning</h2>
+            <div className="flex items-center gap-2">
+              {[{ d: -1 as const, I: ChevronLeft, l: 'Scroll back' }, { d: 1 as const, I: ChevronRight, l: 'Scroll forward' }].map(({ d, I, l }) => (
+                <button key={l} type="button" aria-label={l} onClick={() => scrollRail(d)} className={`w-8 h-8 rounded-full border ${borderClass} ${textSecondary} flex items-center justify-center cursor-pointer hover:bg-[var(--surface-subtle)]`}>
+                  <I className="w-4 h-4" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visibleCourses.length === 0 ? (
+            <div className="soft-card p-8 text-center space-y-3">
+              <p className={`text-sm ${textSecondary}`}>
+                {courses.length === 0 ? 'No courses linked yet.' : 'No courses match your search.'}
+              </p>
+              {courses.length === 0 && (
+                <button type="button" onClick={() => onNavigate('courses')} className={btnPrimary}>Link a course</button>
+              )}
+            </div>
+          ) : (
+            <div ref={rail} className="flex gap-5 overflow-x-auto no-scrollbar snap-x snap-mandatory -mx-1 px-1 py-2">
+              {visibleCourses.map((c, i) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onNavigate('courses')}
+                  className="soft-card soft-card-interactive snap-start shrink-0 w-[270px] p-2.5 text-left"
+                >
+                  <span className={`h-36 rounded-xl flex flex-col items-center justify-center gap-2 ${THUMBS[i % THUMBS.length]}`}>
+                    <Code2 className="w-7 h-7" aria-hidden="true" />
+                    <span className="text-xs font-medium">{c.platform}</span>
+                  </span>
+                  <span className="block px-1.5 pt-3 pb-2 space-y-2.5">
+                    <span className={TYPE_CHIP}>{c.field}</span>
+                    <span className={`block text-sm font-semibold leading-snug line-clamp-2 min-h-[2.6em] ${textPrimary}`}>{c.title}</span>
+                    <ProgressBar value={c.progress || 0} />
+                    <span className="flex items-center gap-2 pt-1">
+                      <span aria-hidden="true" className="w-7 h-7 rounded-full bg-[var(--surface-subtle)] text-[11px] font-semibold flex items-center justify-center shrink-0">
+                        {initialsOf(c.instructor)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={`block text-xs font-medium truncate ${textPrimary}`}>{c.instructor || 'Self-paced'}</span>
+                        <span className={`block text-xs truncate ${textSecondary}`}>{c.skillLevel}</span>
+                      </span>
+                      <span className={`text-xs font-semibold tabular-nums ${textPrimary}`}>{c.progress || 0}%</span>
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Daily check-in */}
+        <form onSubmit={onQuickCheckIn} className="soft-card p-5 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor="checkin" className={`text-sm font-semibold ${textPrimary}`}>What did you figure out today?</label>
+            <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${textSecondary}`}>
+              <input type="checkbox" checked={shareCheckInAsWin} onChange={(e) => setShareCheckInAsWin(e.target.checked)} />
+              Share as a small win
+            </label>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <input id="checkin" type="text" value={quickCheckInText} onChange={(e) => setQuickCheckInText(e.target.value)} placeholder="Built a card grid, finally understood async fetch" className={inputClass} />
+            <button type="submit" className={btnPrimary}>Save check-in</button>
+          </div>
+        </form>
+
+        {/* Activity table */}
+        <section aria-labelledby="activity-h" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 id="activity-h" className={`!text-base ${textPrimary}`}>Your activity</h2>
+            <button type="button" onClick={() => onNavigate('progress')} className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer">See all</button>
+          </div>
+          <div className="soft-card px-5 sm:px-6 py-2">
+            <div className={`hidden md:grid grid-cols-[1.7fr_.8fr_1.4fr_auto] gap-4 py-3 text-xs font-medium uppercase tracking-wide ${textSecondary}`}>
+              <span>Item</span><span>Type</span><span>Detail</span><span className="w-24 text-right">Action</span>
+            </div>
+            <ul className={`divide-y ${borderClass}`}>
+              {activity.map((r) => {
+                const Icon = r.icon;
+                return (
+                  <li key={r.title + r.type} className="py-3.5 grid grid-cols-[1fr_auto] md:grid-cols-[1.7fr_.8fr_1.4fr_auto] items-center gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-full bg-[var(--surface-subtle)] flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className={`block text-sm font-semibold leading-snug line-clamp-2 ${textPrimary}`}>{r.title}</span>
+                        <span className={`block text-xs truncate ${textSecondary}`}>{r.sub}</span>
+                      </span>
+                    </span>
+                    <span className="hidden md:block"><span className={TYPE_CHIP}>{r.type}</span></span>
+                    <span className={`hidden md:block text-sm line-clamp-2 ${textSecondary}`}>{r.detail}</span>
+                    <span className="md:w-24 md:text-right">
+                      <button type="button" onClick={() => onNavigate(r.tab)} className={ACTION_CHIP}>{r.cta}</button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
+          <section className="soft-card p-6">
+            <DashboardMilestoneStrip summary={milestones} borderClass={borderClass} subtleBgClass={subtleBgClass} textPrimary={textPrimary} textSecondary={textSecondary} onOpenProfile={() => onNavigate('profile')} />
+          </section>
         </div>
       </div>
 
-      {/* New Member Guided Welcome (Replaces Empty Stats) */}
-      {isBrandNewMember ? (
-        <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
-          <div className="max-w-2xl space-y-3">
-            <p className="text-xs font-semibold text-[var(--accent-600)]">First time here? Start in 1 minute</p>
-            <h2 className={`font-display text-2xl ${textPrimary}`}>
-              Let’s set up your learning path together.
-            </h2>
-            <p className={`text-sm leading-relaxed ${textSecondary}`}>
-              Tell us what you’re learning and how much time you have. We’ll build a simple step-by-step roadmap so you always know what to do next—no guessing.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            <button type="button" onClick={onStartOnboarding} className={btnPrimary}>
-              Set Up My Learning Path <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-            <button type="button" onClick={() => onNavigate('courses')} className={btnSecondary}>
-              Link an Existing Course
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
-            {/* MAIN: one clear next step, today's trail, check-in, recent work */}
-            <div className="lg:col-span-8 space-y-8 min-w-0">
-              <section className="rounded-[8px] bg-[var(--panel-deep)] text-white p-6 sm:p-8 border border-[var(--border-hairline)] shadow-[var(--shadow-lg)]">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/70">
-                  <span>{latestCourse ? latestCourse.platform : selectedRoadmap.title} · ~{dailyTarget.estimatedMinutes} min left today</span>
-                  <span className="tabular-nums">{doneCount} of {todayChecklist.length} steps done</span>
-                </div>
-                <h2 className="mt-4 text-3xl sm:text-4xl [text-wrap:balance]">{nextActivity.label}</h2>
-                <p className="mt-2 text-sm text-white/75 max-w-xl">
-                  {nextActivity.detail}{currentStage ? ` · ${currentStage.title}` : ''}
-                </p>
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={() => onNavigate(nextActivity.tab)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-[#0A0A0A] text-base font-semibold cursor-pointer hover:brightness-105 active:translate-y-px">
-                    {doneCount === 0 ? 'Start today' : 'Continue'} <ArrowRight className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => onNavigate('ai-mentor')} className="text-sm text-white/80 underline-offset-4 hover:underline cursor-pointer">
-                    Stuck? Ask the mentor
-                  </button>
-                </div>
-              </section>
-
-              <ol className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-6" aria-label="Today's steps">
-                {todayChecklist.map((step, i) => {
-                  const isNext = !step.done && step.id === nextActivity.id;
-                  return (
-                    <li key={step.id}>
-                      <button type="button" onClick={() => onNavigate(step.tab)} className={`w-full h-full text-left pt-3 cursor-pointer border-t-4 transition-colors ${step.done ? 'border-[var(--spark)]' : isNext ? 'border-[var(--accent-600)]' : borderClass}`}>
-                        <span className={`flex items-center gap-1.5 text-xs tabular-nums ${textSecondary}`}>
-                          {step.done ? <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> : <Circle className="w-3.5 h-3.5" />}
-                          Step {i + 1}
-                        </span>
-                        <span className={`mt-1 block text-sm font-semibold leading-snug ${step.done ? 'line-through opacity-60' : textPrimary}`}>{step.label}</span>
-                        <span className={`block text-xs line-clamp-2 ${textSecondary}`}>{step.detail}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-
-              <form onSubmit={onQuickCheckIn} className={`${cardClass} p-6 sm:p-6 space-y-4`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label htmlFor="checkin" className={`text-sm font-semibold ${textPrimary}`}>What did you figure out today?</label>
-                  <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${textSecondary}`}>
-                    <input type="checkbox" checked={shareCheckInAsWin} onChange={(e) => setShareCheckInAsWin(e.target.checked)} className="rounded border-[var(--border-strong)]" />
-                    Share as a small win
-                  </label>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2.5">
-                  <input id="checkin" type="text" value={quickCheckInText} onChange={(e) => setQuickCheckInText(e.target.value)} placeholder="Built a card grid, finally understood async fetch" className={inputClass} />
-                  <button type="submit" className={btnPrimary}>Save check-in</button>
-                </div>
-              </form>
-
-              <section className={`${cardClass} px-6 pt-5 pb-2`}>
-                <div className="flex items-center justify-between">
-                  <h2 className={`text-lg ${textPrimary}`}>Your latest work</h2>
-                  <button type="button" onClick={() => onNavigate('progress')} className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer">All progress</button>
-                </div>
-                <div className={`divide-y ${borderClass}`}>
-                  {row(Code2, latestSubmission ? `Code review · ${latestSubmission.topic}` : 'Code review', latestSubmission?.review?.nextStep || 'Submit today’s practice for a gentle review.', 'submissions', latestSubmission ? 'Feedback' : 'Start')}
-                  {row(BookOpen, 'Quiz', latestQuizAttempt ? `${latestQuizAttempt.quizTitle}: ${latestQuizAttempt.score}/${latestQuizAttempt.total} (${latestQuizAttempt.percentage}%)` : 'No quizzes yet. A short one shows what clicked.', 'quizzes', 'Quizzes')}
-                  {row(FolderGit2, 'Weekly project', latestWeeklyProject ? `${latestWeeklyProject.title} · ${latestWeeklyProject.status}, due ${latestWeeklyProject.deadline}` : 'Pick a beginner-friendly project for this week.', 'weekly-project', 'Projects')}
-                </div>
-              </section>
+      {/* ------------------------------------------------------ RIGHT PANEL */}
+      <aside aria-label="Your profile" className={`border-t xl:border-t-0 xl:border-l ${borderClass} p-5 sm:p-8 space-y-9 min-w-0`}>
+        <section className="text-center">
+          <h2 className={`!text-base text-left ${textPrimary}`}>Your profile</h2>
+          <div className="relative w-32 h-32 mx-auto mt-6">
+            <svg viewBox="0 0 120 120" className="absolute inset-0 -rotate-90" role="img" aria-label={`${ringPct}% complete`}>
+              <circle cx="60" cy="60" r="54" fill="none" stroke="var(--surface-subtle)" strokeWidth="6" />
+              <circle cx="60" cy="60" r="54" fill="none" stroke="var(--spark)" strokeWidth="6" strokeLinecap="round" strokeDasharray={ringC} strokeDashoffset={ringC * (1 - ringPct / 100)} />
+            </svg>
+            <div className="absolute inset-4 rounded-full bg-[var(--panel-deep)] text-white flex items-center justify-center font-display text-2xl font-semibold">
+              {initialsOf(fullName)}
             </div>
-
-            {/* RAIL: where you are, how independent you are, who is around */}
-            <aside className="lg:col-span-4 space-y-8 min-w-0 lg:sticky lg:top-24">
-              <section className={`${cardClass} p-6 space-y-4`}>
-                <div className="flex items-baseline justify-between gap-3">
-                  <h2 className={`text-lg leading-snug ${textPrimary}`}>{latestCourse ? latestCourse.title : selectedRoadmap.title}</h2>
-                  <span className={`text-2xl font-display tabular-nums ${textPrimary}`}>{rollup}%</span>
-                </div>
-                <ProgressBar value={rollup} />
-                <p className={`text-xs ${textSecondary}`}>
-                  <span className="tabular-nums font-medium">{demonstratedCount}/{selectedRoadmap.topics.length}</span> topics demonstrated · {profile.streakDays}-day streak · {dailyLogs.length} check-ins
-                </p>
-              </section>
-
-              <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
-
-              <section className={`${cardClass} p-6`}>
-                <DashboardMilestoneStrip summary={milestones} borderClass={borderClass} subtleBgClass={subtleBgClass} textPrimary={textPrimary} textSecondary={textSecondary} onOpenProfile={() => onNavigate('profile')} />
-              </section>
-
-              <section className={`${cardClass} px-6 pt-5 pb-2`}>
-                <div className="flex items-center justify-between">
-                  <h2 className={`text-lg ${textPrimary}`}>Around the hub</h2>
-                  <button type="button" onClick={() => onNavigate('community')} className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Community</button>
-                </div>
-                <div className={`divide-y ${borderClass}`}>
-                  {importantAnnouncement && row(Megaphone, `${importantAnnouncement.category} · ${importantAnnouncement.author}`, importantAnnouncement.title, 'announcements', 'Read')}
-                  {nextEvent && row(Calendar, `${nextEvent.type} · ${nextEvent.dateTime}`, nextEvent.title, 'events', 'Join')}
-                  {openChallenge && row(Trophy, `Weekly challenge · ${openChallenge.difficulty}`, openChallenge.title, 'challenges', 'Try it')}
-                  {row(MessageSquare, 'Peer help', `${openQuestionsCount} questions need an answer`, 'pairing-help', 'Help')}
-                </div>
-              </section>
-            </aside>
           </div>
-        </>
-      )}
+          <p className={`mt-4 text-base font-semibold ${textPrimary}`}>{greeting}{firstName ? `, ${firstName}` : ''}</p>
+          <p className={`mt-1 text-sm mx-auto max-w-[24ch] ${textSecondary}`}>
+            {ringPct}% through {latestCourse ? latestCourse.title : selectedRoadmap.title}. {profile.streakDays}-day streak.
+          </p>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            {[{ I: Bot, l: 'Ask the AI mentor', t: 'ai-mentor' }, { I: Users, l: 'Open community', t: 'community-home' }, { I: Trophy, l: 'See milestones', t: 'profile' }].map(({ I, l, t }) => (
+              <button key={l} type="button" aria-label={l} title={l} onClick={() => onNavigate(t)} className={`w-11 h-11 rounded-full border ${borderClass} ${textPrimary} flex items-center justify-center cursor-pointer hover:bg-[var(--surface-subtle)]`}>
+                <I className="w-[18px] h-[18px]" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="scores-h" className="space-y-4">
+          <h2 id="scores-h" className={`!text-base ${textPrimary}`}>Recent quiz scores</h2>
+          {recentScores.length === 0 ? (
+            <p className={`text-sm ${textSecondary}`}>Take a quiz and your scores will show up here.</p>
+          ) : (
+            <ul className="flex items-end justify-center gap-4 h-32" role="list">
+              {recentScores.map((a, i) => (
+                <li key={a.id || i} className="flex-1 max-w-12 h-full flex flex-col justify-end items-center gap-1.5" aria-label={`${a.quizTitle}: ${a.percentage}%`}>
+                  <span className="w-full flex-1 rounded-md bg-[var(--accent-50)] flex items-end overflow-hidden">
+                    <span className="w-full rounded-md bg-[var(--spark)]" style={{ height: `${Math.max(6, a.percentage)}%` }} />
+                  </span>
+                  <span className={`text-xs tabular-nums ${textSecondary}`}>{a.percentage}%</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section aria-labelledby="people-h" className="space-y-3">
+          <h2 id="people-h" className={`!text-base ${textPrimary}`}>Mentors and peers</h2>
+          {people.length === 0 ? (
+            <p className={`text-sm ${textSecondary}`}>People you study with will appear here.</p>
+          ) : (
+            <ul className={`divide-y ${borderClass}`}>
+              {people.map((m: any) => (
+                <li key={m.id || m.name} className="py-3 flex items-center gap-3">
+                  <span aria-hidden="true" className="w-9 h-9 rounded-full bg-[var(--panel-deep)] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                    {initialsOf(m.name)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-sm font-medium leading-tight truncate ${textPrimary}`}>{m.name}</span>
+                    <span className={`block text-xs truncate ${textSecondary}`}>{m.role === 'Member' ? m.field : m.role}</span>
+                  </span>
+                  <button type="button" onClick={() => onNavigate('pairing-help')} className="inline-flex items-center rounded-full px-3 min-h-8 text-xs font-semibold bg-[var(--spark)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] cursor-pointer">
+                    View
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button type="button" onClick={() => onNavigate('pairing-help')} className="w-full min-h-11 rounded-full bg-[var(--accent-50)] text-[var(--accent-700)] text-sm font-semibold hover:bg-[var(--accent-100)] cursor-pointer">
+            See all
+          </button>
+        </section>
+      </aside>
     </div>
   );
 };

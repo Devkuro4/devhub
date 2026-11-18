@@ -1,18 +1,16 @@
 import React from 'react';
-import { Code2 } from 'lucide-react';
+import { LogoMark } from './ui';
 
 /**
  * Shown on a published site that is not connected to Supabase yet.
  * Without it, every visitor would silently get a private demo copy of the app.
  */
 export const SetupRequired = () => (
-  <div className="hub-root min-h-screen flex items-center justify-center px-5 py-10 bg-[var(--canvas-bg)] text-[var(--ink-primary)]">
+  <div className="hub-root min-h-screen flex items-center justify-center px-5 py-10 bg-[var(--page-bg)] text-[var(--ink-primary)]">
     <main className="w-full max-w-lg space-y-5">
       <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-[6px] bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
-          <Code2 className="w-5 h-5" aria-hidden="true" />
-        </div>
-        <span className="font-display text-lg font-semibold">Dev Hub</span>
+        <LogoMark size={36} />
+        <span className="font-display text-lg font-bold">Dev Hub</span>
       </div>
       <h1 className="text-2xl">This site isn’t connected to its database yet</h1>
       <p className="text-sm text-[var(--ink-secondary)] leading-relaxed">
