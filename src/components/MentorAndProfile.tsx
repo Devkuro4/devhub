@@ -45,6 +45,7 @@ const QUICK_PROMPTS = [
   { label: 'Help me practise', prompt: 'Give me a 15-minute beginner practice exercise matched to my level.' },
   { label: 'Review my code', prompt: 'I want to paste a few lines of my code—can you review what it does and suggest one small improvement?' },
   { label: 'Help me debug', prompt: 'Help me debug a piece of code—ask me what error I see and guide me step by step.' },
+  { label: 'I feel stuck or discouraged', prompt: 'I’m feeling stuck and a bit discouraged. Can you help me get moving again with one small, doable step?' },
   { label: 'What should I learn next?', prompt: 'Looking at my roadmap, course, and weak spots, what is the clearest next step for me today?' },
 ];
 
