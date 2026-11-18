@@ -332,3 +332,16 @@ export interface MentorChatMessage {
   at?: string; // ISO date
   sources?: { title: string; uri: string }[];
 }
+
+export interface MentorConversation {
+  id: string;
+  title: string;
+  createdAt: string; // ISO date
+  updatedAt: string; // ISO date
+  messages: MentorChatMessage[];
+}
+
+export interface MentorChatStore {
+  activeId: string | null; // null = a fresh chat that has not been started yet
+  chats: MentorConversation[];
+}

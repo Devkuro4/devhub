@@ -777,7 +777,7 @@ export function blankPersonal(name = '', hk: any = { checklist: [] }) {
     gitLevels: INITIAL_GIT_LEVELS.map((g) => ({ ...g, completed: false, evidence: '' })),
     aiLiteracy: INITIAL_AI_LITERACY.map((a) => ({ ...a, completed: false })),
     aiHelpLog: [],
-    mentorChat: [],
+    mentorChat: { activeId: null, chats: [] },
     diagnosticResult: { completed: false, field: '', recommendedLevel: '', strengths: [], weaknesses: [], planSummary: '' },
     pairingState: { partnerName: '', partnerField: '', assignedMentor: '', joinedGroups: [], pairExercise: '' },
     hackathon: { ...hk, teamName: '', idea: '', repoUrl: '', checklist: (hk.checklist || []).map((c: any) => ({ ...c, done: false })) },

@@ -132,7 +132,9 @@ html {
 
 .hub-root code, .hub-root pre, .hub-root .font-mono { font-family: var(--font-mono); font-size: 13px; }
 .hub-root pre {
-  background: var(--panel-deep);
+  /* Follows the theme: a fixed near-black background made code unreadable in light mode. */
+  background: var(--surface-subtle);
+  color: var(--ink-primary);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-md);
 }

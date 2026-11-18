@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ArrowUp,
   Bot,
   ChevronDown,
   ChevronRight,
@@ -7,20 +8,26 @@ import {
   ExternalLink,
   Globe,
   Loader2,
+  MessageSquare,
+  PanelLeft,
+  Plus,
   RotateCcw,
   Save,
   Send,
   Settings,
+  Trash2,
   User,
 } from 'lucide-react';
 import { PageHeader } from './ui';
 import { ProfileMilestonesCard } from './MilestoneBadges';
 import { requestMentorChat, type GroundedSource } from '../lib/aiClient';
 import { HELP_LEVELS } from '../lib/independence';
+import { MAX_CHATS, MAX_MESSAGES_PER_CHAT, chatTitle, groupChats, normalizeStore } from '../lib/mentorChats';
 import type {
   AiHelpEvent,
   HelpLevel,
   MentorChatMessage,
+  MentorChatStore,
   CodeSubmission,
   CourseItem,
   MilestoneSummary,
@@ -163,8 +170,8 @@ export const MentorSection = ({
   initialPrompt?: string;
   onClearInitialPrompt?: () => void;
   onLogHelp?: (event: AiHelpEvent) => void;
-  chat: MentorChatMessage[];
-  onChatChange: React.Dispatch<React.SetStateAction<MentorChatMessage[]>>;
+  chat: MentorChatStore;
+  onChatChange: React.Dispatch<React.SetStateAction<MentorChatStore>>;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -177,7 +184,7 @@ export const MentorSection = ({
     darkMode: boolean;
   };
 }) => {
-  const { cardClass, borderClass, subtleBgClass, textPrimary, textSecondary, inputClass, btnPrimary } = styles;
+  const { cardClass, borderClass, subtleBgClass, textPrimary, textSecondary } = styles;
 
   const activeCourse = courses[0];
   const activeProject = weeklyProjects[0];
@@ -189,40 +196,67 @@ export const MentorSection = ({
         .map((t) => t.name),
     ])
   );
+  const currentTopic = activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'Foundations';
 
-  // The conversation is saved by the app (see mentorChat in App.tsx), so it survives refreshes.
-  // The welcome message is only a greeting; it is not saved and not sent to the AI.
-  const welcome: MentorChatMessage = {
-    id: 'm-welcome',
-    sender: 'mentor',
-    text: `Hi ${(user.name || profile.fullName || 'there').split(' ')[0]}! I’m your private AI Mentor. I can see you’re learning ${profile.field || selectedRoadmap.field} at the ${profile.skillLevel || 'Beginner'} level${activeCourse ? `, currently studying \"${activeCourse.title}\"` : ''}. Ask any question, no question is too basic. I’ll take it one small step at a time and check in with you as we go.`,
-  };
-  const saved = chat;
-  const messages = [welcome, ...saved];
-  // Connection errors are shown but never saved or sent to the AI as if the mentor had said them.
-  const [errorNote, setErrorNote] = useState('');
+  // Chats are saved by the app (mentorChat in App.tsx): they survive refreshes and sync across devices.
+  // activeId === null means a fresh chat that is created when the first message is sent.
+  const store = normalizeStore(chat);
+  const activeChat = store.chats.find((c) => c.id === store.activeId) || null;
+  const messages = activeChat?.messages ?? [];
+  const groups = groupChats(store.chats);
+
   const [input, setInput] = useState('');
   const [useWebSearch, setUseWebSearch] = useState(true);
   // Hint ladder: the member chooses how much help they want. Starting small builds independence.
   const [helpLevel, setHelpLevel] = useState<HelpLevel>(2);
-  const [busy, setBusy] = useState(false);
+  const [busyChatId, setBusyChatId] = useState<string | null>(null);
+  // Connection errors are shown but never saved or sent to the AI as if the mentor had said them.
+  const [error, setError] = useState<{ chatId: string; text: string } | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const busy = busyChatId !== null;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const sendMessage = async (textToSend: string) => {
+  const update = (fn: (s: MentorChatStore) => MentorChatStore) => onChatChange((prev) => fn(normalizeStore(prev)));
+
+  // Adds a message to a chat. A new chat is created (and opened) when the first message arrives.
+  const addMessage = (chatId: string, msg: MentorChatMessage, opts?: { createWithTitle?: string }) =>
+    update((s) => {
+      const now = new Date().toISOString();
+      if (s.chats.some((c) => c.id === chatId)) {
+        return {
+          ...s,
+          chats: s.chats.map((c) =>
+            c.id === chatId ? { ...c, updatedAt: now, messages: [...c.messages, msg].slice(-MAX_MESSAGES_PER_CHAT) } : c
+          ),
+        };
+      }
+      if (opts?.createWithTitle === undefined) return s; // chat was deleted while waiting for a reply
+      return {
+        activeId: chatId,
+        chats: [{ id: chatId, title: opts.createWithTitle, createdAt: now, updatedAt: now, messages: [msg] }, ...s.chats].slice(0, MAX_CHATS),
+      };
+    });
+
+  const sendMessage = async (textToSend: string, forceNewChat = false) => {
     const trimmed = textToSend.trim();
     if (!trimmed || busy) return;
 
+    const base = forceNewChat ? null : activeChat;
+    const chatId = base?.id ?? `c-${Date.now()}`;
+    const history = (base?.messages ?? []).slice(-16).map((m) => ({ sender: m.sender, text: m.text }));
     const userMsg: MentorChatMessage = { id: `u-${Date.now()}`, sender: 'user', text: trimmed, at: new Date().toISOString() };
-    onChatChange((prev) => [...prev, userMsg].slice(-200));
-    setErrorNote('');
+    addMessage(chatId, userMsg, { createWithTitle: chatTitle(trimmed) });
+    setError(null);
     setInput('');
-    setBusy(true);
+    setBusyChatId(chatId);
 
     try {
       const res = await requestMentorChat(
         {
           message: trimmed,
-          history: saved.slice(-16).map((m) => ({ sender: m.sender, text: m.text })),
+          history,
           useWebSearch,
           hintLevel: helpLevel,
           context: {
@@ -230,7 +264,7 @@ export const MentorSection = ({
             skillLevel: profile.skillLevel || 'Beginner',
             roadmapTitle: selectedRoadmap.title,
             activeCourse: activeCourse?.title || 'None linked yet',
-            currentTopic: activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'Foundations',
+            currentTopic,
             weakTopics,
             recentSubmissions: codeSubmissions.slice(0, 3).map((s) => `${s.topic} (${s.exerciseTitle})`),
             activeProject: activeProject?.title || 'None started yet',
@@ -239,22 +273,21 @@ export const MentorSection = ({
         user.id
       );
 
-      onChatChange((prev) =>
-        [...prev, { id: `a-${Date.now()}`, sender: 'mentor' as const, text: res.text, sources: res.sources, at: new Date().toISOString() }].slice(-200)
-      );
+      addMessage(chatId, { id: `a-${Date.now()}`, sender: 'mentor', text: res.text, sources: res.sources, at: new Date().toISOString() });
       onLogHelp?.({
         id: `help-${Date.now()}`,
         at: new Date().toISOString(),
         source: 'mentor',
         level: helpLevel,
-        topic: activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'Foundations',
+        topic: currentTopic,
       });
     } catch (err: any) {
-      setErrorNote(
-        `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'your roadmap'}), test a small 5–10 line example, or post your question in Community Discussions!`
-      );
+      setError({
+        chatId,
+        text: `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${currentTopic}), test a small 5–10 line example, or post your question in Community Discussions!`,
+      });
     } finally {
-      setBusy(false);
+      setBusyChatId(null);
     }
   };
 
@@ -262,175 +295,313 @@ export const MentorSection = ({
     if (initialPrompt && initialPrompt.trim()) {
       const p = initialPrompt;
       onClearInitialPrompt?.();
-      sendMessage(p);
+      // A question sent from elsewhere in the app (e.g. "Ask mentor") starts its own chat.
+      sendMessage(p, true);
     }
   }, [initialPrompt]);
 
+  // Keep the newest message in view.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, busyChatId, store.activeId, error]);
+
+  // The message box grows with what you type (up to a limit), like a chat app.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [input]);
+
+  const startNewChat = () => {
+    update((s) => ({ ...s, activeId: null }));
+    setSidebarOpen(false);
+    setInput('');
+    textareaRef.current?.focus();
+  };
+  const openChat = (id: string) => {
+    update((s) => ({ ...s, activeId: id }));
+    setSidebarOpen(false);
+  };
+  const deleteChat = (id: string) => {
+    if (!window.confirm('Delete this chat? This cannot be undone.')) return;
+    update((s) => ({ activeId: s.activeId === id ? null : s.activeId, chats: s.chats.filter((c) => c.id !== id) }));
+  };
+
   const level = HELP_LEVELS.find((h) => h.level === helpLevel);
-  const fresh = saved.length === 0;
+  const firstName = (user.name || profile.fullName || 'there').split(' ')[0];
   const ctx: [string, string][] = [
     ['Field and level', `${profile.field || selectedRoadmap.field}, ${profile.skillLevel || 'Beginner'}`],
     ['Roadmap', selectedRoadmap.title],
     ['Course', activeCourse ? activeCourse.title : 'Not linked yet'],
-    ['Current topic', activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'Foundations'],
+    ['Current topic', currentTopic],
     ['Weekly project', activeProject?.title || 'None yet'],
     ['To revisit', weakTopics.length ? weakTopics.join(', ') : 'Nothing flagged'],
   ];
+  const showSpinner = busyChatId !== null && busyChatId === activeChat?.id;
+  const pill = (active: boolean) =>
+    `px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer border transition-colors ${
+      active ? 'bg-[var(--accent-600)] text-white border-transparent' : `${borderClass} ${textSecondary} hover:border-[var(--accent-500)]`
+    }`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="AI Mentor"
-        description="A private study guide that gives hints first. Pick how much help you want, then ask."
+        description="A private study guide that teaches one small step at a time. Your chats are saved."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Chat is the page: wide, tall, composer pinned to the bottom */}
-        <section className={`${cardClass} lg:col-span-8 flex flex-col h-[72dvh] min-h-[500px] lg:h-[calc(100dvh-15rem)] overflow-hidden`}>
-          <div className={`px-5 py-3 border-b ${borderClass} flex items-center justify-between gap-3`}>
+      <div className={`${cardClass} relative flex h-[76dvh] min-h-[520px] lg:h-[calc(100dvh-13rem)] overflow-hidden`}>
+        {/* Chat history sidebar */}
+        {sidebarOpen && (
+          <button type="button" aria-label="Close chat list" onClick={() => setSidebarOpen(false)} className="lg:hidden absolute inset-0 z-10 bg-black/40 cursor-default" />
+        )}
+        <aside
+          className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex absolute lg:static inset-y-0 left-0 z-20 w-72 lg:w-64 shrink-0 flex-col border-r ${borderClass} ${subtleBgClass}`}
+        >
+          <div className="p-3">
+            <button
+              type="button"
+              onClick={startNewChat}
+              className={`w-full inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium cursor-pointer ${borderClass} ${textPrimary} hover:border-[var(--accent-500)]`}
+            >
+              <Plus className="w-4 h-4" /> New chat
+            </button>
+          </div>
+          <nav aria-label="Your chats" className="flex-1 overflow-y-auto px-2 pb-3 space-y-4">
+            {groups.length === 0 && <p className={`px-2 text-xs ${textSecondary}`}>Your chats will show up here, so you can come back to them any time.</p>}
+            {groups.map((g) => (
+              <div key={g.label}>
+                <div className={`px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide ${textSecondary}`}>{g.label}</div>
+                <ul className="space-y-0.5">
+                  {g.items.map((c) => {
+                    const active = c.id === store.activeId;
+                    return (
+                      <li key={c.id} className={`group flex items-center rounded-lg ${active ? 'bg-[var(--accent-50)]' : 'hover:bg-[var(--accent-50)]'}`}>
+                        <button
+                          type="button"
+                          onClick={() => openChat(c.id)}
+                          aria-current={active ? 'true' : undefined}
+                          className={`flex-1 min-w-0 flex items-center gap-2 px-2.5 py-2 text-left text-sm cursor-pointer ${active ? 'font-semibold text-[var(--accent-600)]' : textPrimary}`}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                          <span className="truncate">{c.title}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteChat(c.id)}
+                          aria-label={`Delete chat: ${c.title}`}
+                          className={`p-1.5 mr-1 rounded-md cursor-pointer ${textSecondary} hover:text-[var(--accent-600)] ${active ? '' : 'lg:opacity-0'} lg:group-hover:opacity-100 focus:opacity-100`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Conversation */}
+        <section className="flex-1 min-w-0 flex flex-col">
+          <div className={`px-4 py-3 border-b ${borderClass} flex items-center justify-between gap-3`}>
             <div className="flex items-center gap-2.5 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Open your chats"
+                className={`lg:hidden p-1.5 rounded-lg border cursor-pointer ${borderClass} ${textSecondary}`}
+              >
+                <PanelLeft className="w-4 h-4" />
+              </button>
               <div className="w-8 h-8 rounded-lg rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center shrink-0">
                 <Bot className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className={`font-display text-base ${textPrimary}`}>Study chat</div>
-                <div className={`text-[11px] truncate ${textSecondary}`}>Private · {ctx[3][1]}</div>
+                <div className={`font-display text-base truncate ${textPrimary}`}>{activeChat?.title || 'New chat'}</div>
+                <div className={`text-[11px] truncate ${textSecondary}`}>Private · {currentTopic}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-            {saved.length > 0 && (
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm('Start a new chat? This clears your saved conversation with the mentor.')) {
-                    onChatChange([]);
-                    setErrorNote('');
-                  }
-                }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium cursor-pointer ${borderClass} ${textSecondary}`}
-                title="Clear the saved conversation and start fresh"
+                onClick={startNewChat}
+                aria-label="New chat"
+                title="New chat"
+                className={`lg:hidden p-1.5 rounded-lg border cursor-pointer ${borderClass} ${textSecondary}`}
               >
-                New chat
+                <Plus className="w-4 h-4" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setUseWebSearch((v) => !v)}
-              aria-pressed={useWebSearch}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium cursor-pointer shrink-0 ${
-                useWebSearch ? 'bg-[var(--success-bg)] text-[var(--success-ink)] border-[var(--success-border)]' : `${borderClass} ${textSecondary}`
-              }`}
-              title="Lets the mentor look things up on the web for current docs"
-            >
-              <Globe className="w-3.5 h-3.5" /> Web {useWebSearch ? 'on' : 'off'}
-            </button>
+              <button
+                type="button"
+                onClick={() => setContextOpen((v) => !v)}
+                aria-expanded={contextOpen}
+                title="What your mentor knows about you"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium cursor-pointer ${borderClass} ${contextOpen ? 'text-[var(--accent-600)]' : textSecondary}`}
+              >
+                <Compass className="w-3.5 h-3.5" /> <span className="hidden sm:inline">What I know</span>
+              </button>
             </div>
           </div>
 
-          <div ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-            {messages.map((m) =>
-              m.sender === 'user' ? (
-                <div key={m.id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm bg-[var(--panel-deep)] text-white">
-                    <FormattedMessageText text={m.text} isUser subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
+          {contextOpen && (
+            <div className={`px-4 py-3 border-b ${borderClass} ${subtleBgClass}`}>
+              <p className={`text-xs ${textSecondary}`}>Private to you. It keeps answers at your level.</p>
+              <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                {ctx.map(([k, v]) => (
+                  <div key={k}>
+                    <dt className={`text-[11px] ${textSecondary}`}>{k}</dt>
+                    <dd className={`text-sm font-medium ${textPrimary}`}>{v}</dd>
                   </div>
-                </div>
-              ) : (
-                <div key={m.id} className="flex gap-3 max-w-[94%]">
-                  <span aria-hidden="true" className="w-[3px] rounded-full bg-[var(--spark)] shrink-0" />
-                  <div className={`text-sm leading-relaxed min-w-0 ${textPrimary}`}>
-                    <FormattedMessageText text={m.text} isUser={false} subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
-                    {m.sources && m.sources.length > 0 && (
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                        <span className={`text-[11px] ${textSecondary}`}>Sources</span>
-                        {m.sources.map((src, idx) => (
-                          <a key={idx} href={src.uri} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border ${borderClass} text-[11px] text-[var(--accent-600)] hover:underline`}>
-                            <span className="truncate max-w-[200px]">{src.title}</span>
-                            <ExternalLink className="w-3 h-3 shrink-0" />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            )}
-            {errorNote && !busy && (
-              <div className="flex gap-3 max-w-[94%]">
-                <span aria-hidden="true" className="w-[3px] rounded-full bg-[var(--spark)] shrink-0" />
-                <div className={`text-sm leading-relaxed ${textPrimary}`}>{errorNote}</div>
-              </div>
-            )}
-            {busy && (
-              <div className={`flex items-center gap-2 text-xs ${textSecondary}`} role="status">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-600)]" />
-                {useWebSearch ? 'Checking current docs…' : 'Thinking it through…'}
-              </div>
-            )}
-            {fresh && !busy && (
-              <div className="pt-2 space-y-2">
-                <p className={`text-xs ${textSecondary}`}>Not sure where to start?</p>
-                <div className="flex flex-wrap gap-2">
-                  {QUICK_PROMPTS.map((qp) => (
-                    <button key={qp.label} type="button" onClick={() => sendMessage(qp.prompt)} className={`px-3 py-1.5 rounded-full border ${borderClass} text-xs font-medium ${textPrimary} cursor-pointer hover:border-[var(--accent-500)] hover:bg-[var(--accent-50)]`}>
-                      {qp.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={(e) => { e.preventDefault(); sendMessage(input); }} className={`border-t ${borderClass} p-4 space-y-3 ${subtleBgClass}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2" role="radiogroup" aria-label="How much help do you want?">
-              <span className={`text-xs font-semibold ${textPrimary} sm:mr-1`}>How much help?</span>
-              <div className={`grid grid-cols-3 gap-1 p-1 rounded-lg border ${borderClass} flex-1 sm:max-w-md`}>
-                {HELP_LEVELS.map((h) => (
-                  <button key={h.level} type="button" role="radio" aria-checked={helpLevel === h.level} onClick={() => setHelpLevel(h.level)} className={`px-2 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${helpLevel === h.level ? 'bg-[var(--accent-600)] text-white' : textSecondary}`}>
-                    {h.short}
-                  </button>
                 ))}
-              </div>
+              </dl>
             </div>
-            <p className={`text-[11px] ${textSecondary}`}>{level?.description} Smaller help counts more toward your independence score.</p>
-            <div className="flex gap-2.5">
-              <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask a question, or paste code or an error" className={inputClass} disabled={busy} aria-label="Message the mentor" />
-              <button type="submit" disabled={busy || !input.trim()} className={btnPrimary}>
-                <Send className="w-3.5 h-3.5" /> Send
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* Rail: what the mentor knows about you, always visible */}
-        <aside className="lg:col-span-4 space-y-4 lg:sticky lg:top-6">
-          <section className={`${cardClass} p-5`}>
-            <h2 className={`text-lg flex items-center gap-2 ${textPrimary}`}>
-              <Compass className="w-4 h-4 text-[var(--accent-600)]" /> What your mentor knows
-            </h2>
-            <p className={`text-xs mt-1 ${textSecondary}`}>Private to you. It keeps answers at your level.</p>
-            <dl className={`mt-3 divide-y ${borderClass}`}>
-              {ctx.map(([k, v]) => (
-                <div key={k} className="py-2">
-                  <dt className={`text-[11px] ${textSecondary}`}>{k}</dt>
-                  <dd className={`text-sm font-medium ${textPrimary}`}>{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-          {!fresh && (
-            <section className={`${cardClass} p-5 space-y-2`}>
-              <h2 className={`text-sm font-semibold ${textPrimary}`}>Quick starts</h2>
-              <div className="flex flex-wrap gap-1.5">
-                {QUICK_PROMPTS.map((qp) => (
-                  <button key={qp.label} type="button" disabled={busy} onClick={() => sendMessage(qp.prompt)} className={`px-2.5 py-1 rounded-full border ${borderClass} text-xs ${textPrimary} cursor-pointer hover:border-[var(--accent-500)]`}>
-                    {qp.label}
-                  </button>
-                ))}
-              </div>
-            </section>
           )}
-        </aside>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
+            <div className="max-w-3xl mx-auto space-y-5">
+              {messages.length === 0 && !showSpinner && (
+                <div className="pt-4 sm:pt-10 text-center space-y-5">
+                  <div className="w-11 h-11 mx-auto rounded-xl rounded-bl-sm bg-[var(--spark)] text-[var(--on-spark)] flex items-center justify-center">
+                    <Bot className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h2 className={`text-xl ${textPrimary}`}>Hi {firstName}, what are we learning?</h2>
+                    <p className={`text-sm max-w-md mx-auto ${textSecondary}`}>
+                      You’re learning {profile.field || selectedRoadmap.field} at the {profile.skillLevel || 'Beginner'} level
+                      {activeCourse ? `, studying “${activeCourse.title}”` : ''}. No question is too basic. I’ll go one small step at a time and check in with you.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+                    {QUICK_PROMPTS.map((qp) => (
+                      <button
+                        key={qp.label}
+                        type="button"
+                        onClick={() => sendMessage(qp.prompt)}
+                        disabled={busy}
+                        className={`px-3.5 py-2.5 rounded-xl border ${borderClass} text-sm ${textPrimary} cursor-pointer hover:border-[var(--accent-500)] hover:bg-[var(--accent-50)] disabled:opacity-50`}
+                      >
+                        {qp.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {messages.map((m) =>
+                m.sender === 'user' ? (
+                  <div key={m.id} className="flex justify-end">
+                    <div className="max-w-[85%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm bg-[var(--panel-deep)] text-white">
+                      <FormattedMessageText text={m.text} isUser subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
+                    </div>
+                  </div>
+                ) : (
+                  <div key={m.id} className="flex gap-3 max-w-[94%]">
+                    <span aria-hidden="true" className="w-[3px] rounded-full bg-[var(--spark)] shrink-0" />
+                    <div className={`text-sm leading-relaxed min-w-0 ${textPrimary}`}>
+                      <FormattedMessageText text={m.text} isUser={false} subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
+                      {m.sources && m.sources.length > 0 && (
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                          <span className={`text-[11px] ${textSecondary}`}>Sources</span>
+                          {m.sources.map((src, idx) => (
+                            <a key={idx} href={src.uri} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border ${borderClass} text-[11px] text-[var(--accent-600)] hover:underline`}>
+                              <span className="truncate max-w-[200px]">{src.title}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              )}
+
+              {error && error.chatId === activeChat?.id && !showSpinner && (
+                <div className="flex gap-3 max-w-[94%]">
+                  <span aria-hidden="true" className="w-[3px] rounded-full bg-[var(--spark)] shrink-0" />
+                  <div className={`text-sm leading-relaxed ${textPrimary}`}>{error.text}</div>
+                </div>
+              )}
+              {showSpinner && (
+                <div className={`flex items-center gap-2 text-xs ${textSecondary}`} role="status">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-600)]" />
+                  {useWebSearch ? 'Checking current docs…' : 'Thinking it through…'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Message box: the help level lives inside it, like a mode picker in a chat app */}
+          <div className="px-4 sm:px-6 pb-4 pt-2">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendMessage(input);
+              }}
+              className="max-w-3xl mx-auto"
+            >
+              <div className={`rounded-2xl border ${borderClass} ${subtleBgClass} focus-within:border-[var(--accent-500)] transition-colors`}>
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      sendMessage(input);
+                    }
+                  }}
+                  placeholder="Ask a question, or paste code or an error"
+                  aria-label="Message the mentor"
+                  disabled={busy}
+                  className={`w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none placeholder:opacity-60 ${textPrimary}`}
+                />
+                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0" role="radiogroup" aria-label="How much help do you want?">
+                    <span className={`text-[11px] pl-1.5 pr-0.5 ${textSecondary}`}>Help</span>
+                    {HELP_LEVELS.map((h) => (
+                      <button
+                        key={h.level}
+                        type="button"
+                        role="radio"
+                        aria-checked={helpLevel === h.level}
+                        title={h.description}
+                        onClick={() => setHelpLevel(h.level)}
+                        className={pill(helpLevel === h.level)}
+                      >
+                        {h.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setUseWebSearch((v) => !v)}
+                      aria-pressed={useWebSearch}
+                      title="Lets the mentor look things up on the web for current docs"
+                      className={`inline-flex items-center gap-1 ${pill(useWebSearch)}`}
+                    >
+                      <Globe className="w-3 h-3" /> Web
+                    </button>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={busy || !input.trim()}
+                    aria-label="Send"
+                    className="w-8 h-8 shrink-0 rounded-full bg-[var(--accent-600)] text-white flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <p className={`mt-1.5 text-center text-[11px] ${textSecondary}`}>
+                {level?.description} Smaller help counts more toward your independence score.
+              </p>
+            </form>
+          </div>
+        </section>
       </div>
     </div>
   );

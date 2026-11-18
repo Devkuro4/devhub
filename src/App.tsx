@@ -63,11 +63,12 @@ import { RoadmapSection } from './components/RoadmapSection';
 import { LearningSection } from './components/LearningSection';
 import { ProjectsSection } from './components/ProjectsSection';
 import { CommunitySection } from './components/CommunitySection';
+import { normalizeStore } from './lib/mentorChats';
 import { MentorSection, ProfileSection } from './components/MentorAndProfile';
 import { AdminSection } from './components/AdminSection';
 import type {
   AiHelpEvent,
-  MentorChatMessage,
+  MentorChatStore,
   CodeSubmission,
   CommunityEvent,
   CommunityPost,
@@ -136,8 +137,8 @@ export default function App() {
   const [gitLevels, setGitLevels] = useState<any[]>(saved?.gitLevels ?? INITIAL_GIT_LEVELS);
   const [aiLiteracy, setAiLiteracy] = useState<any[]>(saved?.aiLiteracy ?? INITIAL_AI_LITERACY);
   const [aiHelpLog, setAiHelpLog] = useState<AiHelpEvent[]>(saved?.aiHelpLog ?? []);
-  // Saved AI Mentor conversation (kept across refreshes and devices).
-  const [mentorChat, setMentorChat] = useState<MentorChatMessage[]>(saved?.mentorChat ?? []);
+  // Saved AI Mentor chats, like a chat app's history (kept across refreshes and devices).
+  const [mentorChat, setMentorChat] = useState<MentorChatStore>(normalizeStore(saved?.mentorChat));
   const [dailyLogs, setDailyLogs] = useState<any[]>(
     saved?.dailyLogs ?? [
       {
