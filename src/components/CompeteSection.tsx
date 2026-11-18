@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { recommendChallenges } from '../lib/adaptive';
 import { ArrowRight, Award, Check, Flame, Lock, TrendingUp, Zap } from 'lucide-react';
 import { EmptyState, PageHeader, ProgressBar, SectionTabs, Sparkle } from './ui';
 import { MilestoneIcon } from './MilestoneBadges';
 import { XP_RULES, STREAK_BONUSES, LEVELS, boardSkills, rankBoard, type BoardMode, type GamificationSummary } from '../lib/gamification';
-import type { BadgeCategory, LeaderboardMap, MemberMilestone, MilestoneSummary, OnboardingProfile } from '../types';
+import type { BadgeCategory, LeaderboardMap, MemberMilestone, MilestoneSummary, OnboardingProfile, QuizAttempt } from '../types';
 
 const initialsOf = (n: string) =>
   (n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'D';
@@ -126,6 +127,8 @@ export const CompeteSection = ({
   milestones,
   board,
   onNavigate,
+  challenges = [],
+  quizAttempts = [],
   styles,
 }: {
   subTab: CompeteTab;
@@ -138,12 +141,15 @@ export const CompeteSection = ({
   milestones: MilestoneSummary;
   board: LeaderboardMap;
   onNavigate: (tab: string) => void;
+  challenges?: any[];
+  quizAttempts?: QuizAttempt[];
   styles: Styles;
 }) => {
   const { cardClass, textPrimary, textSecondary } = styles;
   const [mode, setMode] = useState<BoardMode>('week');
   const [skill, setSkill] = useState('');
 
+  const fit = useMemo(() => recommendChallenges(challenges, profile, quizAttempts, 3), [challenges, profile, quizAttempts]);
   const joined = profile.joinLeaderboard !== false;
   const skills = useMemo(() => boardSkills(board), [board]);
   const activeSkill = skill && skills.includes(skill) ? skill : skills[0] || '';
@@ -175,6 +181,23 @@ export const CompeteSection = ({
       {/* ------------------------------------------------ OVERVIEW */}
       {subTab === 'compete' && (
         <div className="space-y-6">
+          {fit.items.length > 0 && (
+            <section aria-label="Challenges for your level" className={`${cardClass} p-5 space-y-3`}>
+              <h3 className={`font-semibold ${textPrimary}`}>Challenges for your level</h3>
+              <ul className="divide-y divide-[var(--border-hairline)]">
+                {fit.items.map((c: any) => (
+                  <li key={c.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium truncate ${textPrimary}`}>{c.title}</p>
+                      <p className={`text-xs ${textSecondary}`}>{c.difficulty}</p>
+                    </div>
+                    <button type="button" onClick={() => onNavigate('challenges')} className="min-h-11 px-3 text-sm text-[var(--accent-700)] hover:underline cursor-pointer shrink-0">Try it</button>
+                  </li>
+                ))}
+              </ul>
+              <p className={`text-xs ${textSecondary}`}>Competition should help you grow. These match your level, and harder ones unlock as your results improve.</p>
+            </section>
+          )}
           <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-7 py-8 sm:px-10 sm:py-10">
             <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
             <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />

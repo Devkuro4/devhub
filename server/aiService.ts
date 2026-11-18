@@ -844,6 +844,9 @@ export async function mentorChatReply(
       weakTopics: string[];
       recentSubmissions: string[];
       activeProject: string;
+      learningGoal?: string;
+      biggestDifficulty?: string;
+      contentPreference?: string;
     };
   }
 ) {
@@ -910,6 +913,9 @@ Member context:
 - Areas needing review: ${input.context.weakTopics.join(', ') || 'None yet'}
 - Recent code submissions: ${input.context.recentSubmissions.join('; ') || 'None yet'}
 - Current project: ${input.context.activeProject || 'None yet'}
+- Learning goal: ${input.context.learningGoal || 'Not stated'}
+- Finds hardest: ${input.context.biggestDifficulty || 'Not stated'}
+- Learns best with: ${input.context.contentPreference || 'Not stated'}
 
 ${teachingMethod}
 

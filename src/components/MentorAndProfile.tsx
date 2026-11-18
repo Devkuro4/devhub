@@ -269,6 +269,9 @@ export const MentorSection = ({
             weakTopics,
             recentSubmissions: codeSubmissions.slice(0, 3).map((s) => `${s.topic} (${s.exerciseTitle})`),
             activeProject: activeProject?.title || 'None started yet',
+            learningGoal: profile.goal || '',
+            biggestDifficulty: profile.biggestDifficulty || '',
+            contentPreference: profile.contentPreference || '',
           },
         },
         user.id
@@ -869,6 +872,62 @@ export const ProfileSection = ({
               <SettingsField label="Skills you already know" hint="Topics you're comfortable with, so we don't repeat them." {...fieldProps}>
                 <input value={draft.knownSkills} onChange={(e) => setDraft({ ...draft, knownSkills: e.target.value })} className={field} placeholder="e.g., Basic HTML, CSS selectors, Python loops" />
               </SettingsField>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <SettingsField label="Session length" {...fieldProps}>
+                  <select value={draft.sessionStyle || ''} onChange={(e) => setDraft({ ...draft, sessionStyle: e.target.value })} className={field}>
+                    <option value="">No preference</option>
+                    <option>Short daily sessions</option>
+                    <option>Longer, less frequent sessions</option>
+                    <option>A mix of both</option>
+                  </select>
+                </SettingsField>
+                <SettingsField label="How you learn best" {...fieldProps}>
+                  <select value={draft.contentPreference || ''} onChange={(e) => setDraft({ ...draft, contentPreference: e.target.value })} className={field}>
+                    <option value="">No preference</option>
+                    <option>Reading</option>
+                    <option>Videos</option>
+                    <option>Hands-on exercises</option>
+                    <option>A mixture</option>
+                  </select>
+                </SettingsField>
+                <SettingsField label="What you find hardest" {...fieldProps}>
+                  <select value={draft.biggestDifficulty || ''} onChange={(e) => setDraft({ ...draft, biggestDifficulty: e.target.value })} className={field}>
+                    <option value="">Not sure</option>
+                    <option>Staying consistent</option>
+                    <option>Understanding concepts</option>
+                    <option>Knowing what to learn next</option>
+                    <option>Building projects</option>
+                    <option>Debugging</option>
+                    <option>Getting unstuck alone</option>
+                  </select>
+                </SettingsField>
+                <SettingsField label="Built projects before?" {...fieldProps}>
+                  <select value={draft.builtProjects || ''} onChange={(e) => setDraft({ ...draft, builtProjects: e.target.value as any })} className={field}>
+                    <option value="">Not sure</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">Not yet</option>
+                  </select>
+                </SettingsField>
+              </div>
+              <fieldset>
+                <legend className={`text-sm font-medium mb-2 ${textPrimary}`}>Days you can study</legend>
+                <div className="flex flex-wrap gap-2">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                    const on = (draft.studyDays || []).includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setDraft({ ...draft, studyDays: on ? (draft.studyDays || []).filter((d) => d !== day) : [...(draft.studyDays || []), day] })}
+                        className={`min-h-11 min-w-12 px-3 rounded-lg border text-sm cursor-pointer ${on ? 'border-[var(--accent-600)] bg-[var(--accent-50)] font-semibold' : `${borderClass} hover:bg-[var(--surface-subtle)]`}`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
             </div>
           </section>
 

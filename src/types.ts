@@ -28,6 +28,17 @@ export interface OnboardingProfile {
   portfolioUrl: string;
   linkedinUrl: string;
   streakDays: number;
+  /** Added by the personalized onboarding. All optional so existing members' saved profiles stay valid. */
+  learningInterests?: string[];
+  primaryField?: string;
+  learningSources?: string[];
+  builtProjects?: 'yes' | 'no' | '';
+  biggestDifficulty?: string;
+  studyDays?: string[];
+  sessionStyle?: string;
+  contentPreference?: string;
+  /** ISO time of the last real study action (check-in, quiz, submission, module tick). Drives gentle resume prompts. */
+  lastStudiedAt?: string;
   /** Show me on community leaderboards (default on). Turning it off removes the member's row. */
   joinLeaderboard?: boolean;
   showAdvancedTools: boolean;
@@ -62,6 +73,11 @@ export interface CourseItem {
   notes: string;
   referenceLinks?: string[];
   modules: CourseModule[];
+  /** Added by the personalized onboarding (optional, so older courses stay valid). */
+  description?: string;
+  currentModuleId?: string;
+  materials?: { name: string; size: number }[];
+  origin?: 'onboarding' | 'manual';
 }
 
 export interface DailyTarget {
@@ -399,3 +415,47 @@ export interface LeaderboardEntry {
   skills: Record<string, number>;
 }
 export type LeaderboardMap = Record<string, LeaderboardEntry>;
+
+
+// ---------------------------------------------------------------------------
+// Personalized onboarding (saved in member_state so it survives refresh,
+// sign-out and device changes)
+// ---------------------------------------------------------------------------
+export interface OnboardingDraft {
+  interests: string[];
+  primaryField: string;
+  customField: string;
+  sources: string[];
+  hasCourse: boolean | null;
+  courseTitle: string;
+  courseUrl: string;
+  coursePlatform: string;
+  courseInstructor: string;
+  courseDescription: string;
+  /** One module per line, pasted or typed by the member */
+  syllabusText: string;
+  currentModule: string;
+  materials: { name: string; size: number }[];
+  skillLevel: string;
+  knownSkills: string;
+  builtProjects: 'yes' | 'no' | '';
+  difficulty: string;
+  goal: string;
+  customGoal: string;
+  studyTime: string;
+  studyDays: string[];
+  sessionStyle: string;
+  contentPreference: string;
+}
+
+export interface OnboardingState {
+  status: 'not_started' | 'in_progress' | 'completed';
+  /** Last step the member reached, used to resume */
+  step: number;
+  draft: OnboardingDraft | null;
+  completedAt?: string;
+  /** 1 = original wizard (migrated), 2 = personalized onboarding */
+  version: 1 | 2;
+  /** True once the member has run the personalized flow (migrated members start false) */
+  personalized: boolean;
+}

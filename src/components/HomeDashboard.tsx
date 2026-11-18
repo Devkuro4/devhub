@@ -17,6 +17,8 @@ import {
   Trophy,
   Users,
 } from 'lucide-react';
+import { PersonalPath } from './PersonalPath';
+import { startActionLabel, type StartAction } from '../lib/startLearning';
 import { ProgressBar, Sparkle } from './ui';
 import { DashboardMilestoneStrip } from './MilestoneBadges';
 import { IndependenceCard } from './IndependenceCard';
@@ -31,6 +33,7 @@ import type {
   DailyTarget,
   MilestoneSummary,
   OnboardingProfile,
+  LearningPlan,
   QuizAttempt,
   QuizItem,
   RoadmapItem,
@@ -55,7 +58,13 @@ export const HomeDashboard = ({
   profile,
   onboarded,
   onStartOnboarding,
+  startAction,
+  onStartLearning,
+  onContinueCourse,
+  onPersonalize,
+  personalized,
   courses,
+  learningPlans,
   dailyTarget,
   codeSubmissions,
   quizzes,
@@ -86,7 +95,13 @@ export const HomeDashboard = ({
   profile: OnboardingProfile;
   onboarded: boolean;
   onStartOnboarding: () => void;
+  startAction: StartAction;
+  onStartLearning: () => void;
+  onContinueCourse: (courseId: string) => void;
+  onPersonalize: () => void;
+  personalized: boolean;
   courses: CourseItem[];
+  learningPlans: LearningPlan[];
   dailyTarget: DailyTarget;
   codeSubmissions: CodeSubmission[];
   quizzes: QuizItem[];
@@ -182,7 +197,24 @@ export const HomeDashboard = ({
 
   const rollup = latestCourse ? latestCourse.progress : Math.round((demonstratedCount / Math.max(1, selectedRoadmap.topics.length)) * 100);
   const doneCount = todayChecklist.filter((s) => s.done).length;
-  const isBrandNewMember = !onboarded && !latestCourse && codeSubmissions.length === 0 && dailyLogs.length === 0;
+  const isBrandNewMember =
+    startAction.kind === 'resume-onboarding' ||
+    (startAction.kind === 'start-onboarding' && !latestCourse && codeSubmissions.length === 0 && dailyLogs.length === 0);
+  const needsPath = startAction.kind === 'add-path' || startAction.kind === 'next-path' || startAction.kind === 'choose-course';
+  const showPersonalize = onboarded && !personalized && !isBrandNewMember;
+  const setupTitle = startAction.kind === 'resume-onboarding' ? 'Pick up your setup where you left off' : 'Set up your learning path';
+  const setupCopy =
+    startAction.kind === 'resume-onboarding'
+      ? 'Your answers are saved. Finish the last few steps and we’ll build your plan.'
+      : 'Tell us what you’re learning and how much time you have. We’ll build a step-by-step plan.';
+  const pathTitle =
+    startAction.kind === 'next-path' ? 'You finished your course. What’s next?' : startAction.kind === 'choose-course' ? 'Which course do you want to continue?' : 'Add what you’re learning';
+  const pathCopy =
+    startAction.kind === 'next-path'
+      ? 'Choose a new learning path and we’ll plan it around your progress so far.'
+      : startAction.kind === 'choose-course'
+        ? 'You have more than one active course. Pick one to open today’s session.'
+        : 'Add a course or pick a roadmap so your dashboard can show your next step.';
 
   // --- search + filter over courses
   const [query, setQuery] = useState('');
@@ -298,28 +330,60 @@ export const HomeDashboard = ({
           <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
           <div className="relative max-w-xl">
             <p className="text-sm text-white/70">
-              {isBrandNewMember ? 'One-minute setup' : `${latestCourse ? latestCourse.platform : selectedRoadmap.title} · about ${dailyTarget.estimatedMinutes} min left today`}
+              {isBrandNewMember ? 'Quick setup' : needsPath ? 'Your learning path' : `${latestCourse ? latestCourse.platform : selectedRoadmap.title} · about ${dailyTarget.estimatedMinutes} min left today`}
             </p>
             <h1 className="mt-3 text-white font-semibold !text-[1.75rem] sm:!text-[2rem] leading-tight">
-              {isBrandNewMember ? 'Set up your learning path' : nextActivity.label}
+              {isBrandNewMember ? setupTitle : needsPath ? pathTitle : nextActivity.label}
             </h1>
             <p className="mt-2 text-sm text-white/75">
               {isBrandNewMember
-                ? 'Tell us what you’re learning and how much time you have. We’ll build a step-by-step roadmap.'
-                : `${nextActivity.detail}${currentStage ? ` · ${currentStage.title}` : ''}`}
+                ? setupCopy
+                : needsPath
+                  ? pathCopy
+                  : `${nextActivity.detail}${currentStage ? ` · ${currentStage.title}` : ''}`}
             </p>
             <button
               type="button"
-              onClick={() => (isBrandNewMember ? onStartOnboarding() : onNavigate(nextActivity.tab))}
+              onClick={() => (isBrandNewMember ? onStartOnboarding() : needsPath ? onStartLearning() : onNavigate(nextActivity.tab))}
               className="mt-6 inline-flex items-center gap-3 pl-5 pr-1.5 min-h-11 rounded-full bg-white text-[#0A0A0A] text-sm font-semibold cursor-pointer hover:bg-white/90 active:translate-y-px"
             >
-              {isBrandNewMember ? 'Get started' : doneCount === 0 ? 'Start today' : 'Continue'}
+              {isBrandNewMember ? startActionLabel(startAction) : needsPath ? startActionLabel(startAction) : doneCount === 0 ? 'Start today' : 'Continue'}
               <span className="w-8 h-8 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center">
                 <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
               </span>
             </button>
           </div>
         </section>
+
+        {showPersonalize && (
+          <section aria-label="Personalize your learning" className="soft-card px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[var(--ink-secondary)] max-w-[56ch]">
+              Add your current course and where you are in it, and we’ll tailor your plan. Your existing progress stays as it is.
+            </p>
+            <button type="button" onClick={onPersonalize} className="min-h-11 px-4 rounded-lg border border-[var(--border-strong)] hover:bg-[var(--surface-subtle)] text-sm font-medium text-[var(--ink-primary)] cursor-pointer">
+              Personalize my learning journey
+            </button>
+          </section>
+        )}
+
+        {!isBrandNewMember && (
+          <PersonalPath
+            profile={profile}
+            courses={courses}
+            learningPlans={learningPlans}
+            dailyTarget={dailyTarget}
+            selectedRoadmap={selectedRoadmap}
+            roadmapProgress={roadmapProgress}
+            quizAttempts={quizAttempts}
+            weeklyProjects={weeklyProjects}
+            challenges={challenges}
+            startAction={startAction}
+            onStartLearning={onStartLearning}
+            onContinueCourse={onContinueCourse}
+            onPersonalize={onPersonalize}
+            onNavigate={onNavigate}
+          />
+        )}
 
         {/* Three small stat cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

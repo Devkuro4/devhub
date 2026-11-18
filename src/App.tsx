@@ -73,8 +73,9 @@ import {
   LoadingScreen,
   LoginScreen,
   NotAuthorized,
-  OnboardingWizard,
 } from './components/ui';
+import { OnboardingWizard, type OnboardingResult } from './components/OnboardingWizard';
+import { normalizeOnboarding, resolveStartAction, type StartAction } from './lib/startLearning';
 import { HomeDashboard } from './components/HomeDashboard';
 import { CompeteSection } from './components/CompeteSection';
 import { RoadmapSection } from './components/RoadmapSection';
@@ -96,6 +97,8 @@ import type {
   LearningPlan,
   LedgerEntry,
   OnboardingProfile,
+  OnboardingState,
+  OnboardingDraft,
   QuizAttempt,
   QuizItem,
   RoadmapItem,
@@ -130,6 +133,9 @@ export default function App() {
   const [hydrated, setHydrated] = useState(!CLOUD);
   const [loadError, setLoadError] = useState(false);
   const [onboarded, setOnboarded] = useState<boolean>(saved?.onboarded ?? false);
+  const [onboardingState, setOnboardingState] = useState<OnboardingState>(() =>
+    normalizeOnboarding(saved?.onboarded ?? false, saved?.onboardingState)
+  );
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [authView, setAuthView] = useState<null | 'in' | 'up'>(() =>
     typeof window !== 'undefined' && /[?&#](error|error_description)=/.test(window.location.search + window.location.hash) ? 'in' : null
@@ -309,6 +315,7 @@ export default function App() {
           hackathon,
           user,
           onboarded,
+          onboardingState,
         })
       );
       if (!CLOUD && (typeof navigator === 'undefined' || navigator.onLine)) {
@@ -320,6 +327,7 @@ export default function App() {
     darkMode,
     role,
     activeTab,
+    onboardingState,
     profile,
     courses,
     selectedRoadmapId,
@@ -408,6 +416,7 @@ export default function App() {
     pairingState: [pairingState, setPairingState],
     hackathon: [hackathon, setHackathon],
     onboarded: [onboarded, setOnboarded],
+    onboardingState: [onboardingState, setOnboardingState],
     quizzes: [quizzes, setQuizzes],
     weeklyActivities: [weeklyActivities, setWeeklyActivities],
     challenges: [challenges, setChallenges],
@@ -520,7 +529,10 @@ export default function App() {
         const blank: any = blankPersonal(user.name, m.hackathon[0]);
         const mineObj: any = {};
         PERSONAL_KEYS.forEach((k) => {
-          mineObj[k] = base[k] ?? blank[k];
+          mineObj[k] =
+            k === 'onboardingState'
+              ? normalizeOnboarding(!!base.onboarded, base.onboardingState)
+              : base[k] ?? blank[k];
           if (m[k]) m[k][1](mineObj[k]);
         });
         synced.current.__mine = mine.data ? JSON.stringify(mineObj) : undefined;
@@ -536,7 +548,7 @@ export default function App() {
           if (m[k]) synced.current[k] = user.isAdmin ? undefined : JSON.stringify(m[k][0]);
         });
         setHydrated(true);
-        if (!base.onboarded && !ADMIN_SITE && !user.isAdmin) {
+        if (mineObj.onboardingState.status !== 'completed' && !ADMIN_SITE && !user.isAdmin) {
           setShowOnboardingWizard(true);
         }
       } catch {
@@ -837,20 +849,114 @@ export default function App() {
     else setUser(null);
   };
 
-  const handleOnboardingComplete = (result: {
-    profilePatch: Partial<OnboardingProfile>;
-    selectedRoadmapId: string;
-    customRoadmap?: RoadmapItem;
-  }) => {
+  const handleOnboardingComplete = (result: OnboardingResult) => {
+    const wasCompleted = onboardingState.status === 'completed';
     setProfile((prev) => ({ ...prev, ...result.profilePatch }));
     if (result.customRoadmap) {
       setCustomRoadmaps((prev) => [result.customRoadmap!, ...prev.filter((r) => r.id !== result.customRoadmap!.id)]);
     }
-    setSelectedRoadmapId(result.selectedRoadmapId);
+    // Members who already finished the original setup keep their current roadmap; new ones get the one just built.
+    if (!wasCompleted || !selectedRoadmapId) setSelectedRoadmapId(result.selectedRoadmapId);
+    // Re-running setup with a course the member already tracks updates that course instead of adding a copy,
+    // and never throws away modules they have already ticked off.
+    let courseId = result.course?.id;
+    if (result.course) {
+      const incoming = result.course;
+      const match = courses.find((c) => c.title.trim().toLowerCase() === incoming.title.trim().toLowerCase());
+      if (match) {
+        courseId = match.id;
+        const modules = incoming.modules.length ? incoming.modules : match.modules;
+        const done = modules.filter((m) => m.completed).length;
+        const merged: CourseItem = {
+          ...match,
+          platform: incoming.platform || match.platform,
+          url: incoming.url || match.url,
+          instructor: incoming.instructor || match.instructor,
+          description: incoming.description || match.description,
+          materials: [...(match.materials || []), ...(incoming.materials || [])],
+          modules,
+          progress: modules.length ? Math.round((done / modules.length) * 100) : match.progress,
+          currentTopic: modules.find((m) => !m.completed)?.title || incoming.currentTopic || match.currentTopic,
+          lastStudied: 'Today',
+        };
+        setCourses((prev) => [merged, ...prev.filter((c) => c.id !== match.id)]);
+      } else {
+        setCourses((prev) => [incoming, ...prev]);
+      }
+    }
+    if (result.learningPlan) {
+      const plan = courseId ? { ...result.learningPlan, courseId, dailyTargets: result.learningPlan.dailyTargets.map((t) => ({ ...t, courseId })) } : result.learningPlan;
+      setLearningPlans((prev) => [plan, ...prev.filter((p) => p.courseId !== plan.courseId)]);
+      if (plan.dailyTargets[0]) setDailyTarget(plan.dailyTargets[0]);
+    }
     setOnboarded(true);
+    setOnboardingState({ status: 'completed', step: 1, draft: null, version: 2, personalized: true, completedAt: new Date().toISOString() });
     setShowOnboardingWizard(false);
     setActiveTab('dashboard');
-    notify('Your learning path is ready!');
+    notify(result.course ? `“${result.course.title}” is set up. Your plan is ready.` : 'Your learning path is ready!');
+  };
+
+  // Stamp real study activity so Dev Hub can offer a gentle way back after a break.
+  const studySig = `${dailyLogs.length}|${quizAttempts.length}|${codeSubmissions.length}|${courses
+    .map((c) => (c.modules || []).filter((m) => m.completed).length)
+    .join(',')}`;
+  const studySigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hydrated) {
+      studySigRef.current = null;
+      return;
+    }
+    if (studySigRef.current === null) {
+      studySigRef.current = studySig;
+      return;
+    }
+    if (studySigRef.current !== studySig) {
+      studySigRef.current = studySig;
+      setProfile((prev) => ({ ...prev, lastStudiedAt: new Date().toISOString() }));
+    }
+  }, [studySig, hydrated]);
+
+  const handleOnboardingDraft = (draft: OnboardingDraft, step: number) => {
+    setOnboardingState((prev) => (prev.status === 'completed' ? prev : { ...prev, status: 'in_progress', step, draft, version: 2 }));
+  };
+
+  // Picking a course makes it the one the dashboard, plan and daily session follow.
+  const handleContinueCourse = (courseId: string) => {
+    const picked = courses.find((c) => c.id === courseId);
+    if (!picked) return;
+    setCourses((prev) => [picked, ...prev.filter((c) => c.id !== courseId)]);
+    const plan = learningPlans.find((p) => p.courseId === courseId);
+    const target = plan?.dailyTargets.find((t) => t.status === 'Not Started') || plan?.dailyTargets[0];
+    if (target) setDailyTarget(target);
+    setActiveTab('today');
+    notify(`Continuing “${picked.title}”.`);
+  };
+
+  const startAction: StartAction = resolveStartAction({ onboarding: onboardingState, courses, learningPlans });
+  const handleStartLearning = (a: StartAction = startAction) => {
+    switch (a.kind) {
+      case 'start-onboarding':
+      case 'resume-onboarding':
+        setShowOnboardingWizard(true);
+        return;
+      case 'add-path':
+        setActiveTab('courses');
+        return;
+      case 'next-path':
+        setActiveTab('roadmaps');
+        notify('Nice work finishing your course. Pick your next learning path.');
+        return;
+      case 'choose-course':
+        setActiveTab('dashboard');
+        notify('You have more than one active course. Choose which to continue below.');
+        return;
+      default: {
+        const plan = learningPlans.find((p) => p.courseId === a.courseId);
+        const target = plan?.dailyTargets.find((t) => t.status === 'Not Started') || plan?.dailyTargets[0];
+        if (target) setDailyTarget(target);
+        setActiveTab('today');
+      }
+    }
   };
 
   const handleQuickCheckIn = (e: React.FormEvent) => {
@@ -1269,7 +1375,10 @@ export default function App() {
                 {showOnboardingWizard ? (
                   <OnboardingWizard
                     initialProfile={profile}
-                    userId={user.id}
+                    initialDraft={onboardingState.status === 'in_progress' ? onboardingState.draft : null}
+                    initialStep={onboardingState.status === 'in_progress' ? onboardingState.step : 1}
+                    userId={user?.id}
+                    onDraftChange={handleOnboardingDraft}
                     onComplete={handleOnboardingComplete}
                     onSkipToHome={() => setShowOnboardingWizard(false)}
                   />
@@ -1281,8 +1390,14 @@ export default function App() {
                         greeting={greeting}
                         profile={profile}
                         onboarded={onboarded}
+                        startAction={startAction}
+                        onStartLearning={() => handleStartLearning()}
+                        onContinueCourse={handleContinueCourse}
+                        onPersonalize={() => setShowOnboardingWizard(true)}
+                        personalized={onboardingState.personalized}
                         onStartOnboarding={() => setShowOnboardingWizard(true)}
                         courses={courses}
+                        learningPlans={learningPlans}
                         dailyTarget={dailyTarget}
                         codeSubmissions={codeSubmissions}
                         quizzes={quizzes}
@@ -1352,6 +1467,8 @@ export default function App() {
                         milestones={milestoneSummary}
                         board={leaderboard}
                         onNavigate={(tab) => setActiveTab(tab)}
+                        challenges={challenges}
+                        quizAttempts={quizAttempts}
                         styles={styles}
                       />
                     )}

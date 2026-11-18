@@ -266,6 +266,9 @@ export async function requestMentorChat(
       weakTopics: string[];
       recentSubmissions: string[];
       activeProject: string;
+      learningGoal?: string;
+      biggestDifficulty?: string;
+      contentPreference?: string;
     };
   },
   userId?: string
@@ -308,4 +311,28 @@ export async function requestWeeklySummary(
       encouragementNote: string;
     };
   }>('/api/ai/weekly-summary', input, userId);
+}
+
+export interface MaterialExtraction {
+  readable: boolean;
+  kind: string;
+  text: string;
+  outline: string[];
+  note: string;
+}
+
+export async function extractCourseMaterial(file: File, userId?: string): Promise<MaterialExtraction> {
+  const res = await fetch(`${API_BASE}/api/ai/extract-materials`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'X-Filename': encodeURIComponent(file.name),
+      ...(await authHeaders()),
+      ...(userId ? { 'X-Devhub-User': userId } : {}),
+    },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `Could not read that file (${res.status})`);
+  return data as MaterialExtraction;
 }

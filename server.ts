@@ -18,6 +18,7 @@ import {
   updateAiSettings,
   evaluateShortAnswer,
 } from './server/aiService.ts';
+import { MAX_MATERIAL_BYTES, extractMaterial } from './server/materialService.ts';
 import { listOfficialRoadmaps, lookupRoadmapSh } from './server/roadmapService.ts';
 import { ANON_KEY_TYPE, AUTH_ENABLED, SUPABASE_HOST, requireAdmin, requireUser } from './server/auth.ts';
 
@@ -41,7 +42,7 @@ app.use('/api', (req, res, next) => {
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Devhub-User');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Devhub-User, X-Filename');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Max-Age', '86400');
   }
@@ -237,6 +238,24 @@ app.post('/api/ai/weekly-summary', async (req, res) => {
     res.status(500).json({ error: err?.message || 'Could not generate weekly summary.' });
   }
 });
+
+// Reads uploaded course files (PDF, Word, text) so the plan can use their real structure.
+// Lives under /api/ai so it needs a signed-in member like the other AI routes.
+app.post(
+  '/api/ai/extract-materials',
+  express.raw({ type: 'application/octet-stream', limit: MAX_MATERIAL_BYTES }),
+  async (req, res) => {
+    try {
+      const name = decodeURIComponent(String(req.headers['x-filename'] || 'file'));
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: 'No file was received.' });
+      }
+      res.json(await extractMaterial(name, req.body));
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Could not read that file.' });
+    }
+  }
+);
 
 // ============================================================================
 // VITE DEV MIDDLEWARE OR PRODUCTION STATIC ASSETS
