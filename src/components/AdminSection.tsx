@@ -317,15 +317,22 @@ export const AdminSection = ({
                           <span className={`font-semibold ${textPrimary}`}>{m.name}</span>
                         </span>
                       </td>
-                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.field}</td>
-                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.level}</td>
-                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.partner}</td>
+                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.field || '—'}</td>
+                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.level || '—'}</td>
+                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.partner || '—'}</td>
                       <td className="py-3 pr-5">
-                        <select value={m.role || 'Member'} onChange={(e) => updateMemberRole(m.id, e.target.value)} aria-label={`Role for ${m.name}`} className={`${inputClass} py-1 px-2.5 text-xs max-w-[180px]`}>
+                        <select
+                          value={m.role || 'Member'}
+                          onChange={(e) => updateMemberRole(m.id, e.target.value)}
+                          disabled={m.role === 'Community Admin'}
+                          title={m.role === 'Community Admin' ? 'Admin access is set in Supabase (see LAUNCH.md)' : undefined}
+                          aria-label={`Role for ${m.name}`}
+                          className={`${inputClass} py-1 px-2.5 text-xs max-w-[180px]`}
+                        >
                           <option>Member</option>
                           <option>Learning Coordinator</option>
                           <option>Field Lead</option>
-                          <option>Community Admin</option>
+                          {m.role === 'Community Admin' && <option>Community Admin</option>}
                         </select>
                       </td>
                     </tr>

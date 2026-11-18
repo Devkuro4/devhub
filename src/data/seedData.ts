@@ -692,6 +692,30 @@ export const TEAM_ROSTER = [
   { id: 'tm-5', name: 'David Mensah', role: 'Community Admin', field: 'Full-Stack Development', level: 'Community Admin', coursePct: 100, quizAvg: 95, gitLevel: 6, status: 'Admin', partner: 'Community Support', mentor: '—', bio: 'Helping keep Dev Hub welcoming, clear, and consistent.' },
 ];
 
+// ---------------------------------------------------------------------------
+// Starter content for a REAL team (used when the app is connected to Supabase).
+// No pretend people, posts or events: the community starts empty and fills up with your members.
+// ---------------------------------------------------------------------------
+export const LAUNCH_POSTS: CommunityPost[] = [
+  {
+    id: 'post-welcome',
+    author: 'Dev Hub',
+    role: 'Community Admin',
+    category: 'Announcement',
+    pinned: true,
+    timestamp: 'Pinned',
+    title: 'Welcome to Dev Hub. No question is too basic here',
+    content:
+      'We are a small group learning and building together. Share small wins, post bugs you ran into, ask beginner questions, or volunteer to walk through something you just figured out. Say hi below and tell us what you are learning this week.',
+    likes: 0,
+    comments: [],
+  },
+];
+
+export const LAUNCH_WEEKLY_ACTIVITIES = INITIAL_WEEKLY_ACTIVITIES.map((a) => ({ ...a, completed: false }));
+
+export const LAUNCH_RESOURCES = INITIAL_RESOURCES.map((r) => ({ ...r, addedBy: 'Dev Hub' }));
+
 export const ADMIN_SITE = (import.meta as any).env?.VITE_APP_MODE === 'admin';
 export const MEMBER_SITE_URL: string | undefined = (import.meta as any).env?.VITE_MEMBER_SITE_URL;
 export const ADMIN_CODE: string | undefined = (import.meta as any).env?.VITE_ADMIN_CODE;

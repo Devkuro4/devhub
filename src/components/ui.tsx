@@ -438,7 +438,7 @@ export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: s
           <input
             id="demo-name"
             className={authInputCls(!!show('name'))}
-            placeholder="Amara Okafor"
+            placeholder="Your full name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => blur('name')}
@@ -699,7 +699,7 @@ export const AuthScreen = () => {
             <input
               id="auth-name"
               className={authInputCls(!!show('name'))}
-              placeholder="Amara Okafor"
+              placeholder="Your full name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => blur('name')}

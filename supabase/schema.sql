@@ -107,3 +107,25 @@ on conflict (id) do nothing;
 
 -- After you sign up yourself, make yourself the admin (use your email):
 -- update public.profiles set role = 'admin' where email = 'you@example.com';
+
+
+-- ---------------------------------------------------------------------------
+-- OPTIONAL: only let your team sign up (recommended before sharing the link).
+-- Easiest option, no SQL: Supabase > Authentication > Sign In / Providers >
+-- turn OFF "Allow new users to sign up", then add people yourself with
+-- Authentication > Users > Add user > Send invitation.
+--
+-- Or restrict sign-up to one email domain. Edit the domain, then remove the leading "-- ":
+--
+-- create or replace function public.only_team_emails() returns trigger
+-- language plpgsql security definer set search_path = public as $$
+-- begin
+--   if new.email is null or lower(new.email) not like '%@yourcompany.com' then
+--     raise exception 'Sign-ups are limited to the team.';
+--   end if;
+--   return new;
+-- end $$;
+-- drop trigger if exists only_team_emails_trg on auth.users;
+-- create trigger only_team_emails_trg before insert on auth.users
+--   for each row execute function public.only_team_emails();
+-- ---------------------------------------------------------------------------

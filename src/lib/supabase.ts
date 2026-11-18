@@ -35,3 +35,10 @@ const anon = rawAnon?.trim().replace(/^['"]|['"]$/g, '');
 // With no env vars the app runs in local demo mode (data stays in the browser).
 export const supabase = url && anon ? createClient(url, anon) : null;
 export const CLOUD = !!supabase;
+
+// Demo mode is for trying the app on your own computer (npm run dev).
+// A published site (production build) must be connected to Supabase, otherwise every visitor
+// would get a private, throwaway copy of the app that nobody else can see.
+// Set VITE_ALLOW_DEMO=true to deliberately publish a demo.
+const allowDemoFlag = String((import.meta as any).env?.VITE_ALLOW_DEMO || '').trim().toLowerCase() === 'true';
+export const DEMO_ALLOWED = !(import.meta as any).env?.PROD || allowDemoFlag;

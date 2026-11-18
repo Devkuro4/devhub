@@ -14,6 +14,8 @@ an AI mentor that guides instead of doing the thinking, real projects, and a com
   for your score, bigger is always available. Each request is logged privately to your progress.
 - **AI reviews code and asks you to explain it**, instead of just fixing it.
 
+> **Launching to a real team?** Follow [LAUNCH.md](LAUNCH.md): a step-by-step checklist from Supabase to inviting members.
+
 ## 1. Set up Supabase (about 10 minutes, free tier is fine)
 
 1. Create a project at supabase.com.
@@ -28,7 +30,7 @@ an AI mentor that guides instead of doing the thinking, real projects, and a com
     npm install
     npm run dev              # http://localhost:3000
 
-Without the Supabase values the app runs in local demo mode (data stays in your browser).
+Without the Supabase values the app runs in local demo mode (data stays in your browser). A published site refuses to run in demo mode and shows a setup screen instead.
 
 ## 3. Put it online (Render, free tier works for a small community)
 

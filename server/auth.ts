@@ -60,6 +60,13 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
   // Local demo mode: no accounts exist. Fine for development, and the admin routes
   // stay closed in production.
   if (!AUTH_ENABLED) {
+    // A live server must know who is calling. Without login checking, anyone with the link could
+    // use your AI quota. Set ALLOW_DEMO=true only if you really want an open demo.
+    if (IS_PROD && process.env.ALLOW_DEMO !== 'true') {
+      return res.status(503).json({
+        error: 'This server is not connected to Supabase yet, so the AI is switched off. Ask the team lead to finish setup (see LAUNCH.md).',
+      });
+    }
     const demoId = req.headers['x-devhub-user'];
     res.locals.userId = typeof demoId === 'string' && demoId.trim() ? demoId.trim() : 'local-member';
     res.locals.isAdmin = !IS_PROD;

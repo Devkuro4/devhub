@@ -1446,7 +1446,7 @@ export const CommunitySection = ({
                       <span className={`text-[15px] font-semibold ${textPrimary}`}>{m.name}</span>
                       <span className="text-sm font-medium text-[var(--accent-600)]">{m.role || 'Member'}</span>
                     </div>
-                    <div className={`text-sm ${textSecondary}`}>{m.field} · {m.level}</div>
+                    {(m.field || m.level) && <div className={`text-sm ${textSecondary}`}>{[m.field, m.level].filter(Boolean).join(' · ')}</div>}
                     {m.bio && <p className={`text-sm leading-relaxed ${textSecondary}`}>{m.bio}</p>}
                   </li>
                 ))}

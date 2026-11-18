@@ -20,7 +20,8 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { supabase, CLOUD } from './lib/supabase';
+import { supabase, CLOUD, DEMO_ALLOWED } from './lib/supabase';
+import { SetupRequired } from './components/SetupRequired';
 import { detectMemberMilestones } from './lib/milestones';
 import { computeIndependence } from './lib/independence';
 import {
@@ -43,6 +44,9 @@ import {
   INITIAL_SUBMISSIONS,
   INITIAL_WEEKLY_ACTIVITIES,
   INITIAL_WEEKLY_PROJECT,
+  LAUNCH_POSTS,
+  LAUNCH_RESOURCES,
+  LAUNCH_WEEKLY_ACTIVITIES,
   PERSONAL_KEYS,
   ROADMAPS_CATALOG,
   SHARED_KEYS,
@@ -183,18 +187,48 @@ export default function App() {
   );
 
   // Core Shared Community State
+  // Connected to the database = a real team: start from clean starter content (no pretend people or posts).
+  // Demo mode keeps the sample community so the app looks alive when you try it locally.
   const [quizzes, setQuizzes] = useState<QuizItem[]>(saved?.quizzes ?? INITIAL_QUIZZES);
-  const [weeklyActivities, setWeeklyActivities] = useState<any[]>(saved?.weeklyActivities ?? INITIAL_WEEKLY_ACTIVITIES);
-  const [challenges, setChallenges] = useState<any[]>(saved?.challenges ?? INITIAL_CHALLENGES);
-  const [projects, setProjects] = useState<any[]>(saved?.projects ?? INITIAL_PROJECTS);
-  const [presentations, setPresentations] = useState<CommunityEvent[]>(saved?.presentations ?? INITIAL_PRESENTATIONS);
-  const [posts, setPosts] = useState<CommunityPost[]>(saved?.posts ?? INITIAL_POSTS);
-  const [resources, setResources] = useState<any[]>(saved?.resources ?? INITIAL_RESOURCES);
-  const [helpRequests, setHelpRequests] = useState<any[]>(saved?.helpRequests ?? INITIAL_HELP_REQUESTS);
-  const [showcaseProjects, setShowcaseProjects] = useState<ShowcaseProject[]>(
-    saved?.showcaseProjects ?? INITIAL_SHOWCASE
+  const [weeklyActivities, setWeeklyActivities] = useState<any[]>(
+    saved?.weeklyActivities ?? (CLOUD ? LAUNCH_WEEKLY_ACTIVITIES : INITIAL_WEEKLY_ACTIVITIES)
   );
-  const [teamRoster, setTeamRoster] = useState<any[]>(saved?.teamRoster ?? TEAM_ROSTER);
+  const [challenges, setChallenges] = useState<any[]>(saved?.challenges ?? INITIAL_CHALLENGES);
+  const [projects, setProjects] = useState<any[]>(saved?.projects ?? (CLOUD ? [] : INITIAL_PROJECTS));
+  const [presentations, setPresentations] = useState<CommunityEvent[]>(
+    saved?.presentations ?? (CLOUD ? [] : INITIAL_PRESENTATIONS)
+  );
+  const [posts, setPosts] = useState<CommunityPost[]>(saved?.posts ?? (CLOUD ? LAUNCH_POSTS : INITIAL_POSTS));
+  const [resources, setResources] = useState<any[]>(saved?.resources ?? (CLOUD ? LAUNCH_RESOURCES : INITIAL_RESOURCES));
+  const [helpRequests, setHelpRequests] = useState<any[]>(saved?.helpRequests ?? (CLOUD ? [] : INITIAL_HELP_REQUESTS));
+  const [showcaseProjects, setShowcaseProjects] = useState<ShowcaseProject[]>(
+    saved?.showcaseProjects ?? (CLOUD ? [] : INITIAL_SHOWCASE)
+  );
+  // In the database this only stores admin choices such as a member's role; the real member list
+  // is built from sign-ups (see members below).
+  const [teamRoster, setTeamRoster] = useState<any[]>(saved?.teamRoster ?? (CLOUD ? [] : TEAM_ROSTER));
+  // Everyone who has signed up (names only). Read from the profiles table.
+  const [signedUpProfiles, setSignedUpProfiles] = useState<any[] | null>(null);
+
+  // The member directory shows real sign-ups (from the profiles table), with any role an admin has set.
+  const members = useMemo(() => {
+    if (!CLOUD || !signedUpProfiles) return teamRoster;
+    return signedUpProfiles.map((p: any) => {
+      const extra = teamRoster.find((m: any) => m.id === p.id) || {};
+      const keepsRole = extra.role && extra.role !== 'Community Admin' ? extra.role : 'Member';
+      return {
+        field: '',
+        level: '',
+        partner: '',
+        mentor: '',
+        bio: '',
+        ...extra,
+        id: p.id,
+        name: p.full_name || 'Member',
+        role: p.role === 'admin' ? 'Community Admin' : keepsRole,
+      };
+    });
+  }, [signedUpProfiles, teamRoster]);
 
   // Home Check-in & Mentor Handoff state
   const [quickCheckInText, setQuickCheckInText] = useState('');
@@ -540,6 +574,22 @@ export default function App() {
     return () => clearTimeout(t);
   }, [hydrated, user?.id, onlineNonce, ...Object.values(stateMap).map(([v]) => v)]);
 
+  // Load the list of members who have signed up (names only), so the directory is real.
+  useEffect(() => {
+    if (!supabase || !user?.id || !hydrated) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id,full_name,role,created_at')
+        .order('created_at', { ascending: true });
+      if (!cancelled && !error && data) setSignedUpProfiles(data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, user?.id, activeTab]);
+
   useEffect(() => {
     if (!supabase || !user?.id || !hydrated) return;
     const ch = supabase
@@ -748,6 +798,7 @@ export default function App() {
   // ============================================================================
   // AUTH & HYDRATION GATES
   // ============================================================================
+  if (!CLOUD && !DEMO_ALLOWED) return <SetupRequired />;
   if (CLOUD && !authReady) return <LoadingScreen />;
   if (!user) return CLOUD ? <AuthScreen /> : <LoginScreen onLogin={(u) => setUser(u)} />;
   if (CLOUD && ADMIN_SITE && !user.isAdmin) return <NotAuthorized onSignOut={signOut} />;
@@ -858,6 +909,11 @@ export default function App() {
                 </div>
               )}
             </nav>
+            {!CLOUD && (
+              <div className="mx-3 mb-2 px-3 py-2 rounded-lg border border-[var(--warning-border,var(--border-hairline))] bg-[var(--warning-bg,var(--surface-subtle))] text-[11px] leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
+                <strong>Demo mode.</strong> Data stays in this browser only. Connect Supabase to go live.
+              </div>
+            )}
 
             <div className={`p-3 border-t ${borderClass} space-y-1`}>
               <button
@@ -1187,7 +1243,7 @@ export default function App() {
                         setChallenges={setChallenges}
                         helpRequests={helpRequests}
                         setHelpRequests={setHelpRequests}
-                        teamRoster={teamRoster}
+                        teamRoster={members}
                         pairingState={pairingState}
                         onNotify={notify}
                         styles={styles}
@@ -1255,7 +1311,7 @@ export default function App() {
                         subTab={activeTab as any}
                         setSubTab={(t) => setActiveTab(t)}
                         user={user}
-                        teamRoster={teamRoster}
+                        teamRoster={members}
                         setTeamRoster={setTeamRoster}
                         helpRequests={helpRequests}
                         setHelpRequests={setHelpRequests}
