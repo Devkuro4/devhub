@@ -20,6 +20,7 @@ import { HELP_LEVELS } from '../lib/independence';
 import type {
   AiHelpEvent,
   HelpLevel,
+  MentorChatMessage,
   CodeSubmission,
   CourseItem,
   MilestoneSummary,
@@ -40,6 +41,61 @@ const QUICK_PROMPTS = [
   { label: 'What should I learn next?', prompt: 'Looking at my roadmap, course, and weak spots, what is the clearest next step for me today?' },
 ];
 
+// Renders a markdown table (| a | b |) as a real table so step-by-step traces are easy to read.
+const renderTable = (lines: string[], key: string, borderClass: string, subtleBgClass: string) => {
+  const cells = (l: string) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+  const rows = lines.filter((l) => !/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l)).map(cells);
+  if (!rows.length) return null;
+  const [head, ...body] = rows;
+  return (
+    <div key={key} className={`rounded-lg border ${borderClass} overflow-x-auto`}>
+      <table className="w-full text-xs">
+        <thead className={subtleBgClass}>
+          <tr>{head.map((h, i) => <th key={i} className="text-left font-semibold px-3 py-1.5">{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {body.map((r, ri) => (
+            <tr key={ri} className={`border-t ${borderClass}`}>
+              {r.map((c, ci) => <td key={ci} className="px-3 py-1.5 font-mono">{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// Splits plain text into paragraphs and markdown tables.
+const renderTextBlocks = (text: string, keyPrefix: string, borderClass: string, subtleBgClass: string) => {
+  const lines = text.trim().split('\n');
+  const blocks: React.ReactNode[] = [];
+  let buf: string[] = [];
+  let table: string[] = [];
+  const flushText = () => {
+    if (buf.length) blocks.push(<div key={`${keyPrefix}-t${blocks.length}`} className="whitespace-pre-wrap">{buf.join('\n').trim()}</div>);
+    buf = [];
+  };
+  const flushTable = () => {
+    if (table.length) {
+      const t = renderTable(table, `${keyPrefix}-tb${blocks.length}`, borderClass, subtleBgClass);
+      if (t) blocks.push(t);
+    }
+    table = [];
+  };
+  lines.forEach((line) => {
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      flushText();
+      table.push(line);
+    } else {
+      flushTable();
+      buf.push(line);
+    }
+  });
+  flushTable();
+  flushText();
+  return blocks;
+};
+
 const FormattedMessageText = ({ text, isUser, subtleBgClass, borderClass, textPrimary }: {
   text: string;
   isUser: boolean;
@@ -47,7 +103,7 @@ const FormattedMessageText = ({ text, isUser, subtleBgClass, borderClass, textPr
   borderClass: string;
   textPrimary: string;
 }) => {
-  if (isUser || !text.includes('```')) {
+  if (isUser) {
     return <div className="whitespace-pre-wrap">{text}</div>;
   }
 
@@ -74,11 +130,7 @@ const FormattedMessageText = ({ text, isUser, subtleBgClass, borderClass, textPr
             </div>
           );
         }
-        return (
-          <div key={idx} className="whitespace-pre-wrap">
-            {seg.trim()}
-          </div>
-        );
+        return <React.Fragment key={idx}>{renderTextBlocks(seg, `s${idx}`, borderClass, subtleBgClass)}</React.Fragment>;
       })}
     </div>
   );
@@ -96,6 +148,8 @@ export const MentorSection = ({
   initialPrompt,
   onClearInitialPrompt,
   onLogHelp,
+  chat,
+  onChatChange,
   styles,
 }: {
   profile: OnboardingProfile;
@@ -109,6 +163,8 @@ export const MentorSection = ({
   initialPrompt?: string;
   onClearInitialPrompt?: () => void;
   onLogHelp?: (event: AiHelpEvent) => void;
+  chat: MentorChatMessage[];
+  onChatChange: React.Dispatch<React.SetStateAction<MentorChatMessage[]>>;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -134,15 +190,17 @@ export const MentorSection = ({
     ])
   );
 
-  const [messages, setMessages] = useState<
-    { id: string; sender: 'mentor' | 'user'; text: string; sources?: GroundedSource[] }[]
-  >([
-    {
-      id: 'm-welcome',
-      sender: 'mentor',
-      text: `Hi ${(user.name || profile.fullName || 'there').split(' ')[0]}! I’m your private AI Mentor. I can see you’re learning ${profile.field || selectedRoadmap.field} at the ${profile.skillLevel || 'Beginner'} level${activeCourse ? `, currently studying "${activeCourse.title}"` : ''}. Ask any question—no question is too basic.`,
-    },
-  ]);
+  // The conversation is saved by the app (see mentorChat in App.tsx), so it survives refreshes.
+  // The welcome message is only a greeting; it is not saved and not sent to the AI.
+  const welcome: MentorChatMessage = {
+    id: 'm-welcome',
+    sender: 'mentor',
+    text: `Hi ${(user.name || profile.fullName || 'there').split(' ')[0]}! I’m your private AI Mentor. I can see you’re learning ${profile.field || selectedRoadmap.field} at the ${profile.skillLevel || 'Beginner'} level${activeCourse ? `, currently studying \"${activeCourse.title}\"` : ''}. Ask any question, no question is too basic. I’ll take it one small step at a time and check in with you as we go.`,
+  };
+  const saved = chat;
+  const messages = [welcome, ...saved];
+  // Connection errors are shown but never saved or sent to the AI as if the mentor had said them.
+  const [errorNote, setErrorNote] = useState('');
   const [input, setInput] = useState('');
   const [useWebSearch, setUseWebSearch] = useState(true);
   // Hint ladder: the member chooses how much help they want. Starting small builds independence.
@@ -154,9 +212,9 @@ export const MentorSection = ({
     const trimmed = textToSend.trim();
     if (!trimmed || busy) return;
 
-    const userMsg = { id: `u-${Date.now()}`, sender: 'user' as const, text: trimmed };
-    const nextHistory = [...messages, userMsg];
-    setMessages(nextHistory);
+    const userMsg: MentorChatMessage = { id: `u-${Date.now()}`, sender: 'user', text: trimmed, at: new Date().toISOString() };
+    onChatChange((prev) => [...prev, userMsg].slice(-200));
+    setErrorNote('');
     setInput('');
     setBusy(true);
 
@@ -164,7 +222,7 @@ export const MentorSection = ({
       const res = await requestMentorChat(
         {
           message: trimmed,
-          history: nextHistory.slice(-8).map((m) => ({ sender: m.sender, text: m.text })),
+          history: saved.slice(-16).map((m) => ({ sender: m.sender, text: m.text })),
           useWebSearch,
           hintLevel: helpLevel,
           context: {
@@ -181,10 +239,9 @@ export const MentorSection = ({
         user.id
       );
 
-      setMessages((prev) => [
-        ...prev,
-        { id: `a-${Date.now()}`, sender: 'mentor', text: res.text, sources: res.sources },
-      ]);
+      onChatChange((prev) =>
+        [...prev, { id: `a-${Date.now()}`, sender: 'mentor' as const, text: res.text, sources: res.sources, at: new Date().toISOString() }].slice(-200)
+      );
       onLogHelp?.({
         id: `help-${Date.now()}`,
         at: new Date().toISOString(),
@@ -193,14 +250,9 @@ export const MentorSection = ({
         topic: activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'Foundations',
       });
     } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `e-${Date.now()}`,
-          sender: 'mentor',
-          text: `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'your roadmap'}), test a small 5–10 line example, or post your question in Community Discussions!`,
-        },
-      ]);
+      setErrorNote(
+        `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${activeCourse?.currentTopic || selectedRoadmap.topics[0]?.name || 'your roadmap'}), test a small 5–10 line example, or post your question in Community Discussions!`
+      );
     } finally {
       setBusy(false);
     }
@@ -215,7 +267,7 @@ export const MentorSection = ({
   }, [initialPrompt]);
 
   const level = HELP_LEVELS.find((h) => h.level === helpLevel);
-  const fresh = messages.length <= 1;
+  const fresh = saved.length === 0;
   const ctx: [string, string][] = [
     ['Field and level', `${profile.field || selectedRoadmap.field}, ${profile.skillLevel || 'Beginner'}`],
     ['Roadmap', selectedRoadmap.title],
@@ -245,6 +297,22 @@ export const MentorSection = ({
                 <div className={`text-[11px] truncate ${textSecondary}`}>Private · {ctx[3][1]}</div>
               </div>
             </div>
+            <div className="flex items-center gap-2 shrink-0">
+            {saved.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Start a new chat? This clears your saved conversation with the mentor.')) {
+                    onChatChange([]);
+                    setErrorNote('');
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium cursor-pointer ${borderClass} ${textSecondary}`}
+                title="Clear the saved conversation and start fresh"
+              >
+                New chat
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setUseWebSearch((v) => !v)}
@@ -256,6 +324,7 @@ export const MentorSection = ({
             >
               <Globe className="w-3.5 h-3.5" /> Web {useWebSearch ? 'on' : 'off'}
             </button>
+            </div>
           </div>
 
           <div ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
@@ -285,6 +354,12 @@ export const MentorSection = ({
                   </div>
                 </div>
               )
+            )}
+            {errorNote && !busy && (
+              <div className="flex gap-3 max-w-[94%]">
+                <span aria-hidden="true" className="w-[3px] rounded-full bg-[var(--spark)] shrink-0" />
+                <div className={`text-sm leading-relaxed ${textPrimary}`}>{errorNote}</div>
+              </div>
             )}
             {busy && (
               <div className={`flex items-center gap-2 text-xs ${textSecondary}`} role="status">

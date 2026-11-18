@@ -324,3 +324,11 @@ export interface AiHelpEvent {
   level: HelpLevel;
   topic: string;
 }
+
+export interface MentorChatMessage {
+  id: string;
+  sender: 'mentor' | 'user';
+  text: string;
+  at?: string; // ISO date
+  sources?: { title: string; uri: string }[];
+}

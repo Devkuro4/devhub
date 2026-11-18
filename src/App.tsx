@@ -67,6 +67,7 @@ import { MentorSection, ProfileSection } from './components/MentorAndProfile';
 import { AdminSection } from './components/AdminSection';
 import type {
   AiHelpEvent,
+  MentorChatMessage,
   CodeSubmission,
   CommunityEvent,
   CommunityPost,
@@ -135,6 +136,8 @@ export default function App() {
   const [gitLevels, setGitLevels] = useState<any[]>(saved?.gitLevels ?? INITIAL_GIT_LEVELS);
   const [aiLiteracy, setAiLiteracy] = useState<any[]>(saved?.aiLiteracy ?? INITIAL_AI_LITERACY);
   const [aiHelpLog, setAiHelpLog] = useState<AiHelpEvent[]>(saved?.aiHelpLog ?? []);
+  // Saved AI Mentor conversation (kept across refreshes and devices).
+  const [mentorChat, setMentorChat] = useState<MentorChatMessage[]>(saved?.mentorChat ?? []);
   const [dailyLogs, setDailyLogs] = useState<any[]>(
     saved?.dailyLogs ?? [
       {
@@ -232,6 +235,7 @@ export default function App() {
           gitLevels,
           aiLiteracy,
           aiHelpLog,
+          mentorChat,
           helpRequests,
           showcaseProjects,
           teamRoster,
@@ -274,6 +278,7 @@ export default function App() {
     gitLevels,
     aiLiteracy,
     aiHelpLog,
+    mentorChat,
     helpRequests,
     showcaseProjects,
     teamRoster,
@@ -330,6 +335,7 @@ export default function App() {
     gitLevels: [gitLevels, setGitLevels],
     aiLiteracy: [aiLiteracy, setAiLiteracy],
     aiHelpLog: [aiHelpLog, setAiHelpLog],
+    mentorChat: [mentorChat, setMentorChat],
     dailyLogs: [dailyLogs, setDailyLogs],
     weeklyReports: [weeklyReports, setWeeklyReports],
     savedPostIds: [savedPostIds, setSavedPostIds],
@@ -1226,6 +1232,8 @@ export default function App() {
                         initialPrompt={mentorInitialPrompt}
                         onClearInitialPrompt={() => setMentorInitialPrompt('')}
                         onLogHelp={(event) => setAiHelpLog((prev) => [event, ...prev].slice(0, 500))}
+                        chat={mentorChat}
+                        onChatChange={setMentorChat}
                         styles={styles}
                       />
                     )}
