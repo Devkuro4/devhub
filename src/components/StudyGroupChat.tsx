@@ -14,7 +14,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { fetchChatHistory, fetchChatRooms, getChatWsUrl } from '../lib/aiClient';
+import { fetchChatHistory, fetchChatRooms, getAccessToken, getChatWsUrl } from '../lib/aiClient';
 import type { OnboardingProfile, StudyChatMessage, StudyChatRoom, UserSession } from '../types';
 
 export interface OnlinePeer {
@@ -149,7 +149,7 @@ export const StudyChatProvider: React.FC<{
       }
       wsRef.current = ws;
 
-      ws.onopen = () => {
+      ws.onopen = async () => {
         if (cancelled) {
           ws.close();
           return;
@@ -158,9 +158,13 @@ export const StudyChatProvider: React.FC<{
         setConnectionStatus('connected');
         const currentUser = userRef.current.user;
         const currentProfile = userRef.current.profile;
+        // The server learns who this is from the login token, not from the fields below.
+        const token = await getAccessToken().catch(() => '');
+        if (cancelled || ws.readyState !== WebSocket.OPEN) return;
         ws.send(
           JSON.stringify({
             type: 'chat:join',
+            token,
             userId: currentUser?.id || currentUser?.email || 'member',
             userName: currentUser?.name || currentProfile.fullName || 'Member',
             userField: currentProfile.field || '',
@@ -265,13 +269,16 @@ export const StudyChatProvider: React.FC<{
   }, [user?.id, user?.email, mergeMessages]);
 
   const setActiveRoomId = useCallback(
-    (roomId: string) => {
+    async (roomId: string) => {
       setActiveRoomIdState(roomId);
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
+        const token = await getAccessToken().catch(() => '');
+        if (ws.readyState !== WebSocket.OPEN) return;
         ws.send(
           JSON.stringify({
             type: 'chat:join',
+            token,
             userId: user?.id || user?.email || 'member',
             userName: user?.name || profile.fullName || 'Member',
             userField: profile.field || '',

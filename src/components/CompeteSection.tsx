@@ -181,23 +181,6 @@ export const CompeteSection = ({
       {/* ------------------------------------------------ OVERVIEW */}
       {subTab === 'compete' && (
         <div className="space-y-6">
-          {fit.items.length > 0 && (
-            <section aria-label="Challenges for your level" className={`${cardClass} p-5 space-y-3`}>
-              <h3 className={`font-semibold ${textPrimary}`}>Challenges for your level</h3>
-              <ul className="divide-y divide-[var(--border-hairline)]">
-                {fit.items.map((c: any) => (
-                  <li key={c.id} className="py-2.5 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className={`text-sm font-medium truncate ${textPrimary}`}>{c.title}</p>
-                      <p className={`text-xs ${textSecondary}`}>{c.difficulty}</p>
-                    </div>
-                    <button type="button" onClick={() => onNavigate('challenges')} className="min-h-11 px-3 text-sm text-[var(--accent-700)] hover:underline cursor-pointer shrink-0">Try it</button>
-                  </li>
-                ))}
-              </ul>
-              <p className={`text-xs ${textSecondary}`}>Competition should help you grow. These match your level, and harder ones unlock as your results improve.</p>
-            </section>
-          )}
           <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-7 sm:px-10 sm:py-10">
             <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
             <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
@@ -255,6 +238,24 @@ export const CompeteSection = ({
               );
             })}
           </div>
+
+          {fit.items.length > 0 && (
+            <section aria-label="Challenges for your level" className={`${cardClass} p-5 space-y-3`}>
+              <h3 className={`font-semibold ${textPrimary}`}>Challenges for your level</h3>
+              <ul className="divide-y divide-[var(--border-hairline)]">
+                {fit.items.map((c: any) => (
+                  <li key={c.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium truncate ${textPrimary}`}>{c.title}</p>
+                      <p className={`text-xs ${textSecondary}`}>{c.difficulty}</p>
+                    </div>
+                    <button type="button" onClick={() => onNavigate('challenges')} className="min-h-11 px-3 text-sm text-[var(--accent-700)] hover:underline cursor-pointer shrink-0">Try it</button>
+                  </li>
+                ))}
+              </ul>
+              <p className={`text-xs ${textSecondary}`}>Competition should help you grow. These match your level, and harder ones unlock as your results improve.</p>
+            </section>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             <section className={`${cardClass} p-6 space-y-4`}>

@@ -48,12 +48,69 @@ export const AUTH_ENABLED = Boolean(
   SUPABASE_URL && SUPABASE_ANON && !SUPABASE_URL.includes('YOUR-PROJECT')
 );
 const IS_PROD = process.env.NODE_ENV === 'production';
+// True when the server may run without real accounts (local dev, or a deliberately public demo).
+export const DEMO_SERVER_ALLOWED = !AUTH_ENABLED && (!IS_PROD || process.env.ALLOW_DEMO === 'true');
 
 function readBearer(req: Request): string {
   const header = req.headers.authorization;
   if (typeof header !== 'string') return '';
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : '';
+}
+
+export interface VerifiedUser {
+  userId: string;
+  isAdmin: boolean;
+  name: string;
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  user?: VerifiedUser;
+  status?: number;
+  error?: string;
+}
+
+/**
+ * Checks a Supabase login token and returns who it belongs to. Shared by the HTTP routes
+ * (requireUser) and the study-chat websocket, so both trust the same source of identity.
+ */
+export async function verifyAccessToken(token: string): Promise<VerifyResult> {
+  if (!token) return { ok: false, status: 401, error: 'Please sign in to use this feature.' };
+  try {
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data, error } = await client.auth.getUser(token);
+    if (error && (error.name === 'AuthRetryableFetchError' || (error.status && error.status >= 500))) {
+      console.warn('[auth] could not reach Supabase:', error.message);
+      return { ok: false, status: 503, error: `Could not reach Supabase to check your login (${error.message}). Check VITE_SUPABASE_URL on the server.` };
+    }
+    if (error || !data?.user) {
+      console.warn('[auth] login token rejected:', error?.message || 'no user returned');
+      return { ok: false, status: 401, error: 'Your session has expired. Please sign in again.' };
+    }
+
+    // Role and name are read with the member's own token, so the database rules (RLS) still apply.
+    const { data: profile } = await client
+      .from('profiles')
+      .select('role,full_name')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    return {
+      ok: true,
+      user: {
+        userId: data.user.id,
+        isAdmin: profile?.role === 'admin',
+        name: String(profile?.full_name || data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Member'),
+      },
+    };
+  } catch {
+    return { ok: false, status: 503, error: 'Could not verify your session right now. Try again in a moment.' };
+  }
 }
 
 export async function requireUser(req: Request, res: Response, next: NextFunction) {
@@ -69,44 +126,16 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
     }
     const demoId = req.headers['x-devhub-user'];
     res.locals.userId = typeof demoId === 'string' && demoId.trim() ? demoId.trim() : 'local-member';
+    // Demo-only: nobody is admin on a deliberately public demo (ALLOW_DEMO) in production.
     res.locals.isAdmin = !IS_PROD;
     return next();
   }
 
-  const token = readBearer(req);
-  if (!token) {
-    return res.status(401).json({ error: 'Please sign in to use the AI features.' });
-  }
-
-  try {
-    const client = createClient(SUPABASE_URL, SUPABASE_ANON, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    const { data, error } = await client.auth.getUser(token);
-    if (error && (error.name === 'AuthRetryableFetchError' || (error.status && error.status >= 500))) {
-      console.warn('[auth] could not reach Supabase:', error.message);
-      return res.status(503).json({ error: `Could not reach Supabase to check your login (${error.message}). Check VITE_SUPABASE_URL on the server.` });
-    }
-    if (error || !data?.user) {
-      console.warn('[auth] login token rejected:', error?.message || 'no user returned', '| checking against', SUPABASE_URL);
-      return res.status(401).json({ error: `Your session has expired. Please sign in again. (Supabase says: ${error?.message || 'no user'})` });
-    }
-
-    // Role is read with the member's own token, so the database rules (RLS) still apply.
-    const { data: profile } = await client
-      .from('profiles')
-      .select('role')
-      .eq('id', data.user.id)
-      .maybeSingle();
-
-    res.locals.userId = data.user.id;
-    res.locals.isAdmin = profile?.role === 'admin';
-    return next();
-  } catch {
-    return res.status(503).json({ error: 'Could not verify your session right now. Try again in a moment.' });
-  }
+  const result = await verifyAccessToken(readBearer(req));
+  if (!result.ok || !result.user) return res.status(result.status || 401).json({ error: result.error || 'Please sign in.' });
+  res.locals.userId = result.user.userId;
+  res.locals.isAdmin = result.user.isAdmin;
+  return next();
 }
 
 export function requireAdmin(_req: Request, res: Response, next: NextFunction) {

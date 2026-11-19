@@ -58,7 +58,7 @@ export const AdminSection = ({
   setQuizzes: (q: QuizItem[]) => void;
   weeklyActivities: any[];
   setWeeklyActivities: (w: any[]) => void;
-  onNotify: (msg: string) => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -97,7 +97,7 @@ export const AdminSection = ({
       const data = await fetchAiStatus();
       setAiStatus(data);
     } catch (err: any) {
-      onNotify(err?.message || 'Could not load AI status.');
+      onNotify(err?.message || 'Could not load AI status.', 'error');
     } finally {
       setAiLoading(false);
     }
@@ -115,7 +115,7 @@ export const AdminSection = ({
       setAiStatus(updated);
       onNotify('AI settings updated.');
     } catch (err: any) {
-      onNotify(err?.message || 'Failed to update AI settings.');
+      onNotify(err?.message || 'Failed to update AI settings.', 'error');
     }
   };
 

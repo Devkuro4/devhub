@@ -11,6 +11,7 @@ import {
   generateWeeklyProject,
   generateWeeklySummary,
   getAiStatus,
+  isAiConfigured,
   mentorChatReply,
   reviewCodeSubmission,
   reviewProjectSubmission,
@@ -29,7 +30,18 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
+app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
+
+// Basic browser hardening. No CSP here on purpose: the app loads Vite assets, YouTube embeds and
+// Supabase, and a wrong CSP would break the site. These headers are safe for all of them.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  if (isProd) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
+  next();
+});
 
 // Cross-origin access, only needed when the website is hosted somewhere else than this server
 // (for example the site on Vercel and this server on Railway). Set ALLOWED_ORIGINS to the site's
@@ -54,7 +66,7 @@ app.use('/api', (req, res, next) => {
 
 // Lets hosts (Render, Railway...) check that the server is up.
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE });
+  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GROQ_API_KEY)' });
 });
 
 // The verified user id is set by requireUser (see server/auth.ts), never by the browser.
@@ -117,7 +129,8 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
-app.post('/api/course-metadata', async (req, res) => {
+// Needs a signed-in member: this route fetches pages from the internet on the server's behalf.
+app.post('/api/course-metadata', requireUser, async (req, res) => {
   const url = String(req.body?.url || '').trim();
   if (!url) {
     return res.json({ accessible: false, note: 'No URL provided.' });
@@ -125,12 +138,18 @@ app.post('/api/course-metadata', async (req, res) => {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return res.json({ accessible: false, note: 'Only web links (http or https) can be checked.' });
+    }
+    // Exact host matching. A plain "includes" would accept hosts like youtube.com.evil.example,
+    // letting the server be pointed at any address.
+    const onDomain = (domain: string) => host === domain || host.endsWith(`.${domain}`);
 
     // 1. YouTube videos & playlists
-    if (host.includes('youtube.com') || host.includes('youtu.be')) {
+    if (onDomain('youtube.com') || onDomain('youtu.be')) {
       let videoId = '';
       const playlistId = parsed.searchParams.get('list') || '';
-      if (host.includes('youtu.be')) {
+      if (onDomain('youtu.be')) {
         videoId = parsed.pathname.split('/').filter(Boolean)[0] || '';
       } else if (parsed.pathname.startsWith('/shorts/')) {
         videoId = parsed.pathname.split('/')[2] || '';
@@ -189,8 +208,8 @@ app.post('/api/course-metadata', async (req, res) => {
     }
 
     // 2. Udemy / Coursera / roadmap.sh public page metadata
-    const isUdemy = host.includes('udemy.com');
-    const isCoursera = host.includes('coursera.org');
+    const isUdemy = onDomain('udemy.com');
+    const isCoursera = onDomain('coursera.org');
     if (isUdemy || isCoursera) {
       const platform = isUdemy ? 'Udemy' : 'Coursera';
       const slugPart = parsed.pathname.split('/').filter(Boolean)[1] || parsed.pathname.split('/').filter(Boolean)[0] || '';
@@ -200,6 +219,7 @@ app.post('/api/course-metadata', async (req, res) => {
       try {
         const pageRes = await fetch(url, {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DevHubBot/1.0)', Accept: 'text/html' },
+          redirect: 'error', // never follow a redirect to some other address
           signal: controller.signal,
         });
         clearTimeout(timer);
@@ -247,6 +267,8 @@ app.post('/api/course-metadata', async (req, res) => {
 // ============================================================================
 // REAL-TIME STUDY GROUP CHAT HISTORY & ROOMS
 // ============================================================================
+// Chat rooms and history are for signed-in members only.
+app.use('/api/chat', requireUser);
 app.get('/api/chat/rooms', (_req, res) => {
   res.json({ rooms: listChatRooms() });
 });
@@ -376,6 +398,17 @@ app.post(
   }
 );
 
+// Bad JSON or oversized bodies get a clear JSON error instead of an HTML stack trace.
+app.use('/api', (err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = err?.status || err?.statusCode || 500;
+  res.status(status).json({ error: status === 413 ? 'That upload is too large.' : status === 400 ? 'The request could not be read.' : 'Something went wrong on the server.' });
+});
+
+// Unknown /api paths must not fall through to the web page.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Not found.' });
+});
+
 // ============================================================================
 // VITE DEV MIDDLEWARE OR PRODUCTION STATIC ASSETS
 // ============================================================================
@@ -396,7 +429,7 @@ async function startServer() {
   }
 
   const server = http.createServer(app);
-  setupChatServer(server);
+  setupChatServer(server, allowedOrigins);
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Dev Hub server listening on http://0.0.0.0:${PORT}`);
   });

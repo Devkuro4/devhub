@@ -17,6 +17,13 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** The member's current login token, for the chat websocket (it cannot send headers). Empty in demo mode. */
+export async function getAccessToken(): Promise<string> {
+  if (!supabase) return '';
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || '';
+}
+
 async function postJson<T>(url: string, body: unknown, userId?: string): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, {
     method: 'POST',
@@ -73,13 +80,13 @@ export async function inspectCourseUrl(url: string) {
 }
 
 export async function fetchChatRooms() {
-  const res = await fetch(`${API_BASE}/api/chat/rooms`);
+  const res = await fetch(`${API_BASE}/api/chat/rooms`, { headers: await authHeaders() });
   if (!res.ok) throw new Error('Could not load study chat rooms.');
   return res.json();
 }
 
 export async function fetchChatHistory(roomId: string) {
-  const res = await fetch(`${API_BASE}/api/chat/history?roomId=${encodeURIComponent(roomId)}`);
+  const res = await fetch(`${API_BASE}/api/chat/history?roomId=${encodeURIComponent(roomId)}`, { headers: await authHeaders() });
   if (!res.ok) throw new Error('Could not load study chat history.');
   return res.json();
 }

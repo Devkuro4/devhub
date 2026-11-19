@@ -61,6 +61,12 @@ create policy "profiles update own" on public.profiles for update to authenticat
 revoke update on public.profiles from authenticated;
 grant update (full_name) on public.profiles to authenticated;
 
+-- Members can see each other's names, but not each other's email addresses.
+-- (Admins find emails in Supabase, Authentication, Users. The app never reads the email column.)
+revoke select on public.profiles from authenticated;
+grant select (id, full_name, role, created_at) on public.profiles to authenticated;
+revoke all on public.profiles from anon;
+
 -- member_state: private to the owner, readable by admins
 drop policy if exists "own state read" on public.member_state;
 create policy "own state read" on public.member_state for select to authenticated

@@ -340,3 +340,27 @@ html, body { overflow-x: clip; }
 @media (hover: none) {
   .studio-card-interactive:hover, .soft-card-interactive:hover { box-shadow: 0 2px 16px rgb(10 10 10 / 6%); }
 }
+
+/* ---------- Dev Hub consistency pass ---------- */
+
+/* Sidebar on short screens (laptops ~768px tall): keep every destination reachable.
+   Taller screens are untouched. */
+.sb-nav { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); }
+@media (min-width: 1024px) and (max-height: 840px) {
+  .sb-logo { padding-top: 1.5rem; padding-bottom: 1rem; }
+  .sb-nav button { min-height: 2.5rem; }
+  .sb-study { display: none; }
+  .sb-demo { padding-block: 0.5rem; margin-bottom: 0.5rem; }
+  .sb-demo-detail { display: none; }
+  .sb-foot { padding-bottom: 1rem; }
+  .sb-foot button { min-height: 2.25rem; }
+}
+
+/* Mobile bottom clearance leaves room for the Study Chat bubble so it never covers the last row */
+.main-pad-mobile { padding-bottom: calc(var(--mobile-nav-h) + var(--safe-bottom) + 4.5rem); }
+@media (min-width: 1024px) { .main-pad-mobile { padding-bottom: 0; } }
+
+/* Tab rows that overflow fade the edge with hidden tabs */
+[role=tablist][data-fade-end] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+[role=tablist][data-fade-start] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+[role=tablist][data-fade-start][data-fade-end] { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }

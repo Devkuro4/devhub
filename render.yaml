@@ -11,7 +11,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      - key: GROQ_API_KEY
+      - key: GEMINI_API_KEY   # primary AI engine; set this or GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEY     # optional fallback AI engine
         sync: false
       - key: VITE_SUPABASE_URL
         sync: false

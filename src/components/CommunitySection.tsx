@@ -64,6 +64,14 @@ const PostBody = ({ text, className }: { text: string; className: string }) => {
   );
 };
 
+// Switching tabs remounts this section, which would drop the modal state. Buttons on other Community
+// tabs set this flag so the composer is already open when the Discussions tab appears.
+let openComposerOnMount = false;
+const openComposerOnDiscussions = (setSubTab: (t: CommunitySubTab) => void) => {
+  openComposerOnMount = true;
+  setSubTab('community');
+};
+
 export const CommunitySection = ({
   subTab,
   setSubTab,
@@ -106,7 +114,7 @@ export const CommunitySection = ({
   setHelpRequests: (h: any[]) => void;
   teamRoster: any[];
   pairingState: any;
-  onNotify: (msg: string) => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -120,6 +128,10 @@ export const CommunitySection = ({
   };
 }) => {
   const { cardClass, borderClass, subtleBgClass, textPrimary, textSecondary, inputClass, btnPrimary, btnSecondary } = styles;
+
+  useEffect(() => {
+    openComposerOnMount = false;
+  }, []);
 
   const postDraftKey = `devhub_draft_${user.id || 'local'}_community_post`;
   const helpDraftKey = `devhub_draft_${user.id || 'local'}_community_help`;
@@ -137,7 +149,7 @@ export const CommunitySection = ({
   // Discussions state
   const [postFilter, setPostFilter] = useState('All');
   const [showPostModal, setShowPostModal] = useState(
-    Boolean(savedPostDraft && (savedPostDraft.postTitle || savedPostDraft.postBody))
+    openComposerOnMount || Boolean(savedPostDraft && (savedPostDraft.postTitle || savedPostDraft.postBody))
   );
   const [postCat, setPostCat] = useState(savedPostDraft?.postCat || 'Question');
   const [postTitle, setPostTitle] = useState(savedPostDraft?.postTitle || '');
@@ -374,7 +386,7 @@ export const CommunitySection = ({
       );
       setWebSearchResult({ query: res.query, answer: res.answer, sources: res.sources || [] });
     } catch (err: any) {
-      onNotify(err?.message || 'Could not run the web search right now.');
+      onNotify(err?.message || 'Could not run the web search right now.', 'error');
     } finally {
       setWebSearchBusy(false);
     }
@@ -605,8 +617,15 @@ export const CommunitySection = ({
     'w-full px-3.5 py-2.5 text-base rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)] focus:outline-none focus:border-[var(--accent-600)] transition-colors';
 
   const headerAction =
-    subTab === 'community' ? (
-      <button type="button" onClick={() => setShowPostModal(true)} className={btnPrimary}>
+    subTab === 'community' || subTab === 'community-home' ? (
+      <button
+        type="button"
+        onClick={() => {
+          if (subTab === 'community') setShowPostModal(true);
+          else openComposerOnDiscussions(setSubTab);
+        }}
+        className={btnPrimary}
+      >
         <Plus className="w-3.5 h-3.5" /> Start a Discussion
       </button>
     ) : subTab === 'resources' ? (
@@ -661,17 +680,14 @@ export const CommunitySection = ({
             <section className="lg:col-span-8 space-y-4 min-w-0">
               <div className="flex items-end justify-between">
                 <h2 className={`text-xl ${textPrimary}`}>Recent discussions</h2>
-                <button type="button" onClick={() => setSubTab('community')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Join in</button>
+                <button type="button" onClick={() => setSubTab('community')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">View all discussions</button>
               </div>
               {posts.length === 0 && (
                 <EmptyState
                   title="No discussions yet"
                   description="Be the first to ask a question or share a small win."
                   actionLabel="Start a Discussion"
-                  onAction={() => {
-                    setSubTab('community');
-                    setShowPostModal(true);
-                  }}
+                  onAction={() => openComposerOnDiscussions(setSubTab)}
                 />
               )}
               <ul className="space-y-3 sm:space-y-4">
@@ -1572,11 +1588,11 @@ export const CommunitySection = ({
             )}
 
             <div className={`${cardClass} p-6 space-y-4`}>
-              <div className="flex items-center justify-between gap-2">
-                <h2 className={`text-lg flex items-center gap-2 ${textPrimary}`}>
-                  <Users className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" /> Member directory
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <h2 className={`text-lg flex items-center gap-2 whitespace-nowrap ${textPrimary}`}>
+                  <Users className="w-4 h-4 shrink-0 text-[var(--accent-600)]" aria-hidden="true" /> Member directory
                 </h2>
-                <span className={`text-sm tabular-nums ${textSecondary}`}>{teamRoster.length} members</span>
+                <span className={`text-sm tabular-nums whitespace-nowrap shrink-0 ${textSecondary}`}>{teamRoster.length} members</span>
               </div>
               <p className={`text-sm ${textSecondary}`}>Everyone here is learning and helping each other grow.</p>
               <ul className={`divide-y ${borderClass}`}>

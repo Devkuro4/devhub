@@ -723,6 +723,14 @@ export const LAUNCH_POSTS: CommunityPost[] = [
   },
 ];
 
+// Starter challenges for a real team: same learning content, but nobody has started or completed them.
+export const LAUNCH_CHALLENGES = INITIAL_CHALLENGES.map((c) => ({
+  ...c,
+  status: 'Not Started',
+  submission: null,
+  deadline: 'Self-Paced',
+}));
+
 export const LAUNCH_WEEKLY_ACTIVITIES = INITIAL_WEEKLY_ACTIVITIES.map((a) => ({ ...a, completed: false }));
 
 export const LAUNCH_RESOURCES = INITIAL_RESOURCES.map((r) => ({ ...r, addedBy: 'Dev Hub' }));
@@ -771,6 +779,9 @@ export const SHARED_KEYS = [
   'teamRoster',
   'leaderboard',
 ];
+
+// Sections only admins may change (kept in step with the rules in supabase/schema.sql).
+export const ADMIN_ONLY_KEYS = ['quizzes', 'weeklyActivities', 'presentations', 'resources', 'teamRoster'];
 
 export function blankPersonal(name = '', hk: any = { checklist: [] }) {
   return {

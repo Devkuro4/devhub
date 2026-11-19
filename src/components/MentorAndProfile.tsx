@@ -685,7 +685,7 @@ export const ProfileSection = ({
   setProfile: (p: OnboardingProfile) => void;
   milestones: MilestoneSummary;
   onRestartOnboarding: () => void;
-  onNotify: (msg: string) => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
     borderClass: string;

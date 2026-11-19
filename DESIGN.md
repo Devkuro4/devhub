@@ -59,3 +59,13 @@ Black, white and one blue. Blue marks what you can act on and what is progress: 
 - Composer: Enter sends on desktop, Shift+Enter adds a line; on touch devices Enter adds a line and the Send button sends. Drafts are kept per room. Limits: 2000 characters per message, 3000 per code snippet (same as the server).
 - Server (`server/chatServer.ts`): typing events, 6 messages per 10 s per connection, ping/pong cleanup of dead connections. History is still in memory only (cleared on restart).
 - Discussions: search, sort (Newest / Most helpful / Unanswered), one "Helpful" per person (stored in this browser), long posts collapse with Read more, Enter submits replies.
+
+## Consistency pass (shell, states, small screens)
+- Sidebar: on screens shorter than 840px the footer compacts (study group hidden, one-line demo notice, tighter rows) so every destination stays reachable. The nav fades at the bottom when it scrolls (`.sb-*` classes in `index.css`).
+- Toasts: `onNotify(message, 'error')` shows an alert icon, a red edge and stays about 6.5 seconds. Without the second argument it is a success toast, as before. Use `'error'` for anything that failed.
+- Tab rows (`SectionTabs`) fade the edge that has hidden tabs, so a clipped tab reads as scrollable.
+- Mobile menu: the active item matches the desktop sidebar (blue text, quiet tint), not a solid fill.
+- Content clears the Study Chat bubble: extra bottom space on desktop and mobile.
+- Compete overview reads status first (level, streak, XP), then challenges, then how XP works.
+- Community: Home has the "Start a Discussion" action. The section remounts on tab change, so buttons on other tabs use `openComposerOnDiscussions` to open the composer.
+- Showcase thumbnails stay on neutral and blue tints (no amber or green).

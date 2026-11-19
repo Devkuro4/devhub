@@ -28,7 +28,7 @@ finish the steps below.
 
 | Name | Value |
 |---|---|
-| `GROQ_API_KEY` | your Groq key (server only, never prefix with `VITE_`) |
+| `GEMINI_API_KEY` or `GROQ_API_KEY` | your AI key (server only, never prefix with `VITE_`). Set at least one |
 | `VITE_SUPABASE_URL` | the Project URL |
 | `VITE_SUPABASE_ANON_KEY` | the anon / publishable key |
 | `NODE_VERSION` | `22` |
@@ -54,13 +54,12 @@ update public.profiles set role = 'admin' where email = 'you@example.com';
 
 - [ ] Sign out and back in. You now see the **Admin Console** button.
 
-> **If you already signed in as admin on the live site before this update**, the community may contain pretend people and
-> posts from the old sample data. Clear them once in the SQL Editor, then sign in as admin again:
+> **If this site was already live before this update**, the community may contain pretend people and posts from the old
+> sample data. Run `supabase/cleanup_sample_data.sql` once in the SQL Editor. It removes only the sample items and leaves
+> everything real members wrote (it is safe to run again). Do **not** delete whole rows from `shared_state`: that would
+> also erase your members' real posts, requests and resources.
 >
-> ```sql
-> delete from public.shared_state
-> where key in ('posts','helpRequests','showcaseProjects','presentations','projects','teamRoster','weeklyActivities','resources');
-> ```
+> Also re-run `supabase/schema.sql` once: it now hides members' email addresses from each other.
 
 ## 5. Decide who can join, before you share the link
 

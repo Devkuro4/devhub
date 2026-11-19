@@ -76,7 +76,7 @@ export const ProjectsSection = ({
   aiLiteracy: any[];
   setAiLiteracy: (a: any[]) => void;
   onAskMentor: (prompt: string) => void;
-  onNotify: (msg: string) => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -179,7 +179,7 @@ export const ProjectsSection = ({
       setShowHints(false);
       onNotify(`Generated weekly project: ${item.title}`);
     } catch (err: any) {
-      onNotify(err?.message || 'Could not generate a weekly project right now.');
+      onNotify(err?.message || 'Could not generate a weekly project right now.', 'error');
     } finally {
       setGenBusy(false);
     }
@@ -852,7 +852,7 @@ export const ProjectsSection = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {[...showcaseProjects].sort((x, y) => y.likes - x.likes).map((item, idx) => {
-                const covers = ['var(--accent-100)', 'var(--warning-bg)', 'var(--success-bg)', 'var(--surface-subtle)'];
+                const covers = ['var(--accent-100)', 'var(--surface-subtle)', 'var(--accent-50)', 'var(--surface-subtle)'];
                 return (
                   <article key={item.id} className={`${cardClass} overflow-hidden flex flex-col ${idx === 0 ? 'md:col-span-2 xl:col-span-2' : ''}`}>
                     <div className="h-28 px-5 py-4 flex items-end justify-between gap-3 border-b border-[var(--border-hairline)]" style={{ background: covers[idx % covers.length] }}>

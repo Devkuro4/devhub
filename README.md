@@ -26,7 +26,7 @@ an AI mentor that guides instead of doing the thinking, real projects, and a com
 
 ## 2. Run locally
 
-    cp .env.example .env     # paste GROQ_API_KEY and the two Supabase values
+    cp .env.example .env     # paste GEMINI_API_KEY (or GROQ_API_KEY) and the two Supabase values
     npm install
     npm run dev              # http://localhost:3000
 
@@ -41,10 +41,10 @@ On Render:
 
 1. Push this folder to GitHub.
 2. Render, New, Blueprint, pick the repo. It reads `render.yaml`.
-3. Fill in the three secrets: `GROQ_API_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+3. Fill in the secrets: `GEMINI_API_KEY` (or `GROQ_API_KEY`), `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 4. After it deploys, copy the live URL into Supabase, Authentication, URL Configuration (Site URL and Redirect URLs).
 
-On Railway: New Project, Deploy from GitHub repo, pick the repo, add the same three variables **before** the first
+On Railway: New Project, Deploy from GitHub repo, pick the repo, add the same variables **before** the first
 deploy, then Settings, Networking, Generate Domain. Optional: Settings, Deploy, Healthcheck Path = `/api/health`.
 Railway detects Node and runs `npm run build` then `npm start` by itself.
 
@@ -60,6 +60,10 @@ Vercel only hosts the website, so the AI server runs separately on Railway.
 2. In Vercel, Settings, Environment Variables: add `VITE_API_URL` = your Render/Railway address (no trailing slash), plus `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then redeploy.
 3. In Supabase, keep your Vercel address as the Site URL.
 
+## 3b. Already live? Clear old sample data
+
+Run `supabase/cleanup_sample_data.sql` once in the SQL Editor. It removes only the pretend sample people and posts, never real members' content.
+
 ## 4. Make yourself admin
 
 Sign up on the live site, then run in the Supabase SQL Editor:
@@ -74,7 +78,9 @@ Sign out and back in. You will now see the Admin screens. Roles are enforced by 
   admin role from there, never from the browser (`server/auth.ts`).
 - AI status, settings and test routes are admin-only.
 - Per-member daily AI limits are enforced on the verified user id.
-- The Groq key lives only on the server. Never prefix it with `VITE_`.
+- The AI keys (Gemini, Groq) live only on the server. Never prefix them with `VITE_`.
+- Study chat and course-link checks also require a signed-in member; the chat identity comes from the verified account, not the browser.
+- Members can see each other's names but not email addresses (column rules in `supabase/schema.sql`).
 - Real data security comes from the database rules in `supabase/schema.sql`.
 
 ## How data is stored

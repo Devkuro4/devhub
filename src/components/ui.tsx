@@ -79,10 +79,30 @@ export const SectionTabs = <T extends string>({
     if (!list || !el || list.scrollWidth <= list.clientWidth) return;
     list.scrollTo({ left: el.offsetLeft - (list.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
   }, [active]);
+  // Fade the edge that has more tabs hidden past it, so a clipped tab reads as "scroll" not "broken"
+  const [edges, setEdges] = useState({ start: false, end: false });
+  useEffect(() => {
+    const list = tabListRef.current;
+    if (!list) return;
+    const measure = () =>
+      setEdges({
+        start: list.scrollLeft > 4,
+        end: list.scrollLeft + list.clientWidth < list.scrollWidth - 4,
+      });
+    measure();
+    list.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => {
+      list.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+  }, [tabs.length]);
   return (
     <div
       role="tablist"
       ref={tabListRef}
+      data-fade-start={edges.start || undefined}
+      data-fade-end={edges.end || undefined}
       className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)] snap-x overscroll-x-contain"
     >
       {tabs.map((tab) => {

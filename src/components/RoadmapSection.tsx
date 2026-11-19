@@ -55,7 +55,7 @@ export const RoadmapSection = ({
   setRoadmapProgress: (p: Record<string, RoadmapTopicProgress>) => void;
   userId?: string;
   onAskMentor: (topic: string) => void;
-  onNotify: (msg: string) => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -173,7 +173,7 @@ export const RoadmapSection = ({
       setExpandedStages({ '0': true });
       onNotify(`Created personalized roadmap: ${created.title}`);
     } catch (err: any) {
-      onNotify(err?.message || 'AI roadmap generator could not run right now. Add custom topics manually below.');
+      onNotify(err?.message || 'AI roadmap generator could not run right now. Add custom topics manually below.', 'error');
     } finally {
       setAiBusy(false);
     }

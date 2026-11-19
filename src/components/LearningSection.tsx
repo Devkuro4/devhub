@@ -102,7 +102,7 @@ export const LearningSection = ({
   weeklyReports: any[];
   setWeeklyReports: (r: any[]) => void;
   onAskMentor: (prompt: string) => void;
-  onNotify: (msg: string) => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
     borderClass: string;
@@ -202,7 +202,7 @@ export const LearningSection = ({
       setDailyStage(2);
       onNotify('Generated a fresh practice exercise matched to your level.');
     } catch (err: any) {
-      onNotify(err?.message || 'Could not generate a new exercise right now.');
+      onNotify(err?.message || 'Could not generate a new exercise right now.', 'error');
     } finally {
       setExerciseBusy(false);
     }
@@ -575,7 +575,7 @@ export const LearningSection = ({
       }
       onNotify(`Created learning plan and roadmap gap check for "${course.title}".`);
     } catch (err: any) {
-      onNotify(err?.message || 'Could not generate AI learning plan right now.');
+      onNotify(err?.message || 'Could not generate AI learning plan right now.', 'error');
     } finally {
       setPlanBusyId(null);
     }
@@ -652,7 +652,7 @@ export const LearningSection = ({
       setQuizzes([newQuiz, ...quizzes]);
       onNotify(`Created ${quizGen.scope} on "${topic}".`);
     } catch (err: any) {
-      onNotify(err?.message || 'AI quiz generator is unavailable right now — try one of the starter quizzes below.');
+      onNotify(err?.message || 'AI quiz generator is unavailable right now — try one of the starter quizzes below.', 'error');
     } finally {
       setQuizBusy(false);
     }
@@ -765,7 +765,7 @@ export const LearningSection = ({
       setAiWeeklyReport(data);
       onNotify('Weekly learning report generated!');
     } catch (err: any) {
-      onNotify(err?.message || 'Could not generate AI summary right now.');
+      onNotify(err?.message || 'Could not generate AI summary right now.', 'error');
     } finally {
       setSummaryBusy(false);
     }
@@ -2307,9 +2307,15 @@ export const LearningSection = ({
                   <p className={`p-3 rounded-lg ${subtleBgClass} font-medium ${textPrimary}`}>{aiWeeklyReport.encouragementNote}</p>
                 </div>
               ) : (
-                <p className={`text-xs leading-relaxed ${textSecondary}`}>
-                  Click “Generate Weekly Report” above for an encouraging summary of what you learned, built, understood well, and should aim for next.
-                </p>
+                <div className="space-y-3">
+                  <p className={`text-sm leading-relaxed ${textSecondary}`}>
+                    No report yet. Generate a summary of what you learned, built and understood well this week, plus what to aim for next.
+                  </p>
+                  <button type="button" disabled={summaryBusy} onClick={handleGenerateWeeklySummary} className={btnSecondary}>
+                    {summaryBusy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Sparkles className="w-4 h-4" aria-hidden="true" />}
+                    {summaryBusy ? 'Generating…' : 'Generate report'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -2334,10 +2340,10 @@ export const LearningSection = ({
               }}
               className="grid grid-cols-1 md:grid-cols-2 gap-3"
             >
-              <input type="text" required placeholder="What did you learn or practice this week? *" value={reportDraft.learned} onChange={(e) => setReportDraft({ ...reportDraft, learned: e.target.value })} className={inputClass} />
-              <input type="text" placeholder="Anything still unclear? (optional)" value={reportDraft.struggled} onChange={(e) => setReportDraft({ ...reportDraft, struggled: e.target.value })} className={inputClass} />
-              <input type="text" placeholder="One small goal for next week (optional)" value={reportDraft.nextWeekGoal} onChange={(e) => setReportDraft({ ...reportDraft, nextWeekGoal: e.target.value })} className={inputClass} />
-              <div className="flex justify-end">
+              <label className="block space-y-1.5"><span className={`text-sm font-medium ${textPrimary}`}>What did you learn or practice this week? <span className={`font-normal ${textSecondary}`}>(required)</span></span><input type="text" required value={reportDraft.learned} onChange={(e) => setReportDraft({ ...reportDraft, learned: e.target.value })} className={inputClass} /></label>
+              <label className="block space-y-1.5"><span className={`text-sm font-medium ${textPrimary}`}>Anything still unclear? <span className={`font-normal ${textSecondary}`}>(optional)</span></span><input type="text" value={reportDraft.struggled} onChange={(e) => setReportDraft({ ...reportDraft, struggled: e.target.value })} className={inputClass} /></label>
+              <label className="block space-y-1.5"><span className={`text-sm font-medium ${textPrimary}`}>One small goal for next week <span className={`font-normal ${textSecondary}`}>(optional)</span></span><input type="text" value={reportDraft.nextWeekGoal} onChange={(e) => setReportDraft({ ...reportDraft, nextWeekGoal: e.target.value })} className={inputClass} /></label>
+              <div className="flex justify-end items-end">
                 <button type="submit" className={btnPrimary}>Save Weekly Note</button>
               </div>
             </form>

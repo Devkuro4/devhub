@@ -474,6 +474,11 @@ ${JSON.stringify(responseSchema)}`;
   }
 }
 
+/** True when at least one AI key is set. Used by /api/health so a missing key is obvious at launch. */
+export function isAiConfigured() {
+  return Boolean(getGeminiApiKey() || getGroqApiKey());
+}
+
 export function getAiStatus() {
   resetDailyCountersIfNeeded();
   const hasGemini = Boolean(getGeminiApiKey());
@@ -483,7 +488,7 @@ export function getAiStatus() {
   return {
     configured: hasGemini || hasGroq,
     settings: { ...runtimeSettings, provider: activeProvider },
-    modelChoices: MODEL_CHOICES,
+    modelChoices: MODEL_CHOICES.filter((m) => (m.startsWith('gemini-') ? hasGemini : hasGroq)),
     stats: {
       totalCalls: usageStats.totalCalls,
       callsToday: usageStats.callsToday,
@@ -502,8 +507,12 @@ export function getAiStatus() {
 export function updateAiSettings(patch: Partial<AiRuntimeSettings>) {
   if (typeof patch.model === 'string' && /^[A-Za-z0-9._\/:-]{3,80}$/.test(patch.model.trim())) {
     const nextModel = patch.model.trim();
-    runtimeSettings.model = nextModel;
-    runtimeSettings.provider = nextModel.startsWith('gemini-') ? 'Gemini' : 'Groq';
+    const wantsGemini = nextModel.startsWith('gemini-');
+    // Ignore a model whose provider has no key on this server (it could only fail for every member).
+    if (wantsGemini ? getGeminiApiKey() : getGroqApiKey()) {
+      runtimeSettings.model = nextModel;
+      runtimeSettings.provider = wantsGemini ? 'Gemini' : 'Groq';
+    }
   }
   if (typeof patch.dailyLimitPerUser === 'number' && patch.dailyLimitPerUser >= 5 && patch.dailyLimitPerUser <= 500) {
     runtimeSettings.dailyLimitPerUser = Math.round(patch.dailyLimitPerUser);

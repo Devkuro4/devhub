@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase, CLOUD, DEMO_ALLOWED } from './lib/supabase';
+import { stripSeedFromPersonal, stripSeedFromShared } from './lib/seedCleanup';
 import { SetupRequired } from './components/SetupRequired';
 import { Landing } from './components/Landing';
 import { detectMemberMilestones } from './lib/milestones';
@@ -37,6 +38,7 @@ import {
   weekKeyFor,
 } from './lib/gamification';
 import {
+  ADMIN_ONLY_KEYS,
   ADMIN_SITE,
   INITIAL_AI_LITERACY,
   INITIAL_CHALLENGES,
@@ -57,6 +59,7 @@ import {
   INITIAL_TUTORIAL_STATE,
   INITIAL_WEEKLY_ACTIVITIES,
   INITIAL_WEEKLY_PROJECT,
+  LAUNCH_CHALLENGES,
   LAUNCH_POSTS,
   LAUNCH_RESOURCES,
   LAUNCH_WEEKLY_ACTIVITIES,
@@ -138,6 +141,7 @@ export default function App() {
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
   const [user, setUser] = useState<UserSession | null>(saved?.user ?? null);
   const [authReady, setAuthReady] = useState(!CLOUD);
   const [hydrated, setHydrated] = useState(!CLOUD);
@@ -210,13 +214,16 @@ export default function App() {
     }
   );
   const [pairingState, setPairingState] = useState<any>(
-    saved?.pairingState ?? {
-      partnerName: 'Tunde Bakare',
-      partnerField: 'Backend Development',
-      assignedMentor: 'David Mensah',
-      joinedGroups: ['Frontend'],
-      pairExercise: 'Walk through each other’s weekly mini project together on Friday.',
-    }
+    saved?.pairingState ??
+      (CLOUD
+        ? { partnerName: '', partnerField: '', assignedMentor: '', joinedGroups: [], pairExercise: '' }
+        : {
+            partnerName: 'Tunde Bakare',
+            partnerField: 'Backend Development',
+            assignedMentor: 'David Mensah',
+            joinedGroups: ['Frontend'],
+            pairExercise: 'Walk through each other’s weekly mini project together on Friday.',
+          })
   );
   const [hackathon, setHackathon] = useState<any>(
     saved?.hackathon ?? {
@@ -236,7 +243,7 @@ export default function App() {
   const [weeklyActivities, setWeeklyActivities] = useState<any[]>(
     saved?.weeklyActivities ?? (CLOUD ? LAUNCH_WEEKLY_ACTIVITIES : INITIAL_WEEKLY_ACTIVITIES)
   );
-  const [challenges, setChallenges] = useState<any[]>(saved?.challenges ?? INITIAL_CHALLENGES);
+  const [challenges, setChallenges] = useState<any[]>(saved?.challenges ?? (CLOUD ? LAUNCH_CHALLENGES : INITIAL_CHALLENGES));
   const [projects, setProjects] = useState<any[]>(saved?.projects ?? (CLOUD ? [] : INITIAL_PROJECTS));
   const [presentations, setPresentations] = useState<CommunityEvent[]>(
     saved?.presentations ?? (CLOUD ? [] : INITIAL_PRESENTATIONS)
@@ -383,10 +390,12 @@ export default function App() {
   ]);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notify = (msg: string) => {
+  // Errors stay on screen longer and carry an icon, so a failure never looks like a success.
+  const notify = (msg: string, tone: 'success' | 'error' = 'success') => {
     setToastMessage(msg);
+    setToastTone(tone);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastMessage(''), 3400);
+    toastTimer.current = setTimeout(() => setToastMessage(''), tone === 'error' ? 6500 : 3400);
   };
 
   // ============================================================================
@@ -411,6 +420,9 @@ export default function App() {
   }, []);
 
   const synced = useRef<Record<string, string | undefined>>({});
+  // Anything else already stored in the member's row (from other versions of the app). Kept and written back,
+  // so saving never wipes data this screen does not know about.
+  const extraPersonal = useRef<Record<string, any>>({});
   const stateMap: Record<string, [any, (v: any) => void]> = {
     profile: [profile, setProfile],
     courses: [courses, setCourses],
@@ -546,21 +558,30 @@ export default function App() {
         const m = stateRef.current;
         const base: any = mine.data?.state ?? {};
         const blank: any = blankPersonal(user.name, m.hackathon[0]);
-        const mineObj: any = {};
+        const rawMine: any = {};
         PERSONAL_KEYS.forEach((k) => {
-          mineObj[k] =
+          rawMine[k] =
             k === 'onboardingState'
               ? normalizeOnboarding(!!base.onboarded, base.onboardingState)
               : base[k] ?? blank[k];
+        });
+        extraPersonal.current = Object.fromEntries(Object.entries(base).filter(([k]) => !PERSONAL_KEYS.includes(k)));
+        // Drop the old pretend sample data if an earlier version saved it into this account.
+        const mineObj: any = stripSeedFromPersonal(rawMine);
+        PERSONAL_KEYS.forEach((k) => {
           if (m[k]) m[k][1](mineObj[k]);
         });
-        synced.current.__mine = mine.data ? JSON.stringify(mineObj) : undefined;
+        // Remember the untouched copy, so a cleaned-up version is saved back right away.
+        synced.current.__mine = mine.data ? JSON.stringify(rawMine) : undefined;
         const have = new Set<string>();
         (shared.data || []).forEach((r: any) => {
           have.add(r.key);
           if (m[r.key]) {
-            synced.current[r.key] = JSON.stringify(r.value);
-            m[r.key][1](r.value);
+            const cleaned = stripSeedFromShared(r.key, r.value);
+            const changed = JSON.stringify(cleaned) !== JSON.stringify(r.value);
+            // Admin-only sections cannot be saved by a normal member, so they only get the cleaned view.
+            synced.current[r.key] = changed && (user.isAdmin || !ADMIN_ONLY_KEYS.includes(r.key)) ? JSON.stringify(r.value) : JSON.stringify(cleaned);
+            m[r.key][1](cleaned);
           }
         });
         SHARED_KEYS.filter((k) => !have.has(k)).forEach((k) => {
@@ -603,7 +624,7 @@ export default function App() {
       if (mineJson !== synced.current.__mine) {
         const { error } = await supabase
           .from('member_state')
-          .upsert({ user_id: user.id, state: JSON.parse(mineJson), updated_at: new Date().toISOString() });
+          .upsert({ user_id: user.id, state: { ...extraPersonal.current, ...JSON.parse(mineJson) }, updated_at: new Date().toISOString() });
         if (error) {
           hadError = true;
           notify('Couldn’t save your progress. We’ll retry when your connection stabilizes.');
@@ -661,14 +682,16 @@ export default function App() {
         if (!r?.key || !stateRef.current[r.key]) return;
         const json = JSON.stringify(r.value);
         if (synced.current[r.key] === json) return;
-        synced.current[r.key] = json;
-        stateRef.current[r.key][1](r.value);
+        const cleaned = stripSeedFromShared(r.key, r.value);
+        const cannotSave = ADMIN_ONLY_KEYS.includes(r.key) && !user.isAdmin;
+        synced.current[r.key] = cannotSave ? JSON.stringify(cleaned) : json;
+        stateRef.current[r.key][1](cleaned);
       })
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [hydrated, user?.id]);
+  }, [hydrated, user?.id, user?.isAdmin]);
 
   // ============================================================================
   // SHARED UI DESIGN TOKENS
@@ -1138,7 +1161,7 @@ export default function App() {
           <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop sidebar */}
           <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-6 lg:self-start lg:h-[calc(100vh-3rem)] border-r studio-sidebar rounded-l-[28px]">
-            <div className="px-8 pt-8 pb-7">
+            <div className="sb-logo px-8 pt-8 pb-7">
               <button
                 type="button"
                 onClick={() => setActiveTab(role === 'admin' ? 'admin-dashboard' : 'dashboard')}
@@ -1151,7 +1174,7 @@ export default function App() {
               </button>
             </div>
 
-            <nav aria-label="Main navigation" className="flex-1 px-5 overflow-y-auto no-scrollbar pb-4">
+            <nav aria-label="Main navigation" className="sb-nav flex-1 px-5 overflow-y-auto no-scrollbar pb-4">
               <p className={sideLabel}>{role === 'admin' ? 'Admin' : 'Overview'}</p>
               <div className="space-y-0.5">
                 {(role === 'admin' ? adminNav : mainNav).map((item) => {
@@ -1179,7 +1202,7 @@ export default function App() {
               </div>
 
               {studyGroup.length > 0 && (
-                <div className="mt-9">
+                <div className="sb-study mt-9">
                   <div className="flex items-center justify-between pr-2">
                     <p className={sideLabel}>Study group</p>
                     <button
@@ -1237,12 +1260,12 @@ export default function App() {
             </nav>
 
             {!CLOUD && (
-              <div className="mx-5 mb-3 px-3.5 py-3 rounded-xl bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
-                <strong>Demo mode.</strong> Data stays in this browser only. Connect Supabase to go live.
+              <div title="Data stays in this browser only. Connect Supabase to go live." className="sb-demo mx-5 mb-3 px-3.5 py-3 rounded-xl bg-[var(--warning-bg,var(--surface-subtle))] text-xs leading-snug text-[var(--warning-ink,var(--ink-secondary))]">
+                <strong>Demo mode.</strong> <span className="sb-demo-detail">Data stays in this browser only. Connect Supabase to go live.</span>
               </div>
             )}
 
-            <div className="px-5 pb-7 pt-2">
+            <div className="sb-foot px-5 pb-7 pt-2">
               <p className={sideLabel}>Settings</p>
               <div className="space-y-0.5">
                 <button
@@ -1368,7 +1391,7 @@ export default function App() {
                       setMobileMenuOpen(false);
                     }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium cursor-pointer min-h-[52px] ${
-                      active ? 'bg-[var(--accent-600)] text-white' : `${cardClass} ${textPrimary}`
+                      active ? 'bg-[var(--accent-50)] text-[var(--accent-700)] font-semibold' : `${cardClass} ${textPrimary}`
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -1437,7 +1460,7 @@ export default function App() {
               </header>
             )}
 
-            <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "main-pad-mobile lg:pb-0" : "main-pad-mobile lg:pb-16"}`}>
+            <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "main-pad-mobile lg:pb-20" : "main-pad-mobile lg:pb-24"}`}>
               <motion.div
                 key={showOnboardingWizard ? 'onboarding' : activeTab}
                 initial={{ opacity: 0, y: 6 }}
@@ -1695,7 +1718,7 @@ export default function App() {
                   }`}
                 >
                   <Icon className="w-5 h-5 shrink-0" />
-                  <span className="truncate max-w-[64px]">{item.label.replace('My ', '')}</span>
+                  <span className="truncate max-w-full px-0.5">{item.label.replace('My ', '')}</span>
                 </button>
               );
             })}
@@ -1717,10 +1740,17 @@ export default function App() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              role="status"
-              className="toast-mobile fixed lg:bottom-8 inset-x-4 sm:inset-x-auto sm:right-8 z-40 sm:max-w-sm px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)]"
+              role={toastTone === 'error' ? 'alert' : 'status'}
+              className={`toast-mobile fixed lg:bottom-8 inset-x-4 sm:inset-x-auto sm:right-8 z-40 sm:max-w-sm px-5 py-3 rounded-[12px] bg-[var(--panel-deep)] text-white text-sm font-medium shadow-[var(--shadow-lg)] flex items-start gap-2.5 ${
+                toastTone === 'error' ? 'border-l-[3px] border-l-[#F87171]' : ''
+              }`}
             >
-              {toastMessage}
+              {toastTone === 'error' ? (
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#FCA5A5]" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-[#86EFAC]" aria-hidden="true" />
+              )}
+              <span>{toastMessage}</span>
             </motion.div>
           )}
         </div>
