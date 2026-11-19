@@ -1,47 +1,73 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  AlertCircle,
   ArrowRight,
   Bell,
   Bookmark,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Code2,
+  CornerUpLeft,
+  Edit3,
   ExternalLink,
+  EyeOff,
+  Flag,
   Globe,
+  Hash,
   HelpCircle,
+  HeartHandshake,
   Library,
+  Lightbulb,
   Loader2,
+  Lock,
   Megaphone,
   MessageSquare,
-  ChevronRight,
   Pin,
-  ChevronDown,
   Plus,
+  RefreshCw,
   Search,
   Send,
+  Sparkles,
+  Tag,
   ThumbsUp,
+  Trash2,
   Trophy,
+  Unlock,
   Users,
+  X,
 } from 'lucide-react';
-import { Badge, EmptyState, Modal, PageHeader, SectionTabs } from './ui';
+import { Badge, EmptyState, Modal, PageHeader, SectionTabs, SkeletonBlock } from './ui';
 import { getUrlError } from '../lib/url';
 import { requestGroundedSearch, type GroundedSource } from '../lib/aiClient';
-import { StudyGroupChatPanel, useStudyGroupChat } from './StudyGroupChat';
+import { StudyGroupChatPanel, useStudyGroupChat, type MentionCandidate } from './StudyGroupChat';
+import { MentionPickerBar, MentionText, type ReportDraftTarget } from './CommunityModals';
+import { StudyGroupsPanel } from './StudyGroupsPanel';
 import type {
   CommunityEvent,
   CommunityPost,
+  CommunityPostComment,
+  MemberDirectoryProfile,
+  ModerationState,
   OnboardingProfile,
+  ReactionType,
+  StudyChatMessage,
+  StudyGroup,
 } from '../types';
 
 export type CommunitySubTab =
   | 'community-home'
   | 'study-chat'
   | 'community'
+  | 'study-groups'
   | 'announcements'
   | 'resources'
   | 'events'
   | 'challenges'
   | 'pairing-help';
+
+const QUICK_TAG_SUGGESTIONS = ['javascript', 'react', 'css', 'python', 'sql', 'git', 'debugging', 'beginners'];
 
 /** Long posts collapse to a few lines so the feed stays easy to scan */
 const PostBody = ({ text, className }: { text: string; className: string }) => {
@@ -49,7 +75,9 @@ const PostBody = ({ text, className }: { text: string; className: string }) => {
   const long = text.length > 320 || text.split('\n').length > 5;
   return (
     <div>
-      <p className={`${className} whitespace-pre-wrap break-words ${long && !open ? 'line-clamp-4' : ''}`}>{text}</p>
+      <p className={`${className} whitespace-pre-wrap break-words ${long && !open ? 'line-clamp-4' : ''}`}>
+        <MentionText text={text} />
+      </p>
       {long && (
         <button
           type="button"
@@ -64,13 +92,81 @@ const PostBody = ({ text, className }: { text: string; className: string }) => {
   );
 };
 
-// Switching tabs remounts this section, which would drop the modal state. Buttons on other Community
-// tabs set this flag so the composer is already open when the Discussions tab appears.
+// Switching tabs remounts this section if parent switches keys; this preserves composer intent across Home -> Discussions.
 let openComposerOnMount = false;
 const openComposerOnDiscussions = (setSubTab: (t: CommunitySubTab) => void) => {
   openComposerOnMount = true;
   setSubTab('community');
 };
+
+export interface CommunityActionsProp {
+  createPost: (input: {
+    category: string;
+    title: string;
+    content: string;
+    codeSnippet?: string;
+    attachmentUrl?: string;
+    tags?: string[];
+    pinned?: boolean;
+  }) => Promise<void> | void;
+  updatePost: (
+    postId: string,
+    patch: { title?: string; content?: string; category?: string; tags?: string[]; codeSnippet?: string; attachmentUrl?: string }
+  ) => Promise<void> | void;
+  deletePost: (postId: string) => Promise<void> | void;
+  moderatePost: (
+    postId: string,
+    action: { pinned?: boolean; locked?: boolean; hidden?: boolean; hiddenReason?: string }
+  ) => Promise<void> | void;
+  reactPost: (postId: string, type: ReactionType) => Promise<void> | void;
+  addComment: (postId: string, input: { text: string; parentId?: string }) => Promise<void> | void;
+  updateComment: (
+    postId: string,
+    commentId: string,
+    patch: { text?: string; toggleHelpful?: boolean; hidden?: boolean }
+  ) => Promise<void> | void;
+  deleteComment: (postId: string, commentId: string) => Promise<void> | void;
+  createStudyGroup: (input: {
+    name: string;
+    field: string;
+    topic: string;
+    description: string;
+    level?: string;
+    schedule?: string;
+    maxMembers?: number;
+  }) => Promise<StudyGroup | null | void>;
+  toggleJoinStudyGroup: (groupId: string) => Promise<void> | void;
+  updateStudyGroupWorkspace: (
+    groupId: string,
+    input: { addGoal?: string; toggleGoalId?: string; addLink?: { title: string; url: string } }
+  ) => Promise<void> | void;
+  createHelpRequest: (input: {
+    field?: string;
+    goal: string;
+    attempted?: string;
+    errorOrCode?: string;
+    helpNeeded: string;
+  }) => Promise<void> | void;
+  replyHelpRequest: (helpId: string, text: string) => Promise<void> | void;
+  toggleHelpResolved: (helpId: string) => Promise<void> | void;
+  addResource: (input: {
+    title: string;
+    category: string;
+    type: string;
+    url: string;
+    description?: string;
+    tags?: string[];
+  }) => Promise<void> | void;
+  addEvent: (input: {
+    title: string;
+    type: string;
+    topic?: string;
+    dateTime: string;
+    description?: string;
+    resourceUrl?: string;
+  }) => Promise<void> | void;
+  toggleEventAction: (eventId: string, action: 'rsvp' | 'reminder') => Promise<void> | void;
+}
 
 export const CommunitySection = ({
   subTab,
@@ -90,8 +186,19 @@ export const CommunitySection = ({
   setChallenges,
   helpRequests,
   setHelpRequests,
+  studyGroups = [],
   teamRoster,
+  memberProfiles = {},
+  moderation,
   pairingState,
+  communityLoading = false,
+  communityError = '',
+  onRetryCommunityLoad,
+  focusedPostId,
+  onClearFocusedPost,
+  onOpenMemberProfile,
+  onReportContent,
+  actions,
   onNotify,
   styles,
 }: {
@@ -112,8 +219,19 @@ export const CommunitySection = ({
   setChallenges: (c: any[]) => void;
   helpRequests: any[];
   setHelpRequests: (h: any[]) => void;
+  studyGroups?: StudyGroup[];
   teamRoster: any[];
+  memberProfiles?: Record<string, MemberDirectoryProfile>;
+  moderation?: ModerationState;
   pairingState: any;
+  communityLoading?: boolean;
+  communityError?: string;
+  onRetryCommunityLoad?: () => void;
+  focusedPostId?: string | null;
+  onClearFocusedPost?: () => void;
+  onOpenMemberProfile?: (memberId: string, memberName?: string) => void;
+  onReportContent?: (target: ReportDraftTarget) => void;
+  actions?: CommunityActionsProp;
   onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
@@ -133,8 +251,15 @@ export const CommunitySection = ({
     openComposerOnMount = false;
   }, []);
 
-  const postDraftKey = `devhub_draft_${user.id || 'local'}_community_post`;
-  const helpDraftKey = `devhub_draft_${user.id || 'local'}_community_help`;
+  const currentUserId = user.id || user.email || 'local-member';
+  const currentUserName = user.name || profile.fullName || 'Member';
+  const myMute = moderation?.mutedUserIds?.[currentUserId];
+  const mutedReason = myMute?.reason;
+
+  const { unreadCount: chatUnread, upsertRoomAndOpen } = useStudyGroupChat();
+
+  const postDraftKey = `devhub_draft_${currentUserId}_community_post`;
+  const helpDraftKey = `devhub_draft_${currentUserId}_community_help`;
   const readDraft = (key: string) => {
     try {
       const raw = sessionStorage.getItem(key);
@@ -146,44 +271,40 @@ export const CommunitySection = ({
   const savedPostDraft = readDraft(postDraftKey);
   const savedHelpDraft = readDraft(helpDraftKey);
 
+  // Unified Home Discovery search
+  const [homeQuery, setHomeQuery] = useState('');
+
   // Discussions state
   const [postFilter, setPostFilter] = useState('All');
+  const [tagFilter, setTagFilter] = useState('All');
   const [showPostModal, setShowPostModal] = useState(
     openComposerOnMount || Boolean(savedPostDraft && (savedPostDraft.postTitle || savedPostDraft.postBody))
   );
+  const [editingPost, setEditingPost] = useState<CommunityPost | null>(null);
   const [postCat, setPostCat] = useState(savedPostDraft?.postCat || 'Question');
   const [postTitle, setPostTitle] = useState(savedPostDraft?.postTitle || '');
   const [postBody, setPostBody] = useState(savedPostDraft?.postBody || '');
+  const [postTagsInput, setPostTagsInput] = useState(savedPostDraft?.postTagsInput || '');
   const [postCode, setPostCode] = useState(savedPostDraft?.postCode || '');
   const [postLink, setPostLink] = useState(savedPostDraft?.postLink || '');
   const [showPostExtras, setShowPostExtras] = useState(Boolean(savedPostDraft?.postCode || savedPostDraft?.postLink));
+  const [confirmDeletePostId, setConfirmDeletePostId] = useState<string | null>(null);
+
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyParentByPost, setReplyParentByPost] = useState<Record<string, CommunityPostComment | null>>({});
+  const [editingComment, setEditingComment] = useState<{ postId: string; commentId: string; text: string } | null>(null);
+
   const [postSearch, setPostSearch] = useState('');
-  const [postSort, setPostSort] = useState<'new' | 'helpful' | 'unanswered'>('new');
-  const { unreadCount: chatUnread } = useStudyGroupChat();
+  const [postSort, setPostSort] = useState<'new' | 'helpful' | 'discussed' | 'unanswered'>('new');
 
-  // "Helpful" is one per person and can be taken back
-  const likedKey = `devhub_liked_${user.id || 'local'}`;
-  const [likedPostIds, setLikedPostIds] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(likedKey);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(likedKey, JSON.stringify(likedPostIds));
-    } catch {}
-  }, [likedKey, likedPostIds]);
-
-  // Announcements composer (admin)
+  // Announcements composer & edit state (admin)
   const [annTitle, setAnnTitle] = useState('');
   const [annBody, setAnnBody] = useState('');
+  const [editingAnn, setEditingAnn] = useState<CommunityPost | null>(null);
 
   // Resources state
   const [resSearch, setResSearch] = useState('');
+  const [resTypeFilter, setResTypeFilter] = useState('All');
   const [showAddRes, setShowAddRes] = useState(false);
   const [resTitle, setResTitle] = useState('');
   const [resCat, setResCat] = useState(profile.field || 'Frontend Development');
@@ -199,6 +320,8 @@ export const CommunitySection = ({
   } | null>(null);
 
   // Events state
+  const [evSearch, setEvSearch] = useState('');
+  const [evTypeFilter, setEvTypeFilter] = useState('All');
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [evTitle, setEvTitle] = useState('');
   const [evType, setEvType] = useState('Study Session');
@@ -221,7 +344,9 @@ export const CommunitySection = ({
   const [newChLevel, setNewChLevel] = useState('Beginner');
   const [newChDesc, setNewChDesc] = useState('');
 
-  // Help Desk state
+  // Help Desk & Member directory state
+  const [helpSearch, setHelpSearch] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
   const [helpGoal, setHelpGoal] = useState(savedHelpDraft?.helpGoal || '');
   const [helpTried, setHelpTried] = useState(savedHelpDraft?.helpTried || '');
   const [helpCode, setHelpCode] = useState(savedHelpDraft?.helpCode || '');
@@ -229,14 +354,15 @@ export const CommunitySection = ({
   const [helpReplyDrafts, setHelpReplyDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (editingPost) return;
     try {
-      if (postTitle.trim() || postBody.trim() || postCode.trim() || postLink.trim()) {
-        sessionStorage.setItem(postDraftKey, JSON.stringify({ postCat, postTitle, postBody, postCode, postLink }));
+      if (postTitle.trim() || postBody.trim() || postCode.trim() || postLink.trim() || postTagsInput.trim()) {
+        sessionStorage.setItem(postDraftKey, JSON.stringify({ postCat, postTitle, postBody, postTagsInput, postCode, postLink }));
       } else {
         sessionStorage.removeItem(postDraftKey);
       }
     } catch {}
-  }, [postDraftKey, postCat, postTitle, postBody, postCode, postLink]);
+  }, [editingPost, postDraftKey, postCat, postTitle, postBody, postTagsInput, postCode, postLink]);
 
   useEffect(() => {
     try {
@@ -248,97 +374,274 @@ export const CommunitySection = ({
     } catch {}
   }, [helpDraftKey, helpGoal, helpTried, helpCode, helpAsk]);
 
+  // Scroll to a focused post when navigated from Notifications or Member Profile
+  useEffect(() => {
+    if (subTab === 'community' && focusedPostId) {
+      setPostFilter('All');
+      setTagFilter('All');
+      setPostSearch('');
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`community-post-${focusedPostId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        onClearFocusedPost?.();
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [subTab, focusedPostId, onClearFocusedPost]);
+
   const postLinkError = getUrlError(postLink, 'https://developer.mozilla.org/...');
   const resUrlError = getUrlError(resUrl, 'https://developer.mozilla.org/...');
   const evUrlError = getUrlError(evUrl, 'https://meet.jit.si/devhub-study');
   const chRepoError = getUrlError(chRepo, 'https://github.com/your-name/challenge-solution');
 
-  const currentUserName = user.name || profile.fullName || 'Member';
+  const directoryMembers = useMemo<MemberDirectoryProfile[]>(() => {
+    const map = new Map<string, MemberDirectoryProfile>();
+    for (const m of teamRoster || []) {
+      const id = m.id || m.name;
+      map.set(id, {
+        id,
+        name: m.name || 'Member',
+        username: m.username || (m.name || 'member').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        role: m.role || 'Member',
+        field: m.field || '',
+        level: m.level || '',
+        bio: m.bio || '',
+        partner: m.partner || '',
+        mentor: m.mentor || '',
+        ...(memberProfiles[id] || {}),
+      });
+    }
+    for (const [id, prof] of Object.entries(memberProfiles || {})) {
+      if (!map.has(id)) map.set(id, prof);
+    }
+    return Array.from(map.values());
+  }, [teamRoster, memberProfiles]);
 
-  const handleCreatePost = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!postTitle.trim() || !postBody.trim() || postLinkError) return;
-    const item: CommunityPost = {
-      id: `post-${Date.now()}`,
-      author: currentUserName,
-      role: isAdminMode ? 'Community Admin' : 'Member',
-      category: postCat,
-      pinned: false,
-      timestamp: 'Just now',
-      title: postTitle.trim(),
-      content: postBody.trim(),
-      codeSnippet: postCode.trim() || undefined,
-      attachmentUrl: postLink.trim() || undefined,
-      likes: 1,
-      comments: [],
-    };
-    setPosts([item, ...posts]);
+  const mentionCandidates = useMemo<MentionCandidate[]>(
+    () =>
+      directoryMembers.map((m) => ({
+        id: m.id,
+        name: m.name,
+        username: m.username,
+      })),
+    [directoryMembers]
+  );
+
+  const parseTagsInput = (raw: string) =>
+    Array.from(
+      new Set(
+        raw
+          .split(/[,\s]+/)
+          .map((t) => t.trim().toLowerCase().replace(/^#/, '').replace(/[^a-z0-9.+#_-]/g, ''))
+          .filter(Boolean)
+      )
+    ).slice(0, 6);
+
+  const openEditPostModal = (post: CommunityPost) => {
+    setEditingPost(post);
+    setPostCat(post.category);
+    setPostTitle(post.title);
+    setPostBody(post.content);
+    setPostTagsInput((post.tags || []).join(', '));
+    setPostCode(post.codeSnippet || '');
+    setPostLink(post.attachmentUrl || '');
+    setShowPostExtras(Boolean(post.codeSnippet || post.attachmentUrl));
+    setShowPostModal(true);
+  };
+
+  const resetPostModal = () => {
+    setEditingPost(null);
+    setPostCat('Question');
     setPostTitle('');
     setPostBody('');
+    setPostTagsInput('');
     setPostCode('');
     setPostLink('');
     setShowPostExtras(false);
     setShowPostModal(false);
+  };
+
+  const handleCreateOrSavePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postTitle.trim() || !postBody.trim() || postLinkError) return;
+    const tags = parseTagsInput(postTagsInput);
+
+    if (editingPost) {
+      if (actions) {
+        await actions.updatePost(editingPost.id, {
+          category: postCat,
+          title: postTitle.trim(),
+          content: postBody.trim(),
+          tags,
+          codeSnippet: postCode.trim() || undefined,
+          attachmentUrl: postLink.trim() || undefined,
+        });
+      } else {
+        setPosts(
+          posts.map((p) =>
+            p.id === editingPost.id
+              ? {
+                  ...p,
+                  category: postCat,
+                  title: postTitle.trim(),
+                  content: postBody.trim(),
+                  tags,
+                  codeSnippet: postCode.trim() || undefined,
+                  attachmentUrl: postLink.trim() || undefined,
+                  updatedAt: new Date().toISOString(),
+                }
+              : p
+          )
+        );
+        onNotify('Discussion updated.');
+      }
+      resetPostModal();
+      return;
+    }
+
+    if (actions) {
+      await actions.createPost({
+        category: postCat,
+        title: postTitle.trim(),
+        content: postBody.trim(),
+        tags,
+        codeSnippet: postCode.trim() || undefined,
+        attachmentUrl: postLink.trim() || undefined,
+      });
+    } else {
+      const item: CommunityPost = {
+        id: `post-${Date.now()}`,
+        author: currentUserName,
+        authorId: currentUserId,
+        role: isAdminMode ? 'Community Admin' : 'Member',
+        category: postCat,
+        tags,
+        pinned: false,
+        timestamp: 'Just now',
+        createdAt: new Date().toISOString(),
+        title: postTitle.trim(),
+        content: postBody.trim(),
+        codeSnippet: postCode.trim() || undefined,
+        attachmentUrl: postLink.trim() || undefined,
+        likes: 0,
+        reactions: {},
+        comments: [],
+      };
+      setPosts([item, ...posts]);
+      onNotify('Posted to Community Discussions!');
+    }
+
+    resetPostModal();
     try {
       sessionStorage.removeItem(postDraftKey);
     } catch {}
-    onNotify('Posted to Community Discussions!');
   };
 
-  const handleCreateAnnouncement = (e: React.FormEvent) => {
+  const handleCreateOrSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!annTitle.trim() || !annBody.trim()) return;
-    const item: CommunityPost = {
-      id: `post-${Date.now()}`,
-      author: currentUserName,
-      role: 'Community Admin',
-      category: 'Announcement',
-      pinned: true,
-      timestamp: 'Just now',
-      title: annTitle.trim(),
-      content: annBody.trim(),
-      likes: 1,
-      comments: [],
-    };
-    setPosts([item, ...posts]);
+    if (editingAnn) {
+      if (actions) {
+        await actions.updatePost(editingAnn.id, {
+          title: annTitle.trim(),
+          content: annBody.trim(),
+          category: 'Announcement',
+        });
+      } else {
+        setPosts(
+          posts.map((p) =>
+            p.id === editingAnn.id ? { ...p, title: annTitle.trim(), content: annBody.trim(), updatedAt: new Date().toISOString() } : p
+          )
+        );
+        onNotify('Announcement updated.');
+      }
+      setEditingAnn(null);
+      setAnnTitle('');
+      setAnnBody('');
+      return;
+    }
+
+    if (actions) {
+      await actions.createPost({
+        category: 'Announcement',
+        title: annTitle.trim(),
+        content: annBody.trim(),
+        pinned: true,
+      });
+    } else {
+      const item: CommunityPost = {
+        id: `post-${Date.now()}`,
+        author: currentUserName,
+        authorId: currentUserId,
+        role: 'Community Admin',
+        category: 'Announcement',
+        pinned: true,
+        timestamp: 'Just now',
+        createdAt: new Date().toISOString(),
+        title: annTitle.trim(),
+        content: annBody.trim(),
+        likes: 0,
+        reactions: {},
+        comments: [],
+      };
+      setPosts([item, ...posts]);
+      onNotify('Announcement published.');
+    }
     setAnnTitle('');
     setAnnBody('');
-    onNotify('Announcement published.');
   };
 
-  const handleAddReply = (postId: string) => {
+  const handleAddReply = async (postId: string) => {
     const text = (replyDrafts[postId] || '').trim();
     if (!text) return;
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: [...p.comments, { id: `c-${Date.now()}`, author: currentUserName, text, isHelpful: false }],
-            }
-          : p
-      )
-    );
+    const parent = replyParentByPost[postId];
+    if (actions) {
+      await actions.addComment(postId, { text, parentId: parent?.id });
+    } else {
+      setPosts(
+        posts.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                comments: [
+                  ...p.comments,
+                  {
+                    id: `c-${Date.now()}`,
+                    author: currentUserName,
+                    authorId: currentUserId,
+                    authorRole: isAdminMode ? 'Community Admin' : 'Member',
+                    text,
+                    parentId: parent?.id,
+                    createdAt: new Date().toISOString(),
+                    isHelpful: false,
+                    helpfulBy: [],
+                  },
+                ],
+              }
+            : p
+        )
+      );
+    }
     setReplyDrafts((prev) => ({ ...prev, [postId]: '' }));
+    setReplyParentByPost((prev) => ({ ...prev, [postId]: null }));
   };
 
-  const toggleHelpfulComment = (postId: string, commentId: string) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) => (c.id === commentId ? { ...c, isHelpful: !c.isHelpful } : c)),
-            }
-          : p
-      )
+  const handleReaction = async (post: CommunityPost, type: ReactionType) => {
+    if (actions) {
+      await actions.reactPost(post.id, type);
+      return;
+    }
+    const existing = post.reactions?.[type] || [];
+    const has = existing.includes(currentUserId);
+    const updatedList = has ? existing.filter((id) => id !== currentUserId) : [...existing, currentUserId];
+    const nextReactions = { ...(post.reactions || {}), [type]: updatedList };
+    const total = (['helpful', 'insightful', 'celebrate'] as ReactionType[]).reduce(
+      (sum, key) => sum + ((nextReactions[key] || []).length),
+      0
     );
-  };
-
-  const toggleLikePost = (postId: string) => {
-    const liked = likedPostIds.includes(postId);
-    setLikedPostIds(liked ? likedPostIds.filter((id) => id !== postId) : [...likedPostIds, postId]);
-    setPosts(posts.map((p) => (p.id === postId ? { ...p, likes: Math.max(0, p.likes + (liked ? -1 : 1)) } : p)));
+    setPosts(posts.map((p) => (p.id === post.id ? { ...p, reactions: nextReactions, likes: total } : p)));
   };
 
   const toggleSavePost = (postId: string) => {
@@ -350,24 +653,35 @@ export const CommunitySection = ({
     }
   };
 
-  const handleAddResource = (e: React.FormEvent) => {
+  const handleAddResource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resTitle.trim() || !resUrl.trim() || resUrlError) return;
-    const item = {
-      id: `res-${Date.now()}`,
-      title: resTitle.trim(),
-      category: resCat.trim() || 'General',
-      type: resType,
-      url: resUrl.trim(),
-      addedBy: currentUserName,
-      description: resDesc.trim() || 'Shared by a community member.',
-    };
-    setResources([item, ...resources]);
+    if (actions) {
+      await actions.addResource({
+        title: resTitle.trim(),
+        category: resCat.trim() || 'General',
+        type: resType,
+        url: resUrl.trim(),
+        description: resDesc.trim() || 'Shared by a community member.',
+      });
+    } else {
+      const item = {
+        id: `res-${Date.now()}`,
+        title: resTitle.trim(),
+        category: resCat.trim() || 'General',
+        type: resType,
+        url: resUrl.trim(),
+        addedBy: currentUserName,
+        addedById: currentUserId,
+        description: resDesc.trim() || 'Shared by a community member.',
+      };
+      setResources([item, ...resources]);
+      onNotify('Resource added to the community library.');
+    }
     setResTitle('');
     setResUrl('');
     setResDesc('');
     setShowAddRes(false);
-    onNotify('Resource added to the community library.');
   };
 
   const handleWebResourceSearch = async (e: React.FormEvent) => {
@@ -392,50 +706,78 @@ export const CommunitySection = ({
     }
   };
 
-  const handleSaveGroundedSource = (src: GroundedSource) => {
+  const handleSaveGroundedSource = async (src: GroundedSource) => {
     if (resources.some((r) => r.url === src.uri)) {
       onNotify('This link is already in the community library.');
       return;
     }
-    const item = {
-      id: `res-${Date.now()}`,
-      title: src.title,
-      category: profile.field || 'General',
-      type: 'Documentation',
-      url: src.uri,
-      addedBy: currentUserName,
-      description: `Found via web search for "${webSearchResult?.query || 'study topic'}".`,
-    };
-    setResources([item, ...resources]);
-    onNotify(`Saved "${src.title}" to community resources.`);
+    if (actions) {
+      await actions.addResource({
+        title: src.title,
+        category: profile.field || 'General',
+        type: 'Documentation',
+        url: src.uri,
+        description: `Found via web search for "${webSearchResult?.query || 'study topic'}".`,
+      });
+    } else {
+      const item = {
+        id: `res-${Date.now()}`,
+        title: src.title,
+        category: profile.field || 'General',
+        type: 'Documentation',
+        url: src.uri,
+        addedBy: currentUserName,
+        description: `Found via web search for "${webSearchResult?.query || 'study topic'}".`,
+      };
+      setResources([item, ...resources]);
+      onNotify(`Saved "${src.title}" to community resources.`);
+    }
   };
 
-  const handleAddEvent = (e: React.FormEvent) => {
+  const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!evTitle.trim() || !evTime.trim() || evUrlError) return;
-    const item: CommunityEvent = {
-      id: `pres-${Date.now()}`,
-      title: evTitle.trim(),
-      presenter: currentUserName,
-      topic: evTopic.trim() || 'Peer Learning',
-      type: evType,
-      dateTime: evTime.trim(),
-      description: evDesc.trim() || 'Beginner-friendly live study session.',
-      resourceUrl: evUrl.trim(),
-      attendees: [currentUserName],
-      reminders: [currentUserName],
-    };
-    setPresentations([item, ...presentations]);
+    if (actions) {
+      await actions.addEvent({
+        title: evTitle.trim(),
+        topic: evTopic.trim() || 'Peer Learning',
+        type: evType,
+        dateTime: evTime.trim(),
+        description: evDesc.trim() || 'Beginner-friendly live study session.',
+        resourceUrl: evUrl.trim(),
+      });
+    } else {
+      const item: CommunityEvent = {
+        id: `pres-${Date.now()}`,
+        title: evTitle.trim(),
+        presenter: currentUserName,
+        presenterId: currentUserId,
+        topic: evTopic.trim() || 'Peer Learning',
+        type: evType,
+        dateTime: evTime.trim(),
+        description: evDesc.trim() || 'Beginner-friendly live study session.',
+        resourceUrl: evUrl.trim(),
+        attendees: [currentUserName],
+        attendeeIds: [currentUserId],
+        reminders: [currentUserName],
+        reminderIds: [currentUserId],
+      };
+      setPresentations([item, ...presentations]);
+      onNotify('Session scheduled!');
+    }
     setEvTitle('');
     setEvTopic('');
     setEvTime('');
     setEvDesc('');
     setEvUrl('');
     setShowAddEvent(false);
-    onNotify('Session scheduled!');
   };
 
-  const toggleRsvp = (eventId: string) => {
+  const toggleRsvp = async (eventId: string) => {
+    if (actions) {
+      await actions.toggleEventAction(eventId, 'rsvp');
+      return;
+    }
     setPresentations(
       presentations.map((ev) => {
         if (ev.id !== eventId) return ev;
@@ -448,7 +790,11 @@ export const CommunitySection = ({
     );
   };
 
-  const toggleReminder = (eventId: string) => {
+  const toggleReminder = async (eventId: string) => {
+    if (actions) {
+      await actions.toggleEventAction(eventId, 'reminder');
+      return;
+    }
     setPresentations(
       presentations.map((ev) => {
         if (ev.id !== eventId) return ev;
@@ -514,23 +860,35 @@ export const CommunitySection = ({
     onNotify('Challenge added for the community.');
   };
 
-  const handleAskHelp = (e: React.FormEvent) => {
+  const handleAskHelp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!helpGoal.trim() || !helpAsk.trim()) return;
-    const req = {
-      id: `help-${Date.now()}`,
-      author: currentUserName,
-      field: profile.field || 'General',
-      target: 'Community',
-      status: 'Open',
-      createdAt: 'Just now',
-      goal: helpGoal.trim(),
-      attempted: helpTried.trim() || 'Still exploring where the issue happens.',
-      errorOrCode: helpCode.trim(),
-      helpNeeded: helpAsk.trim(),
-      responses: [],
-    };
-    setHelpRequests([req, ...helpRequests]);
+    if (actions) {
+      await actions.createHelpRequest({
+        field: profile.field || 'General',
+        goal: helpGoal.trim(),
+        attempted: helpTried.trim() || 'Still exploring where the issue happens.',
+        errorOrCode: helpCode.trim(),
+        helpNeeded: helpAsk.trim(),
+      });
+    } else {
+      const req = {
+        id: `help-${Date.now()}`,
+        author: currentUserName,
+        authorId: currentUserId,
+        field: profile.field || 'General',
+        target: 'Community',
+        status: 'Open',
+        createdAt: 'Just now',
+        goal: helpGoal.trim(),
+        attempted: helpTried.trim() || 'Still exploring where the issue happens.',
+        errorOrCode: helpCode.trim(),
+        helpNeeded: helpAsk.trim(),
+        responses: [],
+      };
+      setHelpRequests([req, ...helpRequests]);
+      onNotify('Question posted to peers and mentors!');
+    }
     setHelpGoal('');
     setHelpTried('');
     setHelpCode('');
@@ -538,65 +896,120 @@ export const CommunitySection = ({
     try {
       sessionStorage.removeItem(helpDraftKey);
     } catch {}
-    onNotify('Question posted to peers and mentors!');
   };
 
-  const handleHelpReply = (reqId: string) => {
+  const handleHelpReply = async (reqId: string) => {
     const text = (helpReplyDrafts[reqId] || '').trim();
     if (!text) return;
-    setHelpRequests(
-      helpRequests.map((h) =>
-        h.id === reqId
-          ? {
-              ...h,
-              status: 'Being Helped',
-              responses: [...(h.responses || []), { id: `hr-${Date.now()}`, responder: currentUserName, text }],
-            }
-          : h
-      )
-    );
+    if (actions) {
+      await actions.replyHelpRequest(reqId, text);
+    } else {
+      setHelpRequests(
+        helpRequests.map((h) =>
+          h.id === reqId
+            ? {
+                ...h,
+                status: h.status === 'Resolved' ? 'Resolved' : 'Being Helped',
+                responses: [...(h.responses || []), { id: `hr-${Date.now()}`, responder: currentUserName, responderId: currentUserId, text }],
+              }
+            : h
+        )
+      );
+      onNotify('Helpful response added.');
+    }
     setHelpReplyDrafts((prev) => ({ ...prev, [reqId]: '' }));
-    onNotify('Helpful response added.');
   };
+
+  const visiblePosts = useMemo(
+    () => posts.filter((p) => isAdminMode || !p.hidden),
+    [posts, isAdminMode]
+  );
 
   const communityTabs: { id: CommunitySubTab; label: string; badge?: number }[] = [
     { id: 'community-home', label: 'Community Home' },
     { id: 'study-chat', label: 'Study Chat', badge: chatUnread },
-    { id: 'community', label: 'Discussions', badge: posts.length },
+    { id: 'study-groups', label: 'Study Groups', badge: studyGroups.length },
+    { id: 'community', label: 'Discussions', badge: visiblePosts.length },
     { id: 'events', label: 'Events', badge: presentations.length },
     { id: 'resources', label: 'Resources', badge: resources.length },
     { id: 'pairing-help', label: 'Peer Help' },
   ];
+
+  // Collect all tags used across visible posts
+  const availableTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of visiblePosts) {
+      for (const t of p.tags || []) {
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([tag, count]) => ({ tag, count }));
+  }, [visiblePosts]);
 
   const inCategory = (p: CommunityPost, cat: string) => {
     if (cat === 'Saved') return savedPostIds.includes(p.id);
     if (cat === 'All') return true;
     return p.category === cat;
   };
+
+  const reactionTotal = (p: CommunityPost) => {
+    if (!p.reactions) return p.likes || 0;
+    const sum = (['helpful', 'insightful', 'celebrate'] as ReactionType[]).reduce(
+      (s, k) => s + ((p.reactions?.[k] || []).length),
+      0
+    );
+    return Math.max(sum, p.likes || 0);
+  };
+
   const postQuery = postSearch.trim().toLowerCase();
-  const discussionPosts = (() => {
-    const list = posts
+  const discussionPosts = useMemo(() => {
+    const list = visiblePosts
       .filter((p) => inCategory(p, postFilter))
+      .filter((p) => tagFilter === 'All' || (p.tags || []).includes(tagFilter))
       .filter(
         (p) =>
           !postQuery ||
           p.title.toLowerCase().includes(postQuery) ||
           p.content.toLowerCase().includes(postQuery) ||
-          p.author.toLowerCase().includes(postQuery)
+          p.author.toLowerCase().includes(postQuery) ||
+          (p.tags || []).some((t) => t.includes(postQuery))
       )
-      .filter((p) => postSort !== 'unanswered' || p.comments.length === 0);
-    return postSort === 'helpful' ? [...list].sort((a, b) => b.likes - a.likes) : list;
-  })();
+      .filter((p) => postSort !== 'unanswered' || p.comments.filter((c) => !c.hidden).length === 0);
 
-  const announcementsList = posts.filter((p) => p.category === 'Announcement' || p.pinned);
+    const sorted = [...list].sort((a, b) => {
+      if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
+      if (postSort === 'helpful') return reactionTotal(b) - reactionTotal(a);
+      if (postSort === 'discussed') return b.comments.length - a.comments.length;
+      return 0;
+    });
+    return sorted;
+  }, [visiblePosts, postFilter, tagFilter, postQuery, postSort, savedPostIds]);
+
+  const announcementsList = visiblePosts.filter((p) => p.category === 'Announcement' || p.pinned);
 
   const filteredResources = resources.filter((r) => {
+    if (resTypeFilter !== 'All' && r.type !== resTypeFilter) return false;
     if (!resSearch.trim()) return true;
     const q = resSearch.toLowerCase();
     return (
       r.title.toLowerCase().includes(q) ||
       r.category.toLowerCase().includes(q) ||
-      r.description.toLowerCase().includes(q)
+      r.description.toLowerCase().includes(q) ||
+      (r.tags || []).some((t: string) => t.toLowerCase().includes(q))
+    );
+  });
+
+  const filteredEvents = presentations.filter((ev) => {
+    if (evTypeFilter !== 'All' && ev.type !== evTypeFilter) return false;
+    if (!evSearch.trim()) return true;
+    const q = evSearch.toLowerCase();
+    return (
+      ev.title.toLowerCase().includes(q) ||
+      ev.topic.toLowerCase().includes(q) ||
+      ev.presenter.toLowerCase().includes(q) ||
+      ev.description.toLowerCase().includes(q)
     );
   });
 
@@ -605,10 +1018,45 @@ export const CommunitySection = ({
       ? challenges
       : challenges.filter((c) => c.category === challengeFilter || c.difficulty === challengeFilter);
 
-  const latestAnnouncement = announcementsList[0] || posts[0];
-  const openHelpList = helpRequests.filter((h) => h.status !== 'Resolved');
+  const latestAnnouncement = announcementsList[0] || visiblePosts[0];
+  const openHelpList = helpRequests.filter(
+    (h) =>
+      h.status !== 'Resolved' &&
+      (!helpSearch.trim() ||
+        `${h.helpNeeded} ${h.goal} ${h.author} ${h.field}`.toLowerCase().includes(helpSearch.toLowerCase()))
+  );
+  const resolvedHelpList = helpRequests.filter(
+    (h) =>
+      h.status === 'Resolved' &&
+      (!helpSearch.trim() ||
+        `${h.helpNeeded} ${h.goal} ${h.author} ${h.field}`.toLowerCase().includes(helpSearch.toLowerCase()))
+  );
 
-  // Controls for these three tabs: 44px targets, variable-driven for light and dark
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return directoryMembers;
+    return directoryMembers.filter((m) =>
+      `${m.name} ${m.username || ''} ${m.field} ${m.level} ${m.role} ${(m.languages || []).join(' ')}`
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [directoryMembers, memberSearch]);
+
+  // Unified Home Discovery search results across all community entities
+  const homeDiscovery = useMemo(() => {
+    const q = homeQuery.trim().toLowerCase();
+    if (!q) return null;
+    return {
+      posts: visiblePosts.filter((p) => `${p.title} ${p.content} ${p.author} ${(p.tags || []).join(' ')}`.toLowerCase().includes(q)).slice(0, 4),
+      groups: studyGroups.filter((g) => `${g.name} ${g.topic} ${g.field}`.toLowerCase().includes(q)).slice(0, 3),
+      resources: resources.filter((r) => `${r.title} ${r.category} ${r.description}`.toLowerCase().includes(q)).slice(0, 3),
+      events: presentations.filter((ev) => `${ev.title} ${ev.topic} ${ev.presenter}`.toLowerCase().includes(q)).slice(0, 3),
+      help: helpRequests.filter((h) => `${h.helpNeeded} ${h.goal} ${h.author}`.toLowerCase().includes(q)).slice(0, 3),
+      members: directoryMembers.filter((m) => `${m.name} ${m.field} ${m.role}`.toLowerCase().includes(q)).slice(0, 4),
+    };
+  }, [homeQuery, visiblePosts, studyGroups, resources, presentations, helpRequests, directoryMembers]);
+
+  // Controls styling
   const commBtn =
     'inline-flex items-center justify-center gap-2 min-h-11 px-5 rounded-lg text-sm whitespace-nowrap cursor-pointer transition-colors disabled:opacity-60';
   const commPrimary = `${commBtn} font-semibold bg-[var(--accent-600)] text-white hover:bg-[var(--accent-700)]`;
@@ -620,20 +1068,25 @@ export const CommunitySection = ({
     subTab === 'community' || subTab === 'community-home' ? (
       <button
         type="button"
+        disabled={Boolean(mutedReason)}
         onClick={() => {
-          if (subTab === 'community') setShowPostModal(true);
-          else openComposerOnDiscussions(setSubTab);
+          if (subTab === 'community') {
+            setEditingPost(null);
+            setShowPostModal(true);
+          } else {
+            openComposerOnDiscussions(setSubTab);
+          }
         }}
         className={btnPrimary}
       >
         <Plus className="w-3.5 h-3.5" /> Start a Discussion
       </button>
     ) : subTab === 'resources' ? (
-      <button type="button" onClick={() => setShowAddRes(true)} className={btnPrimary}>
+      <button type="button" disabled={Boolean(mutedReason)} onClick={() => setShowAddRes(true)} className={btnPrimary}>
         <Plus className="w-3.5 h-3.5" /> Share Resource
       </button>
     ) : subTab === 'events' ? (
-      <button type="button" onClick={() => setShowAddEvent(true)} className={btnPrimary}>
+      <button type="button" disabled={Boolean(mutedReason)} onClick={() => setShowAddEvent(true)} className={btnPrimary}>
         <Plus className="w-3.5 h-3.5" /> Host Study Session
       </button>
     ) : subTab === 'challenges' ? (
@@ -649,100 +1102,400 @@ export const CommunitySection = ({
     <div data-tour="community-section" className="space-y-6">
       <PageHeader
         title="Community"
-        description="Learn together with friendly beginners and peers—chat live in study rooms, ask questions, share helpful guides, or join sessions."
+        description="Learn together with friendly beginners and peers—chat live in study rooms, collaborate in study groups, ask questions, share guides, or join sessions."
         action={headerAction}
       />
+
+      {mutedReason && (
+        <div role="status" className="p-4 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] text-sm text-[var(--danger-ink)] flex items-center gap-3">
+          <Lock className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span>Your posting and chat actions are currently muted by a community moderator ({mutedReason}). You can still read discussions and view your notifications.</span>
+        </div>
+      )}
+
+      {communityError && (
+        <div role="alert" className="p-4 rounded-xl border border-[var(--danger-border)] bg-[var(--danger-bg)] text-sm text-[var(--danger-ink)] flex flex-wrap items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+            {communityError}
+          </span>
+          {onRetryCommunityLoad && (
+            <button type="button" onClick={onRetryCommunityLoad} className={btnSecondary}>
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Retry
+            </button>
+          )}
+        </div>
+      )}
 
       <SectionTabs tabs={communityTabs} active={activeNavTab} onChange={setSubTab} />
 
       {/* 0A. LIVE STUDY GROUP CHAT */}
       {subTab === 'study-chat' && (
-        <StudyGroupChatPanel styles={styles} currentUserId={user.id || user.email || 'me'} />
+        <StudyGroupChatPanel
+          styles={styles}
+          currentUserId={currentUserId}
+          isAdmin={isAdminMode}
+          mutedReason={mutedReason}
+          mentionCandidates={mentionCandidates}
+          onReportMessage={
+            onReportContent
+              ? (msg: StudyChatMessage) =>
+                  onReportContent({
+                    targetType: 'chat',
+                    targetId: msg.id,
+                    roomId: msg.roomId,
+                    targetAuthorId: msg.senderId,
+                    targetAuthorName: msg.senderName,
+                    targetPreview: msg.text || msg.codeSnippet || '[Message]',
+                  })
+              : undefined
+          }
+          onSelectMember={(id, name) => onOpenMemberProfile?.(id, name)}
+        />
+      )}
+
+      {/* 0B. STUDY GROUPS */}
+      {subTab === 'study-groups' && (
+        <StudyGroupsPanel
+          groups={studyGroups}
+          loading={communityLoading}
+          currentUserId={currentUserId}
+          currentUserField={profile.field}
+          mutedReason={mutedReason}
+          onCreateGroup={async (input) => {
+            if (actions) return actions.createStudyGroup(input);
+            return null;
+          }}
+          onToggleJoinGroup={async (groupId) => {
+            if (actions) await actions.toggleJoinStudyGroup(groupId);
+          }}
+          onUpdateWorkspace={async (groupId, input) => {
+            if (actions) await actions.updateStudyGroupWorkspace(groupId, input);
+          }}
+          onOpenGroupChat={(group) => {
+            upsertRoomAndOpen({
+              id: group.roomId,
+              name: group.name,
+              topic: `${group.field} · ${group.topic}`,
+              groupId: group.id,
+            });
+            setSubTab('study-chat');
+          }}
+          onSelectMember={(id, name) => onOpenMemberProfile?.(id, name)}
+          styles={styles}
+        />
       )}
 
       {/* 0. COMMUNITY HOME OVERVIEW */}
       {subTab === 'community-home' && (
         <div className="space-y-6">
-          {latestAnnouncement && (
-            <button type="button" onClick={() => setSubTab('announcements')} className={`${cardClass} studio-card-interactive w-full text-left flex items-start gap-4 p-5 cursor-pointer border-l-[6px] border-l-[var(--spark)]`}>
-              <Megaphone className="w-5 h-5 text-[var(--accent-600)] shrink-0 mt-1" />
-              <span className="min-w-0 flex-1 space-y-1">
-                <span className={`block text-xs ${textSecondary}`}>Pinned announcement · {latestAnnouncement.timestamp}</span>
-                <span className={`block text-lg font-display ${textPrimary}`}>{latestAnnouncement.title}</span>
-                <span className={`block text-sm line-clamp-2 max-w-[70ch] ${textSecondary}`}>{latestAnnouncement.content}</span>
-              </span>
-              <ArrowRight className="w-4 h-4 mt-1 shrink-0 text-[var(--accent-600)]" />
-            </button>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Feed: the main reason to be here */}
-            <section className="lg:col-span-8 space-y-4 min-w-0">
-              <div className="flex items-end justify-between">
-                <h2 className={`text-xl ${textPrimary}`}>Recent discussions</h2>
-                <button type="button" onClick={() => setSubTab('community')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">View all discussions</button>
-              </div>
-              {posts.length === 0 && (
-                <EmptyState
-                  title="No discussions yet"
-                  description="Be the first to ask a question or share a small win."
-                  actionLabel="Start a Discussion"
-                  onAction={() => openComposerOnDiscussions(setSubTab)}
-                />
-              )}
-              <ul className="space-y-3 sm:space-y-4">
-                {posts.slice(0, 5).map((p) => (
-                  <li key={p.id}>
-                    <button type="button" onClick={() => setSubTab('community')} className={`${cardClass} studio-card-interactive w-full text-left p-4 flex gap-4 items-start cursor-pointer`}>
-                      <span aria-hidden="true" className="w-10 h-10 rounded-full bg-[var(--accent-100)] text-[var(--accent-700)] text-sm font-semibold flex items-center justify-center shrink-0">
-                        {(p.author || '?').slice(0, 1).toUpperCase()}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={`block text-xs ${textSecondary}`}>{p.author} posted in <span className="font-semibold text-[var(--accent-600)]">{p.category}</span> · {p.timestamp}</span>
-                        <span className={`block text-base font-semibold leading-snug mt-0.5 ${textPrimary}`}>{p.title}</span>
-                      </span>
-                      <span className={`inline-flex items-center gap-1 text-xs tabular-nums shrink-0 ${textSecondary}`}>
-                        <MessageSquare className="w-3.5 h-3.5" /> {p.comments.length}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            {/* Rail: things with a date or a task attached */}
-            <aside className="lg:col-span-4 space-y-4 min-w-0">
-              {presentations[0] && (
-                <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
-                  <div className={`flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-600)]`}><Calendar className="w-3.5 h-3.5" /> Next session · {presentations[0].dateTime}</div>
-                  <h3 className={`text-lg ${textPrimary}`}>{presentations[0].title}</h3>
-                  <p className={`text-sm line-clamp-3 ${textSecondary}`}>{presentations[0].description}</p>
-                  <button type="button" onClick={() => setSubTab('events')} className={btnSecondary}>All events ({presentations.length})</button>
-                </section>
-              )}
-              {challenges[0] && (
-                <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[var(--accent-600)] inline-flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> Weekly challenge</span>
-                    <span className={textSecondary}>{challenges[0].difficulty}</span>
-                  </div>
-                  <h3 className={`text-lg ${textPrimary}`}>{challenges[0].title}</h3>
-                  <p className={`text-sm line-clamp-3 ${textSecondary}`}>{challenges[0].description}</p>
-                  <button type="button" onClick={() => setSubTab('challenges')} className={btnSecondary}>Try it</button>
-                </section>
-              )}
-              <section className={`${cardClass} p-5 sm:p-6 space-y-4 bg-[var(--accent-50)]`}>
-                <div>
-                  <h3 className={`text-lg ${textPrimary}`}>Peer help & study chat</h3>
-                  <p className={`text-sm ${textSecondary}`}>{openHelpList.length} open question{openHelpList.length === 1 ? '' : 's'} · {teamRoster.length} members</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setSubTab('pairing-help')} className={btnPrimary}>Ask or help</button>
-                  <button type="button" onClick={() => setSubTab('study-chat')} className={btnSecondary}>Live study chat</button>
-                </div>
-              </section>
-            </aside>
+          {/* Unified Discovery Search */}
+          <div className="relative">
+            <label htmlFor="community-global-search" className="sr-only">
+              Search across discussions, study groups, resources, events, help questions, and members
+            </label>
+            <Search className={`w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 ${textSecondary}`} aria-hidden="true" />
+            <input
+              id="community-global-search"
+              type="search"
+              value={homeQuery}
+              onChange={(e) => setHomeQuery(e.target.value)}
+              placeholder="Search discussions, tags, study groups, resources, events, or members..."
+              className={`${commInput} !pl-11 !h-12 !rounded-full`}
+            />
           </div>
+
+          {homeDiscovery ? (
+            <div className={`${cardClass} p-6 space-y-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className={`text-lg font-display ${textPrimary}`}>
+                  Discovery results for “{homeQuery.trim()}”
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setHomeQuery('')}
+                  className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+                >
+                  Clear search
+                </button>
+              </div>
+
+              {homeDiscovery.posts.length === 0 &&
+              homeDiscovery.groups.length === 0 &&
+              homeDiscovery.resources.length === 0 &&
+              homeDiscovery.events.length === 0 &&
+              homeDiscovery.help.length === 0 &&
+              homeDiscovery.members.length === 0 ? (
+                <EmptyState
+                  title="Nothing matches that search yet"
+                  description="Try a shorter keyword like React, SQL, CSS, or a member's name."
+                  actionLabel="Clear search"
+                  onAction={() => setHomeQuery('')}
+                />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {homeDiscovery.posts.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Discussions</h3>
+                      <ul className="space-y-2">
+                        {homeDiscovery.posts.map((p) => (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPostSearch(homeQuery);
+                                setSubTab('community');
+                              }}
+                              className={`w-full text-left p-3 rounded-xl ${subtleBgClass} hover:bg-[var(--accent-50)] cursor-pointer`}
+                            >
+                              <div className="text-xs font-semibold text-[var(--accent-600)]">{p.category} · {p.author}</div>
+                              <div className={`text-sm font-medium ${textPrimary} truncate`}>{p.title}</div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {homeDiscovery.groups.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Study Groups</h3>
+                      <ul className="space-y-2">
+                        {homeDiscovery.groups.map((g) => (
+                          <li key={g.id}>
+                            <button
+                              type="button"
+                              onClick={() => setSubTab('study-groups')}
+                              className={`w-full text-left p-3 rounded-xl ${subtleBgClass} hover:bg-[var(--accent-50)] cursor-pointer`}
+                            >
+                              <div className="text-xs font-semibold text-[var(--accent-600)]">{g.field} · {g.memberIds.length} members</div>
+                              <div className={`text-sm font-medium ${textPrimary} truncate`}>{g.name}</div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {homeDiscovery.members.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Members</h3>
+                      <ul className="space-y-2">
+                        {homeDiscovery.members.map((m) => (
+                          <li key={m.id}>
+                            <button
+                              type="button"
+                              onClick={() => onOpenMemberProfile?.(m.id, m.name)}
+                              className={`w-full text-left p-3 rounded-xl ${subtleBgClass} hover:bg-[var(--accent-50)] cursor-pointer flex items-center justify-between`}
+                            >
+                              <span className={`text-sm font-medium ${textPrimary}`}>{m.name}</span>
+                              <span className={`text-xs ${textSecondary}`}>{m.field || m.role}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(homeDiscovery.resources.length > 0 || homeDiscovery.events.length > 0 || homeDiscovery.help.length > 0) && (
+                    <div className="space-y-2">
+                      <h3 className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Resources, Events & Help</h3>
+                      <ul className="space-y-2">
+                        {homeDiscovery.resources.map((r) => (
+                          <li key={r.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResSearch(homeQuery);
+                                setSubTab('resources');
+                              }}
+                              className={`w-full text-left p-3 rounded-xl ${subtleBgClass} hover:bg-[var(--accent-50)] cursor-pointer`}
+                            >
+                              <div className="text-xs font-semibold text-[var(--accent-600)]">Resource · {r.type}</div>
+                              <div className={`text-sm font-medium ${textPrimary} truncate`}>{r.title}</div>
+                            </button>
+                          </li>
+                        ))}
+                        {homeDiscovery.events.map((ev) => (
+                          <li key={ev.id}>
+                            <button
+                              type="button"
+                              onClick={() => setSubTab('events')}
+                              className={`w-full text-left p-3 rounded-xl ${subtleBgClass} hover:bg-[var(--accent-50)] cursor-pointer`}
+                            >
+                              <div className="text-xs font-semibold text-[var(--accent-600)]">Event · {ev.dateTime}</div>
+                              <div className={`text-sm font-medium ${textPrimary} truncate`}>{ev.title}</div>
+                            </button>
+                          </li>
+                        ))}
+                        {homeDiscovery.help.map((h) => (
+                          <li key={h.id}>
+                            <button
+                              type="button"
+                              onClick={() => setSubTab('pairing-help')}
+                              className={`w-full text-left p-3 rounded-xl ${subtleBgClass} hover:bg-[var(--accent-50)] cursor-pointer`}
+                            >
+                              <div className="text-xs font-semibold text-[var(--accent-600)]">Help Desk · {h.status}</div>
+                              <div className={`text-sm font-medium ${textPrimary} truncate`}>{h.helpNeeded}</div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : communityLoading ? (
+            <div className="space-y-4">
+              <SkeletonBlock className="h-28 w-full" />
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-8 space-y-3">
+                  <SkeletonBlock className="h-24 w-full" />
+                  <SkeletonBlock className="h-24 w-full" />
+                </div>
+                <div className="lg:col-span-4 space-y-3">
+                  <SkeletonBlock className="h-36 w-full" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {latestAnnouncement && (
+                <button
+                  type="button"
+                  onClick={() => setSubTab('announcements')}
+                  className={`${cardClass} studio-card-interactive w-full text-left flex items-start gap-4 p-5 cursor-pointer border-l-[6px] border-l-[var(--spark)]`}
+                >
+                  <Megaphone className="w-5 h-5 text-[var(--accent-600)] shrink-0 mt-1" />
+                  <span className="min-w-0 flex-1 space-y-1">
+                    <span className={`block text-xs ${textSecondary}`}>Pinned announcement · {latestAnnouncement.timestamp}</span>
+                    <span className={`block text-lg font-display ${textPrimary}`}>{latestAnnouncement.title}</span>
+                    <span className={`block text-sm line-clamp-2 max-w-[70ch] ${textSecondary}`}>{latestAnnouncement.content}</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 mt-1 shrink-0 text-[var(--accent-600)]" />
+                </button>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Feed */}
+                <section className="lg:col-span-8 space-y-4 min-w-0">
+                  <div className="flex items-end justify-between">
+                    <h2 className={`text-xl ${textPrimary}`}>Recent discussions</h2>
+                    <button
+                      type="button"
+                      onClick={() => setSubTab('community')}
+                      className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+                    >
+                      View all discussions
+                    </button>
+                  </div>
+                  {visiblePosts.length === 0 && (
+                    <EmptyState
+                      title="No discussions yet"
+                      description="Be the first to ask a question or share a small win."
+                      actionLabel="Start a Discussion"
+                      onAction={() => openComposerOnDiscussions(setSubTab)}
+                    />
+                  )}
+                  <ul className="space-y-3 sm:space-y-4">
+                    {visiblePosts.slice(0, 5).map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSubTab('community')}
+                          className={`${cardClass} studio-card-interactive w-full text-left p-4 flex gap-4 items-start cursor-pointer`}
+                        >
+                          <span aria-hidden="true" className="w-10 h-10 rounded-full bg-[var(--accent-100)] text-[var(--accent-700)] text-sm font-semibold flex items-center justify-center shrink-0">
+                            {(p.author || '?').slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-xs ${textSecondary}`}>
+                              {p.pinned && <span className="font-semibold text-[var(--accent-600)] mr-1">Pinned ·</span>}
+                              {p.author} posted in <span className="font-semibold text-[var(--accent-600)]">{p.category}</span> · {p.timestamp}
+                            </span>
+                            <span className={`block text-base font-semibold leading-snug mt-0.5 ${textPrimary}`}>{p.title}</span>
+                          </span>
+                          <span className={`inline-flex items-center gap-1 text-xs tabular-nums shrink-0 ${textSecondary}`}>
+                            <MessageSquare className="w-3.5 h-3.5" /> {p.comments.filter((c) => !c.hidden).length}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+
+                {/* Rail */}
+                <aside className="lg:col-span-4 space-y-4 min-w-0">
+                  {presentations[0] && (
+                    <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-600)]">
+                        <Calendar className="w-3.5 h-3.5" /> Next session · {presentations[0].dateTime}
+                      </div>
+                      <h3 className={`text-lg ${textPrimary}`}>{presentations[0].title}</h3>
+                      <p className={`text-sm line-clamp-3 ${textSecondary}`}>{presentations[0].description}</p>
+                      <button type="button" onClick={() => setSubTab('events')} className={btnSecondary}>
+                        All events ({presentations.length})
+                      </button>
+                    </section>
+                  )}
+
+                  <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[var(--accent-600)] inline-flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" /> Study groups
+                      </span>
+                      <span className="tabular-nums text-[var(--ink-secondary)]">{studyGroups.length} active</span>
+                    </div>
+                    <h3 className={`text-lg ${textPrimary}`}>
+                      {studyGroups[0] ? studyGroups[0].name : 'Collaborate in small groups'}
+                    </h3>
+                    <p className={`text-sm line-clamp-2 ${textSecondary}`}>
+                      {studyGroups[0]
+                        ? `${studyGroups[0].topic} · ${studyGroups[0].memberIds.length} members`
+                        : 'Join or create a topic study circle with shared goals, links, and group chat.'}
+                    </p>
+                    <button type="button" onClick={() => setSubTab('study-groups')} className={btnSecondary}>
+                      Browse study groups
+                    </button>
+                  </section>
+
+                  {challenges[0] && (
+                    <section className={`${cardClass} p-5 sm:p-6 space-y-3`}>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-[var(--accent-600)] inline-flex items-center gap-1.5">
+                          <Trophy className="w-3.5 h-3.5" /> Weekly challenge
+                        </span>
+                        <span className={textSecondary}>{challenges[0].difficulty}</span>
+                      </div>
+                      <h3 className={`text-lg ${textPrimary}`}>{challenges[0].title}</h3>
+                      <p className={`text-sm line-clamp-3 ${textSecondary}`}>{challenges[0].description}</p>
+                      <button type="button" onClick={() => setSubTab('challenges')} className={btnSecondary}>
+                        Try it
+                      </button>
+                    </section>
+                  )}
+
+                  <section className={`${cardClass} p-5 sm:p-6 space-y-4 bg-[var(--accent-50)]`}>
+                    <div>
+                      <h3 className={`text-lg ${textPrimary}`}>Peer help & study chat</h3>
+                      <p className={`text-sm ${textSecondary}`}>
+                        {openHelpList.length} open question{openHelpList.length === 1 ? '' : 's'} · {directoryMembers.length} members
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setSubTab('pairing-help')} className={btnPrimary}>
+                        Ask or help
+                      </button>
+                      <button type="button" onClick={() => setSubTab('study-chat')} className={btnSecondary}>
+                        Live study chat
+                      </button>
+                    </div>
+                  </section>
+                </aside>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -750,7 +1503,7 @@ export const CommunitySection = ({
       {subTab === 'community' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           <nav aria-label="Discussion categories" className="lg:col-span-3 lg:sticky lg:top-6 flex lg:flex-col gap-2 lg:gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 lg:mx-0 lg:px-0">
-            {['All', 'Question', 'Small Win', 'Mistake & Lesson', 'Explain a Concept', 'Study Session Idea', 'Saved'].map((cat) => (
+            {['All', 'Announcement', 'Question', 'Small Win', 'Mistake & Lesson', 'Explain a Concept', 'Study Session Idea', 'Saved'].map((cat) => (
               <button
                 key={cat}
                 type="button"
@@ -764,7 +1517,7 @@ export const CommunitySection = ({
               >
                 <span>{cat}</span>
                 <span className={`text-xs tabular-nums ${postFilter === cat ? 'text-[var(--accent-700)]' : textSecondary}`}>
-                  {posts.filter((p) => inCategory(p, cat)).length}
+                  {visiblePosts.filter((p) => inCategory(p, cat)).length}
                 </span>
               </button>
             ))}
@@ -779,12 +1532,17 @@ export const CommunitySection = ({
                   type="search"
                   value={postSearch}
                   onChange={(e) => setPostSearch(e.target.value)}
-                  placeholder="Search discussions"
+                  placeholder="Search discussions, tags, or authors..."
                   className={`${commInput} !pl-10 min-h-11`}
                 />
               </label>
               <div role="group" aria-label="Sort discussions" className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 sm:mx-0 sm:px-0">
-                {([['new', 'Newest'], ['helpful', 'Most helpful'], ['unanswered', 'Unanswered']] as const).map(([id, label]) => (
+                {([
+                  ['new', 'Newest'],
+                  ['helpful', 'Most helpful'],
+                  ['discussed', 'Most discussed'],
+                  ['unanswered', 'Unanswered'],
+                ] as const).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -801,43 +1559,230 @@ export const CommunitySection = ({
                 ))}
               </div>
             </div>
-            {discussionPosts.length === 0 ? (
+
+            {availableTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex items-center gap-1 text-xs mr-1 ${textSecondary}`}>
+                  <Tag className="w-3.5 h-3.5" aria-hidden="true" /> Tags:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTagFilter('All')}
+                  className={`px-2.5 min-h-[30px] rounded-md text-xs font-medium cursor-pointer transition-colors ${
+                    tagFilter === 'All'
+                      ? 'bg-[var(--accent-600)] text-white'
+                      : 'bg-[var(--surface-subtle)] text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
+                  }`}
+                >
+                  All
+                </button>
+                {availableTags.slice(0, 12).map(({ tag, count }) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setTagFilter(tagFilter === tag ? 'All' : tag)}
+                    className={`px-2.5 min-h-[30px] rounded-md text-xs font-medium cursor-pointer transition-colors ${
+                      tagFilter === tag
+                        ? 'bg-[var(--accent-600)] text-white'
+                        : 'bg-[var(--surface-subtle)] text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
+                    }`}
+                  >
+                    #{tag} <span className="opacity-70 tabular-nums">{count}</span>
+                  </button>
+                ))}
+                {(postFilter !== 'All' || tagFilter !== 'All' || postQuery || postSort !== 'new') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPostFilter('All');
+                      setTagFilter('All');
+                      setPostSearch('');
+                      setPostSort('new');
+                    }}
+                    className="ml-auto text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+
+            {communityLoading ? (
+              <div className="space-y-4">
+                <SkeletonBlock className="h-44 w-full" />
+                <SkeletonBlock className="h-44 w-full" />
+              </div>
+            ) : discussionPosts.length === 0 ? (
               <EmptyState
-                title={postQuery || postSort === 'unanswered' ? 'Nothing matches yet' : 'No discussions here yet'}
+                title={postQuery || postSort === 'unanswered' || tagFilter !== 'All' ? 'Nothing matches yet' : 'No discussions here yet'}
                 description={
-                  postQuery || postSort === 'unanswered'
-                    ? 'Try a different word, or clear the filters to see everything.'
+                  postQuery || postSort === 'unanswered' || tagFilter !== 'All'
+                    ? 'Try a different keyword, or clear the filters to see everything.'
                     : 'Start a friendly question, celebrate a small win, or share something you figured out today.'
                 }
-                actionLabel="Start a Discussion"
-                onAction={() => setShowPostModal(true)}
+                actionLabel={postQuery || tagFilter !== 'All' ? 'Clear filters' : 'Start a Discussion'}
+                onAction={() => {
+                  if (postQuery || tagFilter !== 'All' || postSort !== 'new') {
+                    setPostFilter('All');
+                    setTagFilter('All');
+                    setPostSearch('');
+                    setPostSort('new');
+                  } else {
+                    setShowPostModal(true);
+                  }
+                }}
               />
             ) : (
               discussionPosts.map((post) => {
                 const isSaved = savedPostIds.includes(post.id);
+                const isAuthor = post.authorId === currentUserId || (!post.authorId && post.author === currentUserName);
+                const canModify = isAuthor || isAdminMode;
+                const helpfulList = post.reactions?.helpful || [];
+                const insightfulList = post.reactions?.insightful || [];
+                const celebrateList = post.reactions?.celebrate || [];
+                const helpfulCount = Math.max(helpfulList.length, !post.reactions ? post.likes : 0);
+
+                const allVisibleComments = post.comments.filter((c) => isAdminMode || !c.hidden);
+                const topComments = allVisibleComments
+                  .filter((c) => !c.parentId)
+                  .sort((a, b) => Number(!!b.isHelpful) - Number(!!a.isHelpful));
+                const repliesByParent = new Map<string, CommunityPostComment[]>();
+                for (const c of allVisibleComments) {
+                  if (c.parentId) {
+                    const arr = repliesByParent.get(c.parentId) || [];
+                    arr.push(c);
+                    repliesByParent.set(c.parentId, arr);
+                  }
+                }
+                const activeParentReply = replyParentByPost[post.id] || null;
+
                 return (
-                  <div key={post.id} className={`${cardClass} p-5 sm:p-6 space-y-3.5`}>
+                  <article
+                    key={post.id}
+                    id={`community-post-${post.id}`}
+                    className={`${cardClass} p-5 sm:p-6 space-y-3.5 ${post.pinned ? 'border-l-4 !border-l-[var(--spark)]' : ''} ${post.hidden ? 'opacity-65' : ''}`}
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex flex-wrap items-center gap-2">
-                        {post.pinned && <Pin className="w-3.5 h-3.5 text-[var(--accent-600)]" />}
+                        {post.pinned && (
+                          <span className="inline-flex items-center gap-1 font-semibold text-[var(--accent-600)]">
+                            <Pin className="w-3.5 h-3.5" aria-hidden="true" /> Pinned
+                          </span>
+                        )}
+                        {post.locked && <Badge variant="warning"><Lock className="w-3 h-3" /> Locked</Badge>}
+                        {post.hidden && <Badge variant="danger">Hidden by Moderator</Badge>}
                         <span className="font-semibold text-[var(--accent-600)]">{post.category}</span>
-                        <span className={textSecondary}>· {post.author} ({post.role})</span>
+                        <span className={textSecondary}>
+                          ·{' '}
+                          <button
+                            type="button"
+                            onClick={() => onOpenMemberProfile?.(post.authorId || post.author, post.author)}
+                            className="font-medium hover:text-[var(--accent-600)] hover:underline cursor-pointer"
+                          >
+                            {post.author}
+                          </button>{' '}
+                          ({post.role})
+                        </span>
                         <span className={textSecondary}>· {post.timestamp}</span>
+                        {post.updatedAt && <span className={textSecondary}>(edited)</span>}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleSavePost(post.id)}
-                        aria-pressed={isSaved}
-                        className={`inline-flex items-center gap-1 min-h-[36px] px-1 -mr-1 text-xs cursor-pointer ${
-                          isSaved ? 'text-[var(--accent-600)] font-semibold' : textSecondary
-                        }`}
-                      >
-                        <Bookmark className="w-3.5 h-3.5" /> {isSaved ? 'Saved' : 'Save'}
-                      </button>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleSavePost(post.id)}
+                          aria-pressed={isSaved}
+                          className={`inline-flex items-center gap-1 min-h-[32px] px-1.5 text-xs cursor-pointer ${
+                            isSaved ? 'text-[var(--accent-600)] font-semibold' : textSecondary
+                          }`}
+                        >
+                          <Bookmark className="w-3.5 h-3.5" /> {isSaved ? 'Saved' : 'Save'}
+                        </button>
+
+                        {canModify && !mutedReason && (
+                          <button
+                            type="button"
+                            onClick={() => openEditPostModal(post)}
+                            className={`inline-flex items-center gap-1 min-h-[32px] px-1.5 text-xs ${textSecondary} hover:text-[var(--accent-600)] cursor-pointer`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                        )}
+
+                        {canModify && (
+                          confirmDeletePostId === post.id ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (actions) await actions.deletePost(post.id);
+                                  else setPosts(posts.filter((x) => x.id !== post.id));
+                                  setConfirmDeletePostId(null);
+                                }}
+                                className="px-2 py-1 rounded text-xs font-semibold bg-[var(--danger-bg)] text-[var(--danger-ink)] cursor-pointer"
+                              >
+                                Confirm delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeletePostId(null)}
+                                className={`text-xs ${textSecondary} cursor-pointer`}
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeletePostId(post.id)}
+                              className={`inline-flex items-center gap-1 min-h-[32px] px-1.5 text-xs ${textSecondary} hover:text-[var(--danger-ink)] cursor-pointer`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Delete
+                            </button>
+                          )
+                        )}
+
+                        {!isAuthor && onReportContent && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onReportContent({
+                                targetType: 'post',
+                                targetId: post.id,
+                                targetAuthorId: post.authorId,
+                                targetAuthorName: post.author,
+                                targetPreview: `${post.title}: ${post.content}`,
+                              })
+                            }
+                            className={`inline-flex items-center gap-1 min-h-[32px] px-1.5 text-xs ${textSecondary} hover:text-[var(--warning-ink)] cursor-pointer`}
+                          >
+                            <Flag className="w-3.5 h-3.5" /> Report
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <h2 className={`text-xl ${textPrimary}`}>{post.title}</h2>
                     <PostBody text={post.content} className={`text-sm leading-relaxed ${textSecondary}`} />
+
+                    {post.tags && post.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {post.tags.map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setTagFilter(tagFilter === t ? 'All' : t)}
+                            className={`px-2 py-0.5 rounded-md text-xs font-medium cursor-pointer transition-colors ${
+                              tagFilter === t
+                                ? 'bg-[var(--accent-600)] text-white'
+                                : 'bg-[var(--surface-subtle)] text-[var(--accent-700)] hover:bg-[var(--accent-50)]'
+                            }`}
+                          >
+                            #{t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {post.codeSnippet && (
                       <pre className={`p-3.5 rounded-lg border ${borderClass} ${subtleBgClass} font-mono text-xs overflow-x-auto ${textPrimary}`}>
@@ -856,90 +1801,333 @@ export const CommunitySection = ({
                       </a>
                     )}
 
-                    <div className={`pt-2 flex items-center gap-5 text-xs ${textSecondary}`}>
-                      <button
-                        type="button"
-                        onClick={() => toggleLikePost(post.id)}
-                        aria-pressed={likedPostIds.includes(post.id)}
-                        className={`inline-flex items-center gap-1.5 min-h-[36px] cursor-pointer tabular-nums ${
-                          likedPostIds.includes(post.id) ? 'text-[var(--accent-600)] font-semibold' : 'hover:text-[var(--accent-600)]'
-                        }`}
-                      >
-                        <ThumbsUp className="w-3.5 h-3.5" /> Helpful ({post.likes})
-                      </button>
-                      <span className="inline-flex items-center gap-1.5 tabular-nums">
-                        <MessageSquare className="w-3.5 h-3.5" /> {post.comments.length} {post.comments.length === 1 ? 'reply' : 'replies'}
-                      </span>
-                    </div>
+                    {/* Multi-Reactions & Admin Moderation Strip */}
+                    <div className={`pt-2 flex flex-wrap items-center justify-between gap-3 text-xs ${textSecondary}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleReaction(post, 'helpful')}
+                          aria-pressed={helpfulList.includes(currentUserId)}
+                          className={`inline-flex items-center gap-1.5 px-3 min-h-[34px] rounded-full border cursor-pointer tabular-nums transition-colors ${
+                            helpfulList.includes(currentUserId)
+                              ? 'border-[var(--accent-600)] bg-[var(--accent-50)] text-[var(--accent-700)] font-semibold'
+                              : `${borderClass} hover:bg-[var(--surface-subtle)]`
+                          }`}
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" /> Helpful ({helpfulCount})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReaction(post, 'insightful')}
+                          aria-pressed={insightfulList.includes(currentUserId)}
+                          className={`inline-flex items-center gap-1.5 px-3 min-h-[34px] rounded-full border cursor-pointer tabular-nums transition-colors ${
+                            insightfulList.includes(currentUserId)
+                              ? 'border-[var(--accent-600)] bg-[var(--accent-50)] text-[var(--accent-700)] font-semibold'
+                              : `${borderClass} hover:bg-[var(--surface-subtle)]`
+                          }`}
+                        >
+                          <Lightbulb className="w-3.5 h-3.5" /> Insightful ({insightfulList.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReaction(post, 'celebrate')}
+                          aria-pressed={celebrateList.includes(currentUserId)}
+                          className={`inline-flex items-center gap-1.5 px-3 min-h-[34px] rounded-full border cursor-pointer tabular-nums transition-colors ${
+                            celebrateList.includes(currentUserId)
+                              ? 'border-[var(--accent-600)] bg-[var(--accent-50)] text-[var(--accent-700)] font-semibold'
+                              : `${borderClass} hover:bg-[var(--surface-subtle)]`
+                          }`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5" /> Celebrate ({celebrateList.length})
+                        </button>
+                        <span className="inline-flex items-center gap-1.5 tabular-nums px-1">
+                          <MessageSquare className="w-3.5 h-3.5" /> {allVisibleComments.length}{' '}
+                          {allVisibleComments.length === 1 ? 'reply' : 'replies'}
+                        </span>
+                      </div>
 
-                    {/* Replies */}
-                    <details open={post.comments.length > 0 && post.comments.length <= 2} className={`pt-3 border-t ${borderClass} group`}>
-                    <summary className={`list-none cursor-pointer text-sm font-semibold flex items-center gap-1.5 [&::-webkit-details-marker]:hidden ${textPrimary}`}>
-                      <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90 text-[var(--accent-600)]" />
-                      {post.comments.length === 0 ? 'Be the first to reply' : `${post.comments.length} repl${post.comments.length === 1 ? 'y' : 'ies'}`}
-                    </summary>
-                    <div className="space-y-3 mt-3">
-
-                      {[...post.comments].sort((a, b) => Number(!!b.isHelpful) - Number(!!a.isHelpful)).map((c) => (
-                        <div key={c.id} className={`py-2.5 px-3 rounded-lg ${subtleBgClass} flex items-start justify-between gap-3`}>
-                          <div className="space-y-0.5 text-xs min-w-0">
-                            <div className="flex items-center gap-2">
-                              <strong className={textPrimary}>{c.author}</strong>
-                              {c.isHelpful && <Badge variant="success">Helpful answer</Badge>}
-                            </div>
-                            <p className={`${textSecondary} whitespace-pre-wrap break-words`}>{c.text}</p>
-                          </div>
+                      {isAdminMode && actions && (
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => toggleHelpfulComment(post.id, c.id)}
-                            className={`text-xs font-medium shrink-0 min-h-[36px] cursor-pointer ${
-                              c.isHelpful ? 'text-[var(--success-ink)]' : 'text-[var(--accent-600)] hover:underline'
-                            }`}
+                            onClick={() => actions.moderatePost(post.id, { pinned: !post.pinned })}
+                            className="px-2.5 min-h-[30px] rounded-md border border-[var(--border-hairline)] hover:bg-[var(--surface-subtle)] text-xs cursor-pointer inline-flex items-center gap-1"
                           >
-                            {c.isHelpful ? 'Helpful ✓' : 'Mark helpful'}
+                            <Pin className="w-3 h-3" /> {post.pinned ? 'Unpin' : 'Pin'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => actions.moderatePost(post.id, { locked: !post.locked })}
+                            className="px-2.5 min-h-[30px] rounded-md border border-[var(--border-hairline)] hover:bg-[var(--surface-subtle)] text-xs cursor-pointer inline-flex items-center gap-1"
+                          >
+                            {post.locked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                            {post.locked ? 'Unlock' : 'Lock'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => actions.moderatePost(post.id, { hidden: !post.hidden })}
+                            className="px-2.5 min-h-[30px] rounded-md border border-[var(--border-hairline)] hover:bg-[var(--surface-subtle)] text-xs cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <EyeOff className="w-3 h-3" /> {post.hidden ? 'Restore' : 'Hide'}
                           </button>
                         </div>
-                      ))}
-
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleAddReply(post.id);
-                        }}
-                        className="flex flex-col sm:flex-row gap-2 pt-1"
-                      >
-                        <label htmlFor={`reply-${post.id}`} className="sr-only">Write a reply</label>
-                        <input
-                          id={`reply-${post.id}`}
-                          value={replyDrafts[post.id] || ''}
-                          onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))}
-                          maxLength={1000}
-                          placeholder="Write a helpful reply..."
-                          className={`${inputClass} flex-1 min-w-0`}
-                        />
-                        <button type="submit" disabled={!(replyDrafts[post.id] || '').trim()} className={btnSecondary}>
-                          Reply
-                        </button>
-                      </form>
+                      )}
                     </div>
+
+                    {/* Replies & Nested Comments */}
+                    <details open={allVisibleComments.length > 0 && allVisibleComments.length <= 4} className={`pt-3 border-t ${borderClass} group`}>
+                      <summary className={`list-none cursor-pointer text-sm font-semibold flex items-center gap-1.5 [&::-webkit-details-marker]:hidden ${textPrimary}`}>
+                        <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90 text-[var(--accent-600)]" />
+                        {allVisibleComments.length === 0
+                          ? post.locked
+                            ? 'Replies locked'
+                            : 'Be the first to reply'
+                          : `${allVisibleComments.length} repl${allVisibleComments.length === 1 ? 'y' : 'ies'}`}
+                      </summary>
+
+                      <div className="space-y-3 mt-3">
+                        {topComments.map((c) => {
+                          const childReplies = repliesByParent.get(c.id) || [];
+                          const renderCommentRow = (comment: CommunityPostComment, isNested: boolean) => {
+                            const isCommentAuthor =
+                              comment.authorId === currentUserId || (!comment.authorId && comment.author === currentUserName);
+                            const canModComment = isCommentAuthor || isAdminMode;
+                            const isEditingThis =
+                              editingComment?.postId === post.id && editingComment?.commentId === comment.id;
+
+                            return (
+                              <div
+                                key={comment.id}
+                                className={`py-2.5 px-3 rounded-lg ${subtleBgClass} space-y-1.5 ${
+                                  isNested ? 'ml-6 border-l-2 border-[var(--accent-500)]/40' : ''
+                                } ${comment.hidden ? 'opacity-60' : ''}`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2 text-xs">
+                                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenMemberProfile?.(comment.authorId || comment.author, comment.author)}
+                                      className={`font-semibold hover:text-[var(--accent-600)] hover:underline cursor-pointer ${textPrimary}`}
+                                    >
+                                      {comment.author}
+                                    </button>
+                                    {comment.authorRole === 'Community Admin' && <Badge variant="info">Admin</Badge>}
+                                    {comment.isHelpful && <Badge variant="success">Helpful answer</Badge>}
+                                    {comment.hidden && <Badge variant="danger">Hidden</Badge>}
+                                    {comment.updatedAt && <span className={textSecondary}>(edited)</span>}
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (actions) {
+                                          await actions.updateComment(post.id, comment.id, { toggleHelpful: true });
+                                        } else {
+                                          setPosts(
+                                            posts.map((p) =>
+                                              p.id === post.id
+                                                ? {
+                                                    ...p,
+                                                    comments: p.comments.map((x) =>
+                                                      x.id === comment.id ? { ...x, isHelpful: !x.isHelpful } : x
+                                                    ),
+                                                  }
+                                                : p
+                                            )
+                                          );
+                                        }
+                                      }}
+                                      className={`text-xs font-medium cursor-pointer ${
+                                        comment.isHelpful ? 'text-[var(--success-ink)]' : 'text-[var(--accent-600)] hover:underline'
+                                      }`}
+                                    >
+                                      {comment.isHelpful
+                                        ? `Helpful ✓${comment.helpfulBy?.length ? ` (${comment.helpfulBy.length})` : ''}`
+                                        : 'Mark helpful'}
+                                    </button>
+
+                                    {!post.locked && !mutedReason && !isNested && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setReplyParentByPost((prev) => ({ ...prev, [post.id]: comment }))
+                                        }
+                                        className={`inline-flex items-center gap-1 ${textSecondary} hover:text-[var(--accent-600)] cursor-pointer`}
+                                      >
+                                        <CornerUpLeft className="w-3 h-3" /> Reply
+                                      </button>
+                                    )}
+
+                                    {isCommentAuthor && !mutedReason && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setEditingComment({ postId: post.id, commentId: comment.id, text: comment.text })
+                                        }
+                                        className={`${textSecondary} hover:text-[var(--accent-600)] cursor-pointer`}
+                                      >
+                                        Edit
+                                      </button>
+                                    )}
+
+                                    {canModComment && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (actions) await actions.deleteComment(post.id, comment.id);
+                                          else
+                                            setPosts(
+                                              posts.map((p) =>
+                                                p.id === post.id
+                                                  ? { ...p, comments: p.comments.filter((x) => x.id !== comment.id) }
+                                                  : p
+                                              )
+                                            );
+                                        }}
+                                        className={`${textSecondary} hover:text-[var(--danger-ink)] cursor-pointer`}
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
+
+                                    {!isCommentAuthor && onReportContent && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          onReportContent({
+                                            targetType: 'comment',
+                                            targetId: comment.id,
+                                            parentId: post.id,
+                                            targetAuthorId: comment.authorId,
+                                            targetAuthorName: comment.author,
+                                            targetPreview: comment.text,
+                                          })
+                                        }
+                                        className={`${textSecondary} hover:text-[var(--warning-ink)] cursor-pointer`}
+                                      >
+                                        Report
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {isEditingThis ? (
+                                  <form
+                                    onSubmit={async (e) => {
+                                      e.preventDefault();
+                                      if (!editingComment.text.trim()) return;
+                                      if (actions) {
+                                        await actions.updateComment(post.id, comment.id, { text: editingComment.text.trim() });
+                                      }
+                                      setEditingComment(null);
+                                    }}
+                                    className="flex flex-col sm:flex-row gap-2 pt-1"
+                                  >
+                                    <input
+                                      value={editingComment.text}
+                                      onChange={(e) =>
+                                        setEditingComment((prev) => (prev ? { ...prev, text: e.target.value } : null))
+                                      }
+                                      className={`${inputClass} flex-1 text-xs`}
+                                    />
+                                    <button type="submit" className={btnPrimary}>Save</button>
+                                    <button type="button" onClick={() => setEditingComment(null)} className={btnSecondary}>
+                                      Cancel
+                                    </button>
+                                  </form>
+                                ) : (
+                                  <p className={`text-xs leading-relaxed ${textSecondary} whitespace-pre-wrap break-words`}>
+                                    <MentionText text={comment.text} />
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          };
+
+                          return (
+                            <div key={c.id} className="space-y-2">
+                              {renderCommentRow(c, false)}
+                              {childReplies.map((child) => renderCommentRow(child, true))}
+                            </div>
+                          );
+                        })}
+
+                        {post.locked ? (
+                          <p className={`text-xs flex items-center gap-1.5 ${textSecondary}`}>
+                            <Lock className="w-3.5 h-3.5" /> This thread is locked by a moderator.
+                          </p>
+                        ) : mutedReason ? (
+                          <p className="text-xs text-[var(--danger-ink)]">Replying is disabled while your account is muted.</p>
+                        ) : (
+                          <div className="space-y-1.5 pt-1">
+                            {activeParentReply && (
+                              <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-[var(--accent-50)] text-xs text-[var(--accent-700)]">
+                                <span>
+                                  Replying to <strong>{activeParentReply.author}</strong>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setReplyParentByPost((prev) => ({ ...prev, [post.id]: null }))}
+                                  className="hover:underline cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
+
+                            <MentionPickerBar
+                              value={replyDrafts[post.id] || ''}
+                              candidates={mentionCandidates}
+                              onPick={(next) => setReplyDrafts((prev) => ({ ...prev, [post.id]: next }))}
+                            />
+
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleAddReply(post.id);
+                              }}
+                              className="flex flex-col sm:flex-row gap-2"
+                            >
+                              <label htmlFor={`reply-${post.id}`} className="sr-only">Write a reply</label>
+                              <input
+                                id={`reply-${post.id}`}
+                                value={replyDrafts[post.id] || ''}
+                                onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                                maxLength={1500}
+                                placeholder={
+                                  activeParentReply
+                                    ? `Reply to ${activeParentReply.author}… (use @ to mention)`
+                                    : 'Write a helpful reply… (use @ to mention)'
+                                }
+                                className={`${inputClass} flex-1 min-w-0`}
+                              />
+                              <button type="submit" disabled={!(replyDrafts[post.id] || '').trim()} className={btnSecondary}>
+                                Reply
+                              </button>
+                            </form>
+                          </div>
+                        )}
+                      </div>
                     </details>
-                  </div>
+                  </article>
                 );
               })
             )}
           </div>
 
-          {/* Start Discussion Modal */}
-          <Modal open={showPostModal} onClose={() => setShowPostModal(false)} title="Start a Discussion">
-            <form onSubmit={handleCreatePost} className="space-y-3.5">
+          {/* Start / Edit Discussion Modal */}
+          <Modal open={showPostModal} onClose={resetPostModal} title={editingPost ? 'Edit Discussion' : 'Start a Discussion'}>
+            <form onSubmit={handleCreateOrSavePost} className="space-y-3.5">
               <div className="flex items-center justify-between text-xs">
                 <span className={textSecondary}>Ask basic questions, celebrate small wins, or explain what you learned.</span>
-                {(postTitle.trim() || postBody.trim() || postCode.trim() || postLink.trim()) && (
+                {!editingPost && (postTitle.trim() || postBody.trim() || postCode.trim() || postLink.trim()) && (
                   <button
                     type="button"
                     onClick={() => {
                       setPostTitle('');
                       setPostBody('');
+                      setPostTagsInput('');
                       setPostCode('');
                       setPostLink('');
                       try {
@@ -959,6 +2147,7 @@ export const CommunitySection = ({
                   <option>Mistake & Lesson</option>
                   <option>Explain a Concept</option>
                   <option>Study Session Idea</option>
+                  {isAdminMode && <option>Announcement</option>}
                 </select>
                 <input
                   value={postTitle}
@@ -968,14 +2157,53 @@ export const CommunitySection = ({
                   required
                 />
               </div>
+
+              <MentionPickerBar
+                value={postBody}
+                candidates={mentionCandidates}
+                onPick={(next) => setPostBody(next)}
+              />
               <textarea
                 rows={4}
                 value={postBody}
                 onChange={(e) => setPostBody(e.target.value)}
-                placeholder="Write your question, win, or lesson learned..."
+                placeholder="Write your question, win, or lesson learned… (type @ to mention a member)"
                 className={inputClass}
                 required
               />
+
+              <div className="space-y-2">
+                <input
+                  value={postTagsInput}
+                  onChange={(e) => setPostTagsInput(e.target.value)}
+                  placeholder="Optional tags (comma-separated, e.g. react, css, debugging)"
+                  className={inputClass}
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_TAG_SUGGESTIONS.map((tag) => {
+                    const active = parseTagsInput(postTagsInput).includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          const current = parseTagsInput(postTagsInput);
+                          const next = active ? current.filter((t) => t !== tag) : [...current, tag].slice(0, 6);
+                          setPostTagsInput(next.join(', '));
+                        }}
+                        className={`px-2 py-0.5 rounded text-xs cursor-pointer ${
+                          active
+                            ? 'bg-[var(--accent-600)] text-white'
+                            : 'bg-[var(--surface-subtle)] text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
+                        }`}
+                      >
+                        #{tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {showPostExtras && (
                 <div className="space-y-3">
                   <textarea
@@ -1006,9 +2234,9 @@ export const CommunitySection = ({
                   {showPostExtras ? 'Hide code/link' : 'Attach code or link'}
                 </button>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowPostModal(false)} className={btnSecondary}>Cancel</button>
+                  <button type="button" onClick={resetPostModal} className={btnSecondary}>Cancel</button>
                   <button type="submit" className={btnPrimary}>
-                    <Send className="w-3.5 h-3.5" /> Post Discussion
+                    <Send className="w-3.5 h-3.5" /> {editingPost ? 'Save Changes' : 'Post Discussion'}
                   </button>
                 </div>
               </div>
@@ -1021,10 +2249,26 @@ export const CommunitySection = ({
       {subTab === 'announcements' && (
         <div className="space-y-8 max-w-3xl">
           {isAdminMode && (
-            <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-6 sm:p-6 space-y-4`}>
-              <h2 className={`text-lg flex items-center gap-2 ${textPrimary}`}>
-                <Megaphone className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" /> Post an announcement
-              </h2>
+            <form onSubmit={handleCreateOrSaveAnnouncement} className={`${cardClass} p-6 sm:p-6 space-y-4`}>
+              <div className="flex items-center justify-between">
+                <h2 className={`text-lg flex items-center gap-2 ${textPrimary}`}>
+                  <Megaphone className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" />
+                  {editingAnn ? 'Edit announcement' : 'Post an announcement'}
+                </h2>
+                {editingAnn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingAnn(null);
+                      setAnnTitle('');
+                      setAnnBody('');
+                    }}
+                    className="text-xs text-[var(--ink-secondary)] hover:underline cursor-pointer"
+                  >
+                    Cancel edit
+                  </button>
+                )}
+              </div>
               <div>
                 <label htmlFor="ann-title" className={`block text-sm font-medium mb-1.5 ${textPrimary}`}>Title</label>
                 <input id="ann-title" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="What’s the update?" className={`${commInput} min-h-11`} required />
@@ -1033,7 +2277,9 @@ export const CommunitySection = ({
                 <label htmlFor="ann-body" className={`block text-sm font-medium mb-1.5 ${textPrimary}`}>Message</label>
                 <textarea id="ann-body" rows={3} value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Write it in clear, welcoming language" className={commInput} required />
               </div>
-              <button type="submit" className={commPrimary}>Publish announcement</button>
+              <button type="submit" className={commPrimary}>
+                {editingAnn ? 'Save announcement' : 'Publish announcement'}
+              </button>
             </form>
           )}
 
@@ -1043,17 +2289,58 @@ export const CommunitySection = ({
             (() => {
               const ordered = [...announcementsList.filter((a) => a.pinned), ...announcementsList.filter((a) => !a.pinned)];
               const [lead, ...rest] = ordered;
+              const renderAdminAnnActions = (a: CommunityPost) =>
+                isAdminMode && actions ? (
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingAnn(a);
+                        setAnnTitle(a.title);
+                        setAnnBody(a.content);
+                      }}
+                      className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => actions.moderatePost(a.id, { pinned: !a.pinned })}
+                      className="text-xs font-medium text-[var(--ink-secondary)] hover:text-[var(--accent-600)] cursor-pointer"
+                    >
+                      {a.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => actions.deletePost(a.id)}
+                      className="text-xs font-medium text-[var(--danger-ink)] hover:underline cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null;
+
               return (
                 <>
                   <article className={`${cardClass} p-6 sm:p-8 space-y-4 border-l-4 !border-l-[var(--spark)]`}>
-                    <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm ${textSecondary}`}>
-                      <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--accent-600)]">
-                        <Pin className="w-3.5 h-3.5" aria-hidden="true" /> Pinned
-                      </span>
-                      <span>· {lead.author} · {lead.timestamp}</span>
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm ${textSecondary}`}>
+                        <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--accent-600)]">
+                          <Pin className="w-3.5 h-3.5" aria-hidden="true" /> {lead.pinned ? 'Pinned' : lead.category}
+                        </span>
+                        <span>· {lead.author} · {lead.timestamp}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleReaction(lead, 'celebrate')}
+                        className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+                      >
+                        Acknowledge ({(lead.reactions?.celebrate || []).length})
+                      </button>
+                    </div>
                     <h2 className={`font-display text-xl sm:text-2xl max-w-[40ch] ${textPrimary}`}>{lead.title}</h2>
-                    <p className={`text-base leading-relaxed max-w-[66ch] ${textPrimary}`}>{lead.content}</p>
+                    <p className={`text-base leading-relaxed max-w-[66ch] whitespace-pre-wrap ${textPrimary}`}>{lead.content}</p>
+                    {renderAdminAnnActions(lead)}
                   </article>
 
                   {rest.length > 0 && (
@@ -1069,6 +2356,7 @@ export const CommunitySection = ({
                             </p>
                             <h3 className={`text-lg ${textPrimary}`}>{a.title}</h3>
                             <p className={`text-base leading-relaxed max-w-[66ch] ${textSecondary}`}>{a.content}</p>
+                            {renderAdminAnnActions(a)}
                           </li>
                         ))}
                       </ul>
@@ -1084,9 +2372,8 @@ export const CommunitySection = ({
       {/* 3. LEARNING RESOURCES (WITH LIVE WEB SEARCH) */}
       {subTab === 'resources' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-          {/* The library leads */}
           <div className="lg:col-span-8 space-y-5 min-w-0">
-            <div>
+            <div className="space-y-3">
               <label htmlFor="res-filter" className="sr-only">Filter the resource library</label>
               <div className="relative">
                 <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${textSecondary}`} aria-hidden="true" />
@@ -1099,18 +2386,35 @@ export const CommunitySection = ({
                   className={`${commInput} min-h-11 pl-10`}
                 />
               </div>
-              <p className={`mt-2 text-sm tabular-nums ${textSecondary}`}>
-                {filteredResources.length} {filteredResources.length === 1 ? 'resource' : 'resources'}
-                {resSearch.trim() ? ' match your search' : ' shared by the community'}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {['All', 'Guide', 'Documentation', 'Video', 'Interactive'].map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setResTypeFilter(type)}
+                      className={`px-3 min-h-[34px] rounded-full text-xs font-medium border cursor-pointer ${
+                        resTypeFilter === type
+                          ? 'bg-[var(--accent-50)] border-[var(--spark)] text-[var(--ink-primary)] font-semibold'
+                          : `border-[var(--border-hairline)] ${textSecondary} hover:bg-[var(--surface-subtle)]`
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <p className={`text-xs tabular-nums ${textSecondary}`}>
+                  {filteredResources.length} {filteredResources.length === 1 ? 'resource' : 'resources'}
+                </p>
+              </div>
             </div>
 
             {filteredResources.length === 0 ? (
               <EmptyState
-                title={resSearch.trim() ? 'Nothing matches that search' : 'The library is empty'}
+                title={resSearch.trim() || resTypeFilter !== 'All' ? 'Nothing matches that search' : 'The library is empty'}
                 description={
-                  resSearch.trim()
-                    ? 'Try a shorter word, or search the web from the panel and save a good link.'
+                  resSearch.trim() || resTypeFilter !== 'All'
+                    ? 'Try a shorter word, clear filters, or search the web from the panel and save a good link.'
                     : 'Share the first guide, video or doc that helped you learn.'
                 }
                 actionLabel="Share a resource"
@@ -1119,37 +2423,53 @@ export const CommunitySection = ({
             ) : (
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredResources.map((r) => (
-                  <li key={r.id} className="flex">
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={`${cardClass} studio-card-interactive p-5 flex flex-col justify-between gap-4 w-full`}
-                    >
-                      <div className="space-y-3">
+                  <li key={r.id} className={`${cardClass} p-5 flex flex-col justify-between gap-4`}>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
                         <p className={`flex items-center gap-2 text-sm ${textSecondary}`}>
                           <Library className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" />
                           <span className="font-semibold text-[var(--accent-600)]">{r.type}</span>
                           <span>· {r.category}</span>
                         </p>
-                        <h2 className={`text-lg ${textPrimary}`}>{r.title}</h2>
-                        <p className={`text-base leading-relaxed ${textSecondary}`}>{r.description}</p>
+                        {onReportContent && (
+                          <button
+                            type="button"
+                            aria-label={`Report ${r.title}`}
+                            onClick={() =>
+                              onReportContent({
+                                targetType: 'resource',
+                                targetId: r.id,
+                                targetAuthorId: r.addedById,
+                                targetAuthorName: r.addedBy || 'Member',
+                                targetPreview: `${r.title} (${r.url})`,
+                              })
+                            }
+                            className={`text-xs ${textSecondary} hover:text-[var(--warning-ink)] cursor-pointer`}
+                          >
+                            <Flag className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <div className={`pt-3 border-t ${borderClass} flex items-center justify-between gap-3 text-sm`}>
-                        <span className={`${textSecondary} truncate`}>Shared by {r.addedBy}</span>
-                        <span className="inline-flex items-center gap-1.5 font-medium text-[var(--accent-600)] shrink-0">
-                          Open <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-                          <span className="sr-only">{r.title} in a new tab</span>
-                        </span>
-                      </div>
-                    </a>
+                      <h2 className={`text-lg ${textPrimary}`}>{r.title}</h2>
+                      <p className={`text-sm leading-relaxed ${textSecondary}`}>{r.description}</p>
+                    </div>
+                    <div className={`pt-3 border-t ${borderClass} flex items-center justify-between gap-3 text-sm`}>
+                      <span className={`${textSecondary} truncate`}>Shared by {r.addedBy}</span>
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 font-medium text-[var(--accent-600)] hover:underline shrink-0"
+                      >
+                        Open <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                      </a>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          {/* Web search tucked away until you need it */}
           <aside className="lg:col-span-4 lg:sticky lg:top-6 min-w-0">
             <details className={`${cardClass} group`} open={webSearchResult ? true : undefined}>
               <summary className="flex items-center justify-between gap-3 p-5 min-h-11 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
@@ -1246,43 +2566,90 @@ export const CommunitySection = ({
       {/* 4. EVENTS & STUDY SESSIONS */}
       {subTab === 'events' && (
         <div className="space-y-5">
-          <ol className="space-y-4">
-            {presentations.map((ev) => {
-              const going = ev.attendees.includes(currentUserName);
-              const reminded = (ev.reminders || []).includes(currentUserName);
-              const [day, ...rest] = String(ev.dateTime).split(' · ');
-              return (
-                <li key={ev.id} className={`${cardClass} overflow-hidden flex flex-col sm:flex-row`}>
-                  <div className={`sm:w-44 shrink-0 p-5 flex sm:flex-col justify-between sm:justify-center gap-1 ${going ? 'bg-[var(--spark)] text-[var(--on-spark)]' : 'bg-[var(--accent-50)]'} sm:border-r border-b sm:border-b-0 ${borderClass}`}>
-                    <div className="font-display text-xl leading-tight">{day}</div>
-                    <div className="text-sm tabular-nums">{rest.join(' · ') || ev.type}</div>
-                  </div>
-                  <div className="p-5 flex-1 min-w-0 space-y-4">
-                    <div className="space-y-2">
-                      <p className={`text-xs ${textSecondary}`}>
-                        <span className="font-semibold text-[var(--accent-600)]">{ev.type}</span> · hosted by {ev.presenter} · <span className="tabular-nums">{ev.attendees.length}</span> going
-                      </p>
-                      <h2 className={`text-xl ${textPrimary}`}>{ev.title}</h2>
-                      <p className={`text-sm leading-relaxed max-w-[62ch] ${textSecondary}`}>{ev.description}</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <label className="relative flex-1 min-w-[200px]">
+              <span className="sr-only">Search events</span>
+              <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${textSecondary}`} aria-hidden="true" />
+              <input
+                type="search"
+                value={evSearch}
+                onChange={(e) => setEvSearch(e.target.value)}
+                placeholder="Search study sessions, workshops, or hosts..."
+                className={`${commInput} !pl-10 min-h-11`}
+              />
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {['All', 'Study Session', 'Debugging Session', 'Workshop', 'Knowledge Sharing'].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setEvTypeFilter(type)}
+                  className={`px-3 min-h-[38px] rounded-full text-xs font-medium border cursor-pointer ${
+                    evTypeFilter === type
+                      ? 'bg-[var(--accent-50)] border-[var(--spark)] text-[var(--ink-primary)] font-semibold'
+                      : `border-[var(--border-hairline)] ${textSecondary} hover:bg-[var(--surface-subtle)]`
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredEvents.length === 0 ? (
+            <EmptyState
+              title="No sessions match right now"
+              description="Host a study session or debugging hour for peers to RSVP."
+              actionLabel="Host Study Session"
+              onAction={() => setShowAddEvent(true)}
+            />
+          ) : (
+            <ol className="space-y-4">
+              {filteredEvents.map((ev) => {
+                const going = (ev.attendeeIds || []).includes(currentUserId) || ev.attendees.includes(currentUserName);
+                const reminded = (ev.reminderIds || []).includes(currentUserId) || (ev.reminders || []).includes(currentUserName);
+                const [day, ...rest] = String(ev.dateTime).split(' · ');
+                return (
+                  <li key={ev.id} className={`${cardClass} overflow-hidden flex flex-col sm:flex-row`}>
+                    <div className={`sm:w-44 shrink-0 p-5 flex sm:flex-col justify-between sm:justify-center gap-1 ${going ? 'bg-[var(--spark)] text-[var(--on-spark)]' : 'bg-[var(--accent-50)]'} sm:border-r border-b sm:border-b-0 ${borderClass}`}>
+                      <div className="font-display text-xl leading-tight">{day}</div>
+                      <div className="text-sm tabular-nums">{rest.join(' · ') || ev.type}</div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button type="button" onClick={() => toggleRsvp(ev.id)} className={going ? btnPrimary : btnSecondary}>
-                        {going ? (<><CheckCircle2 className="w-3.5 h-3.5" /> Going</>) : 'Join'}
-                      </button>
-                      <button type="button" onClick={() => toggleReminder(ev.id)} className={btnSecondary}>
-                        <Bell className="w-3.5 h-3.5" /> {reminded ? 'Reminder on' : 'Remind me'}
-                      </button>
-                      {ev.resourceUrl && (
-                        <a href={ev.resourceUrl} target="_blank" rel="noreferrer" className={btnSecondary}>
-                          Link <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
+                    <div className="p-5 flex-1 min-w-0 space-y-4">
+                      <div className="space-y-2">
+                        <p className={`text-xs ${textSecondary}`}>
+                          <span className="font-semibold text-[var(--accent-600)]">{ev.type}</span> · hosted by{' '}
+                          <button
+                            type="button"
+                            onClick={() => onOpenMemberProfile?.(ev.presenterId || ev.presenter, ev.presenter)}
+                            className="font-medium hover:text-[var(--accent-600)] hover:underline cursor-pointer"
+                          >
+                            {ev.presenter}
+                          </button>{' '}
+                          · <span className="tabular-nums">{ev.attendees.length}</span> going
+                        </p>
+                        <h2 className={`text-xl ${textPrimary}`}>{ev.title}</h2>
+                        <p className={`text-sm leading-relaxed max-w-[62ch] ${textSecondary}`}>{ev.description}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" onClick={() => toggleRsvp(ev.id)} className={going ? btnPrimary : btnSecondary}>
+                          {going ? (<><CheckCircle2 className="w-3.5 h-3.5" /> Going</>) : 'Join'}
+                        </button>
+                        <button type="button" onClick={() => toggleReminder(ev.id)} className={btnSecondary}>
+                          <Bell className="w-3.5 h-3.5" /> {reminded ? 'Reminder on' : 'Remind me'}
+                        </button>
+                        {ev.resourceUrl && (
+                          <a href={ev.resourceUrl} target="_blank" rel="noreferrer" className={btnSecondary}>
+                            Link <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
 
           <Modal open={showAddEvent} onClose={() => setShowAddEvent(false)} title="Host a Study Session or Event">
             <form onSubmit={handleAddEvent} className="space-y-3.5">
@@ -1412,41 +2779,60 @@ export const CommunitySection = ({
       {subTab === 'pairing-help' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           <div className="lg:col-span-8 space-y-8 min-w-0">
-            {/* Open questions come first */}
+            <label className="relative block">
+              <span className="sr-only">Search peer help questions</span>
+              <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${textSecondary}`} aria-hidden="true" />
+              <input
+                type="search"
+                value={helpSearch}
+                onChange={(e) => setHelpSearch(e.target.value)}
+                placeholder="Search open or resolved help questions..."
+                className={`${commInput} !pl-10 min-h-11`}
+              />
+            </label>
+
             {(() => {
-              const resolvedList = helpRequests.filter((h) => h.status === 'Resolved');
-              const renderReply = (h: any, label: string) => (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleHelpReply(h.id);
-                  }}
-                  className="flex flex-col sm:flex-row gap-2"
-                >
-                  <label htmlFor={`help-reply-${h.id}`} className="sr-only">{label}</label>
-                  <input
-                    id={`help-reply-${h.id}`}
-                    value={helpReplyDrafts[h.id] || ''}
-                    onChange={(e) => setHelpReplyDrafts((prev) => ({ ...prev, [h.id]: e.target.value }))}
-                    placeholder={label}
-                    className={`${commInput} min-h-11`}
-                  />
-                  <button type="submit" disabled={!(helpReplyDrafts[h.id] || '').trim()} className={commSecondary}>
-                    Send answer
-                  </button>
-                </form>
-              );
+              const renderReply = (h: any, label: string) =>
+                mutedReason ? null : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleHelpReply(h.id);
+                    }}
+                    className="flex flex-col sm:flex-row gap-2"
+                  >
+                    <label htmlFor={`help-reply-${h.id}`} className="sr-only">{label}</label>
+                    <input
+                      id={`help-reply-${h.id}`}
+                      value={helpReplyDrafts[h.id] || ''}
+                      onChange={(e) => setHelpReplyDrafts((prev) => ({ ...prev, [h.id]: e.target.value }))}
+                      placeholder={label}
+                      className={`${commInput} min-h-11`}
+                    />
+                    <button type="submit" disabled={!(helpReplyDrafts[h.id] || '').trim()} className={commSecondary}>
+                      Send answer
+                    </button>
+                  </form>
+                );
+
               const renderResponses = (h: any) =>
                 (h.responses || []).length > 0 && (
                   <ul className="space-y-3">
                     {(h.responses || []).map((r: any) => (
-                      <li key={r.id} className={`pl-4 py-1 border-l-4 border-[var(--accent-500)] text-base leading-relaxed max-w-[66ch]`}>
-                        <strong className={`font-semibold ${textPrimary}`}>{r.responder}</strong>
-                        <span className={textSecondary}> · {r.text}</span>
+                      <li key={r.id} className="pl-4 py-1 border-l-4 border-[var(--accent-500)] text-base leading-relaxed max-w-[66ch]">
+                        <button
+                          type="button"
+                          onClick={() => onOpenMemberProfile?.(r.responderId || r.responder, r.responder)}
+                          className={`font-semibold hover:text-[var(--accent-600)] hover:underline cursor-pointer ${textPrimary}`}
+                        >
+                          {r.responder}
+                        </button>
+                        <span className={textSecondary}> · <MentionText text={r.text} /></span>
                       </li>
                     ))}
                   </ul>
                 );
+
               return (
                 <>
                   <section aria-labelledby="help-open" className="space-y-4">
@@ -1457,34 +2843,82 @@ export const CommunitySection = ({
                     </div>
                     {openHelpList.length === 0 ? (
                       <p className={`p-5 rounded-xl border border-dashed ${borderClass} text-base ${textSecondary}`}>
-                        Every question has been answered. Ask your own below, or check back later.
+                        {helpSearch.trim()
+                          ? 'No open questions match that search.'
+                          : 'Every question has been answered. Ask your own below, or check back later.'}
                       </p>
                     ) : (
-                      openHelpList.map((h) => (
-                        <article key={h.id} className={`${cardClass} p-6 sm:p-6 space-y-4 border-l-4 !border-l-[var(--spark)]`}>
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className={textSecondary}>
-                              <strong className={`font-semibold ${textPrimary}`}>{h.author}</strong> · {h.field} · {h.createdAt}
-                            </span>
-                            <Badge variant="info">{h.status}</Badge>
-                          </div>
-                          <h3 className={`text-lg ${textPrimary}`}>{h.helpNeeded}</h3>
-                          <p className={`text-base leading-relaxed max-w-[66ch] ${textSecondary}`}>
-                            <strong className={`font-semibold ${textPrimary}`}>Goal:</strong> {h.goal}
-                            {h.attempted ? (
-                              <>
-                                <br />
-                                <strong className={`font-semibold ${textPrimary}`}>Tried:</strong> {h.attempted}
-                              </>
-                            ) : null}
-                          </p>
-                          {h.errorOrCode && (
-                            <pre className={`p-3.5 ${subtleBgClass} text-sm overflow-x-auto ${textPrimary}`}>{h.errorOrCode}</pre>
-                          )}
-                          {renderResponses(h)}
-                          {renderReply(h, 'Write an answer to help')}
-                        </article>
-                      ))
+                      openHelpList.map((h) => {
+                        const canResolve =
+                          isAdminMode || h.authorId === currentUserId || (!h.authorId && h.author === currentUserName);
+                        return (
+                          <article key={h.id} className={`${cardClass} p-6 sm:p-6 space-y-4 border-l-4 !border-l-[var(--spark)]`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                              <span className={textSecondary}>
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenMemberProfile?.(h.authorId || h.author, h.author)}
+                                  className={`font-semibold hover:text-[var(--accent-600)] hover:underline cursor-pointer ${textPrimary}`}
+                                >
+                                  {h.author}
+                                </button>{' '}
+                                · {h.field} · {h.createdAt}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="info">{h.status}</Badge>
+                                {canResolve && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (actions) await actions.toggleHelpResolved(h.id);
+                                      else
+                                        setHelpRequests(
+                                          helpRequests.map((x) => (x.id === h.id ? { ...x, status: 'Resolved' } : x))
+                                        );
+                                    }}
+                                    className="text-xs font-medium text-[var(--accent-600)] hover:underline cursor-pointer"
+                                  >
+                                    Mark resolved
+                                  </button>
+                                )}
+                                {onReportContent && h.authorId !== currentUserId && (
+                                  <button
+                                    type="button"
+                                    aria-label="Report question"
+                                    onClick={() =>
+                                      onReportContent({
+                                        targetType: 'help',
+                                        targetId: h.id,
+                                        targetAuthorId: h.authorId,
+                                        targetAuthorName: h.author,
+                                        targetPreview: h.helpNeeded,
+                                      })
+                                    }
+                                    className={`text-xs ${textSecondary} hover:text-[var(--warning-ink)] cursor-pointer`}
+                                  >
+                                    <Flag className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <h3 className={`text-lg ${textPrimary}`}>{h.helpNeeded}</h3>
+                            <p className={`text-base leading-relaxed max-w-[66ch] ${textSecondary}`}>
+                              <strong className={`font-semibold ${textPrimary}`}>Goal:</strong> {h.goal}
+                              {h.attempted ? (
+                                <>
+                                  <br />
+                                  <strong className={`font-semibold ${textPrimary}`}>Tried:</strong> {h.attempted}
+                                </>
+                              ) : null}
+                            </p>
+                            {h.errorOrCode && (
+                              <pre className={`p-3.5 ${subtleBgClass} text-sm overflow-x-auto ${textPrimary}`}>{h.errorOrCode}</pre>
+                            )}
+                            {renderResponses(h)}
+                            {renderReply(h, 'Write an answer to help')}
+                          </article>
+                        );
+                      })
                     )}
                   </section>
 
@@ -1528,16 +2962,16 @@ export const CommunitySection = ({
                       <label htmlFor="help-ask" className={`block text-sm font-medium mb-1.5 ${textPrimary}`}>Your question</label>
                       <input id="help-ask" value={helpAsk} onChange={(e) => setHelpAsk(e.target.value)} placeholder="What do you need help with?" className={`${commInput} min-h-11`} required />
                     </div>
-                    <button type="submit" className={commPrimary}>Post question</button>
+                    <button type="submit" disabled={Boolean(mutedReason)} className={commPrimary}>Post question</button>
                   </form>
 
-                  {resolvedList.length > 0 && (
+                  {resolvedHelpList.length > 0 && (
                     <section aria-labelledby="help-resolved" className="space-y-4">
                       <h2 id="help-resolved" className={`text-xl ${textSecondary}`}>
-                        Resolved <span className="tabular-nums">({resolvedList.length})</span>
+                        Resolved <span className="tabular-nums">({resolvedHelpList.length})</span>
                       </h2>
-                      {resolvedList.map((h) => (
-                        <article key={h.id} className={`${cardClass} p-6 space-y-4 opacity-70 hover:opacity-100 focus-within:opacity-100 transition-opacity`}>
+                      {resolvedHelpList.map((h) => (
+                        <article key={h.id} className={`${cardClass} p-6 space-y-4 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity`}>
                           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                             <span className={textSecondary}>
                               <strong className={`font-semibold ${textPrimary}`}>{h.author}</strong> · {h.field} · {h.createdAt}
@@ -1546,7 +2980,7 @@ export const CommunitySection = ({
                           </div>
                           <h3 className={`text-base ${textPrimary}`}>{h.helpNeeded}</h3>
                           <details className="group">
-                            <summary className={`min-h-11 flex items-center gap-2 text-sm font-medium cursor-pointer list-none [&::-webkit-details-marker]:hidden text-[var(--accent-600)]`}>
+                            <summary className="min-h-11 flex items-center gap-2 text-sm font-medium cursor-pointer list-none [&::-webkit-details-marker]:hidden text-[var(--accent-600)]">
                               <ChevronDown className="w-4 h-4 transition-transform group-open:rotate-180" aria-hidden="true" />
                               {(h.responses || []).length} {(h.responses || []).length === 1 ? 'answer' : 'answers'} and details
                             </summary>
@@ -1592,18 +3026,32 @@ export const CommunitySection = ({
                 <h2 className={`text-lg flex items-center gap-2 whitespace-nowrap ${textPrimary}`}>
                   <Users className="w-4 h-4 shrink-0 text-[var(--accent-600)]" aria-hidden="true" /> Member directory
                 </h2>
-                <span className={`text-sm tabular-nums whitespace-nowrap shrink-0 ${textSecondary}`}>{teamRoster.length} members</span>
+                <span className={`text-sm tabular-nums whitespace-nowrap shrink-0 ${textSecondary}`}>{directoryMembers.length} members</span>
               </div>
-              <p className={`text-sm ${textSecondary}`}>Everyone here is learning and helping each other grow.</p>
+              <input
+                type="search"
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                placeholder="Find members by name or stack..."
+                className={`${commInput} text-sm min-h-10`}
+              />
               <ul className={`divide-y ${borderClass}`}>
-                {teamRoster.map((m) => (
-                  <li key={m.id} className="py-3 first:pt-1 last:pb-1 space-y-0.5">
+                {filteredMembers.map((m) => (
+                  <li key={m.id} className="py-3 first:pt-1 last:pb-1 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`text-base font-semibold ${textPrimary}`}>{m.name}</span>
-                      <span className="text-sm font-medium text-[var(--accent-600)]">{m.role || 'Member'}</span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenMemberProfile?.(m.id, m.name)}
+                        className={`text-base font-semibold hover:text-[var(--accent-600)] hover:underline text-left cursor-pointer ${textPrimary}`}
+                      >
+                        {m.name}
+                      </button>
+                      <span className="text-xs font-medium text-[var(--accent-600)] shrink-0">{m.role || 'Member'}</span>
                     </div>
-                    {(m.field || m.level) && <div className={`text-sm ${textSecondary}`}>{[m.field, m.level].filter(Boolean).join(' · ')}</div>}
-                    {m.bio && <p className={`text-sm leading-relaxed ${textSecondary}`}>{m.bio}</p>}
+                    {(m.field || m.level) && (
+                      <div className={`text-xs ${textSecondary}`}>{[m.field, m.level].filter(Boolean).join(' · ')}</div>
+                    )}
+                    {m.bio && <p className={`text-xs leading-relaxed line-clamp-2 ${textSecondary}`}>{m.bio}</p>}
                   </li>
                 ))}
               </ul>

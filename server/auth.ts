@@ -58,6 +58,11 @@ function readBearer(req: Request): string {
   return match ? match[1].trim() : '';
 }
 
+let localAdminChecker: ((userId: string) => boolean) | null = null;
+export function setLocalAdminChecker(fn: (userId: string) => boolean) {
+  localAdminChecker = fn;
+}
+
 export interface VerifiedUser {
   userId: string;
   isAdmin: boolean;
@@ -114,26 +119,28 @@ export async function verifyAccessToken(token: string): Promise<VerifyResult> {
 }
 
 export async function requireUser(req: Request, res: Response, next: NextFunction) {
-  // Local demo mode: no accounts exist. Fine for development, and the admin routes
-  // stay closed in production.
+  // Local demo mode: no Supabase accounts exist, so identity comes from session header
+  // and admin status comes strictly from the stored role/id (never blindly true for every user).
   if (!AUTH_ENABLED) {
-    // A live server must know who is calling. Without login checking, anyone with the link could
-    // use your AI quota. Set ALLOW_DEMO=true only if you really want an open demo.
     if (IS_PROD && process.env.ALLOW_DEMO !== 'true') {
       return res.status(503).json({
         error: 'This server is not connected to Supabase yet, so the AI is switched off. Ask the team lead to finish setup (see LAUNCH.md).',
       });
     }
     const demoId = req.headers['x-devhub-user'];
-    res.locals.userId = typeof demoId === 'string' && demoId.trim() ? demoId.trim() : 'local-member';
-    // Demo-only: nobody is admin on a deliberately public demo (ALLOW_DEMO) in production.
-    res.locals.isAdmin = !IS_PROD;
+    const demoName = req.headers['x-devhub-name'];
+    const userId = typeof demoId === 'string' && demoId.trim() ? demoId.trim().slice(0, 120) : 'local-member';
+    const userName = typeof demoName === 'string' && demoName.trim() ? decodeURIComponent(demoName.trim()).slice(0, 80) : 'Member';
+    res.locals.userId = userId;
+    res.locals.userName = userName;
+    res.locals.isAdmin = !IS_PROD && (localAdminChecker ? localAdminChecker(userId) : userId.startsWith('admin:') || userId === 'tm-5');
     return next();
   }
 
   const result = await verifyAccessToken(readBearer(req));
   if (!result.ok || !result.user) return res.status(result.status || 401).json({ error: result.error || 'Please sign in.' });
   res.locals.userId = result.user.userId;
+  res.locals.userName = result.user.name;
   res.locals.isAdmin = result.user.isAdmin;
   return next();
 }

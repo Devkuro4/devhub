@@ -764,6 +764,9 @@ export const PERSONAL_KEYS = [
   'onboardingState',
   'tutorialState',
   'xpLedger',
+  'importedMaterials',
+  'selfDirectedTopics',
+  'studySessions',
 ];
 
 export const SHARED_KEYS = [
@@ -778,6 +781,11 @@ export const SHARED_KEYS = [
   'showcaseProjects',
   'teamRoster',
   'leaderboard',
+  'studyGroups',
+  'memberProfiles',
+  'notifications',
+  'reports',
+  'moderation',
 ];
 
 // Sections only admins may change (kept in step with the rules in supabase/schema.sql).
@@ -835,5 +843,8 @@ export function blankPersonal(name = '', hk: any = { checklist: [] }) {
     onboardingState: { status: 'not_started', step: 1, draft: null, version: 2, personalized: false },
     tutorialState: { ...INITIAL_TUTORIAL_STATE },
     xpLedger: [],
+    importedMaterials: [],
+    selfDirectedTopics: [],
+    studySessions: [],
   };
 }

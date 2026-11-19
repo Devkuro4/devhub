@@ -4,16 +4,19 @@ import {
   AlertCircle,
   CheckCircle2,
   Cpu,
+  Flag,
   HelpCircle,
   Loader2,
   Lock,
+  Pin,
   Plus,
   RefreshCw,
-  Users,
+  ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 import { Badge, PageHeader, SectionTabs } from './ui';
 import { fetchAiStatus, saveAiSettings, testAiConnection } from '../lib/aiClient';
-import type { CommunityEvent, CommunityPost, QuizItem } from '../types';
+import type { CommunityEvent, CommunityPost, ContentReport, ModerationState, QuizItem } from '../types';
 
 export type AdminSubTab =
   | 'admin-dashboard'
@@ -39,6 +42,16 @@ export const AdminSection = ({
   setQuizzes,
   weeklyActivities,
   setWeeklyActivities,
+  reports = [],
+  moderation,
+  onCreateAnnouncement,
+  onModeratePost,
+  onDeletePost,
+  onToggleHelpResolved,
+  onResolveReport,
+  onSetMemberMuted,
+  onSetMemberRole,
+  onViewMember,
   onNotify,
   styles,
 }: {
@@ -58,6 +71,19 @@ export const AdminSection = ({
   setQuizzes: (q: QuizItem[]) => void;
   weeklyActivities: any[];
   setWeeklyActivities: (w: any[]) => void;
+  reports?: ContentReport[];
+  moderation?: ModerationState;
+  onCreateAnnouncement?: (title: string, body: string) => Promise<void> | void;
+  onModeratePost?: (postId: string, action: { pinned?: boolean; locked?: boolean; hidden?: boolean }) => Promise<void> | void;
+  onDeletePost?: (postId: string) => Promise<void> | void;
+  onToggleHelpResolved?: (helpId: string) => Promise<void> | void;
+  onResolveReport?: (
+    reportId: string,
+    input: { status: 'resolved' | 'dismissed'; action?: 'none' | 'hide' | 'delete' | 'lock' | 'mute_author'; note?: string }
+  ) => Promise<void> | void;
+  onSetMemberMuted?: (userId: string, muted: boolean, reason?: string) => Promise<void> | void;
+  onSetMemberRole?: (userId: string, role: string) => Promise<void> | void;
+  onViewMember?: (memberId: string, memberName: string) => void;
   onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
@@ -71,7 +97,7 @@ export const AdminSection = ({
     darkMode: boolean;
   };
 }) => {
-  const { cardClass, borderClass, subtleBgClass, textPrimary, textSecondary, inputClass, btnPrimary, btnSecondary } = styles;
+  const { cardClass, borderClass, textPrimary, textSecondary, inputClass, btnPrimary, btnSecondary } = styles;
 
   // Announcement draft
   const [annTitle, setAnnTitle] = useState('');
@@ -133,30 +159,39 @@ export const AdminSection = ({
     }
   };
 
-  const updateMemberRole = (id: string, newRole: string) => {
+  const updateMemberRole = async (id: string, newRole: string) => {
+    if (onSetMemberRole) {
+      await onSetMemberRole(id, newRole);
+      return;
+    }
     setTeamRoster(teamRoster.map((m) => (m.id === id ? { ...m, role: newRole } : m)));
     onNotify(`Updated role to ${newRole}.`);
   };
 
-  const handleCreateAnnouncement = (e: React.FormEvent) => {
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!annTitle.trim() || !annBody.trim()) return;
-    const item: CommunityPost = {
-      id: `post-${Date.now()}`,
-      author: user.name || 'Community Admin',
-      role: 'Community Admin',
-      category: 'Announcement',
-      pinned: true,
-      timestamp: 'Just now',
-      title: annTitle.trim(),
-      content: annBody.trim(),
-      likes: 1,
-      comments: [],
-    };
-    setPosts([item, ...posts]);
+    if (onCreateAnnouncement) {
+      await onCreateAnnouncement(annTitle.trim(), annBody.trim());
+    } else {
+      const item: CommunityPost = {
+        id: `post-${Date.now()}`,
+        author: user.name || 'Community Admin',
+        authorId: user.id,
+        role: 'Community Admin',
+        category: 'Announcement',
+        pinned: true,
+        timestamp: 'Just now',
+        title: annTitle.trim(),
+        content: annBody.trim(),
+        likes: 0,
+        comments: [],
+      };
+      setPosts([item, ...posts]);
+      onNotify('Announcement published to all members.');
+    }
     setAnnTitle('');
     setAnnBody('');
-    onNotify('Announcement published to all members.');
   };
 
   const handleCreateQuiz = (e: React.FormEvent) => {
@@ -194,15 +229,18 @@ export const AdminSection = ({
     onNotify('Quiz added to the community Quiz Bank.');
   };
 
+  const openHelp = helpRequests.filter((h) => h.status !== 'Resolved');
+  const openReports = reports.filter((r) => r.status === 'open');
+  const announcements = posts.filter((p) => p.category === 'Announcement' || p.pinned);
+
   const adminTabs: { id: AdminSubTab; label: string; badge?: number }[] = [
     { id: 'admin-dashboard', label: 'Overview' },
     { id: 'admin-members', label: 'Members', badge: teamRoster.length },
-    { id: 'admin-support', label: 'Announcements & Help', badge: helpRequests.filter((h) => h.status !== 'Resolved').length },
+    { id: 'admin-support', label: 'Moderation & Help', badge: openHelp.length + openReports.length },
     { id: 'admin-activities', label: 'Activities & Quizzes', badge: quizzes.length },
     { id: 'admin-ai', label: 'AI Settings' },
   ];
 
-  const openHelp = helpRequests.filter((h) => h.status !== 'Resolved');
   const aiStats = aiStatus?.stats;
 
   return (
@@ -223,22 +261,25 @@ export const AdminSection = ({
       {/* 1. OVERVIEW */}
       {subTab === 'admin-dashboard' && (
         <div className="space-y-6">
-          {/* Needs attention first: the queue is the job */}
           <section className={`${cardClass} p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-[6px] border-l-[var(--spark)]`}>
             <div>
               <p className={`text-xs ${textSecondary}`}>Needs your attention</p>
               <h2 className={`text-2xl ${textPrimary}`}>
-                {openHelp.length === 0 ? 'No open questions. Nice and quiet.' : `${openHelp.length} member question${openHelp.length === 1 ? '' : 's'} waiting`}
+                {openHelp.length === 0 && openReports.length === 0
+                  ? 'No open questions or reports. Nice and quiet.'
+                  : `${openReports.length} open report${openReports.length === 1 ? '' : 's'} · ${openHelp.length} member question${openHelp.length === 1 ? '' : 's'} waiting`}
               </h2>
             </div>
-            <button type="button" onClick={() => setSubTab('admin-support')} className={btnPrimary}>Open help queue</button>
+            <button type="button" onClick={() => setSubTab('admin-support')} className={btnPrimary}>
+              Open moderation & help queue
+            </button>
           </section>
 
           <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
             {[
               { label: 'Members', value: teamRoster.length },
+              { label: 'Open reports', value: openReports.length },
               { label: 'Upcoming events', value: presentations.length },
-              { label: 'Group projects', value: projects.length },
               { label: 'Challenges', value: challenges.length },
             ].map((stat) => (
               <div key={stat.label} className="soft-card px-5 py-4">
@@ -268,7 +309,9 @@ export const AdminSection = ({
             <section className={`${cardClass} p-6 lg:col-span-5 space-y-4`}>
               <div className="flex items-center justify-between">
                 <h2 className={`text-lg ${textPrimary}`}>This week</h2>
-                <button type="button" onClick={() => setSubTab('admin-support')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">Manage</button>
+                <button type="button" onClick={() => setSubTab('admin-support')} className="text-sm font-medium text-[var(--accent-600)] hover:underline cursor-pointer">
+                  Manage
+                </button>
               </div>
               <ul className={`divide-y ${borderClass}`}>
                 {weeklyActivities.slice(0, 5).map((wa) => (
@@ -283,7 +326,7 @@ export const AdminSection = ({
         </div>
       )}
 
-      {/* 2. MEMBERS & EXPANDABLE ROLES */}
+      {/* 2. MEMBERS, ROLES & MUTE CONTROLS */}
       {subTab === 'admin-members' && (
         <div className="space-y-5">
           <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -294,49 +337,80 @@ export const AdminSection = ({
               </div>
             ))}
           </dl>
-          <p className={`text-sm max-w-[70ch] ${textSecondary}`}>Promote Learning Coordinators or Field Leads only as the community grows.</p>
+          <p className={`text-sm max-w-[70ch] ${textSecondary}`}>
+            Manage member roles or temporarily mute accounts that need a community guidelines reminder.
+          </p>
 
           <div className={`${cardClass} overflow-hidden`}>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm min-w-[640px]">
+              <table className="w-full text-left text-sm min-w-[740px]">
                 <thead className={`${textSecondary} bg-[var(--surface-subtle)] text-xs`}>
                   <tr>
                     <th scope="col" className="py-3 pl-5 pr-4 font-medium">Member</th>
                     <th scope="col" className="py-3 pr-4 font-medium">Focus field</th>
                     <th scope="col" className="py-3 pr-4 font-medium">Level</th>
-                    <th scope="col" className="py-3 pr-4 font-medium">Study buddy</th>
-                    <th scope="col" className="py-3 pr-5 font-medium">Role</th>
+                    <th scope="col" className="py-3 pr-4 font-medium">Status</th>
+                    <th scope="col" className="py-3 pr-4 font-medium">Role</th>
+                    <th scope="col" className="py-3 pr-5 font-medium text-right">Moderation</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${borderClass}`}>
-                  {teamRoster.map((m) => (
-                    <tr key={m.id} className="hover:bg-[var(--accent-50)]">
-                      <td className="py-3 pl-5 pr-4">
-                        <span className="flex items-center gap-3">
-                          <span aria-hidden="true" className="w-8 h-8 rounded-full bg-[var(--accent-100)] text-[var(--accent-700)] text-xs font-semibold flex items-center justify-center shrink-0">{(m.name || '?').slice(0, 1).toUpperCase()}</span>
-                          <span className={`font-semibold ${textPrimary}`}>{m.name}</span>
-                        </span>
-                      </td>
-                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.field || '—'}</td>
-                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.level || '—'}</td>
-                      <td className={`py-3 pr-4 ${textSecondary}`}>{m.partner || '—'}</td>
-                      <td className="py-3 pr-5">
-                        <select
-                          value={m.role || 'Member'}
-                          onChange={(e) => updateMemberRole(m.id, e.target.value)}
-                          disabled={m.role === 'Community Admin'}
-                          title={m.role === 'Community Admin' ? 'Admin access is set in Supabase (see LAUNCH.md)' : undefined}
-                          aria-label={`Role for ${m.name}`}
-                          className={`${inputClass} py-1 px-2.5 text-xs max-w-[180px]`}
-                        >
-                          <option>Member</option>
-                          <option>Learning Coordinator</option>
-                          <option>Field Lead</option>
-                          {m.role === 'Community Admin' && <option>Community Admin</option>}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
+                  {teamRoster.map((m) => {
+                    const isMuted = Boolean(moderation?.mutedUserIds?.[m.id]);
+                    const isAdminMember = m.role === 'Community Admin';
+                    return (
+                      <tr key={m.id} className="hover:bg-[var(--accent-50)]">
+                        <td className="py-3 pl-5 pr-4">
+                          <button
+                            type="button"
+                            onClick={() => onViewMember?.(m.id, m.name)}
+                            className="flex items-center gap-3 text-left cursor-pointer hover:underline"
+                          >
+                            <span aria-hidden="true" className="w-8 h-8 rounded-full bg-[var(--accent-100)] text-[var(--accent-700)] text-xs font-semibold flex items-center justify-center shrink-0">
+                              {(m.name || '?').slice(0, 1).toUpperCase()}
+                            </span>
+                            <span className={`font-semibold ${textPrimary}`}>{m.name}</span>
+                          </button>
+                        </td>
+                        <td className={`py-3 pr-4 ${textSecondary}`}>{m.field || '—'}</td>
+                        <td className={`py-3 pr-4 ${textSecondary}`}>{m.level || '—'}</td>
+                        <td className="py-3 pr-4">
+                          {isMuted ? <Badge variant="danger">Muted</Badge> : <Badge variant="success">Active</Badge>}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <select
+                            value={m.role || 'Member'}
+                            onChange={(e) => updateMemberRole(m.id, e.target.value)}
+                            disabled={isAdminMember}
+                            aria-label={`Role for ${m.name}`}
+                            className={`${inputClass} py-1 px-2.5 text-xs max-w-[180px]`}
+                          >
+                            <option>Member</option>
+                            <option>Learning Coordinator</option>
+                            <option>Field Lead</option>
+                            {isAdminMember && <option>Community Admin</option>}
+                          </select>
+                        </td>
+                        <td className="py-3 pr-5 text-right">
+                          {!isAdminMember && onSetMemberMuted && m.id !== user.id && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onSetMemberMuted(
+                                  m.id,
+                                  !isMuted,
+                                  isMuted ? undefined : 'Community guidelines reminder'
+                                )
+                              }
+                              className="px-3 min-h-[34px] rounded-lg border border-[var(--border-strong)] text-xs font-medium hover:bg-[var(--surface-subtle)] cursor-pointer"
+                            >
+                              {isMuted ? 'Unmute' : 'Mute'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -344,9 +418,9 @@ export const AdminSection = ({
         </div>
       )}
 
-      {/* 3. ANNOUNCEMENTS, WEEKLY RHYTHM & HELP QUEUE */}
+      {/* 3. MODERATION QUEUE, ANNOUNCEMENTS & HELP QUEUE */}
       {subTab === 'admin-support' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           <div className="lg:col-span-5 lg:order-2 space-y-5">
             <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-6 space-y-4`}>
               <h2 className={`font-display text-base ${textPrimary}`}>Publish Community Announcement</h2>
@@ -354,6 +428,42 @@ export const AdminSection = ({
               <textarea rows={2} value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Share a friendly weekly note or reminder..." className={inputClass} required />
               <button type="submit" className={btnPrimary}>Publish Announcement</button>
             </form>
+
+            {announcements.length > 0 && (
+              <div className={`${cardClass} p-6 space-y-3`}>
+                <h2 className={`font-display text-base ${textPrimary}`}>Manage Announcements ({announcements.length})</h2>
+                <ul className={`divide-y ${borderClass}`}>
+                  {announcements.slice(0, 6).map((a) => (
+                    <li key={a.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
+                      <div className="min-w-0">
+                        <div className={`font-semibold truncate ${textPrimary}`}>{a.title}</div>
+                        <div className={textSecondary}>{a.pinned ? 'Pinned' : 'Standard'} · {a.timestamp}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {onModeratePost && (
+                          <button
+                            type="button"
+                            onClick={() => onModeratePost(a.id, { pinned: !a.pinned })}
+                            className="inline-flex items-center gap-1 text-[var(--accent-600)] hover:underline cursor-pointer"
+                          >
+                            <Pin className="w-3 h-3" /> {a.pinned ? 'Unpin' : 'Pin'}
+                          </button>
+                        )}
+                        {onDeletePost && (
+                          <button
+                            type="button"
+                            onClick={() => onDeletePost(a.id)}
+                            className="inline-flex items-center gap-1 text-[var(--danger-ink)] hover:underline cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" /> Delete
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className={`${cardClass} p-6 space-y-4`}>
               <h2 className={`font-display text-base ${textPrimary}`}>Weekly Community Rhythm</h2>
@@ -382,38 +492,140 @@ export const AdminSection = ({
             </div>
           </div>
 
-          <div className="lg:col-span-7 lg:order-1">
+          <div className="lg:col-span-7 lg:order-1 space-y-6">
+            {/* Reports Moderation Queue */}
+            <div className={`${cardClass} p-6 space-y-4`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-[var(--warning-ink)]" />
+                  <h2 className={`font-display text-base ${textPrimary}`}>Content Reports ({openReports.length} open)</h2>
+                </div>
+              </div>
+
+              {reports.length === 0 ? (
+                <p className={`text-sm ${textSecondary}`}>No community reports submitted yet.</p>
+              ) : (
+                <div className={`divide-y ${borderClass}`}>
+                  {[...reports]
+                    .sort((a, b) => Number(a.status !== 'open') - Number(b.status !== 'open'))
+                    .map((rep) => (
+                      <div
+                        key={rep.id}
+                        className={`py-4 first:pt-0 last:pb-0 space-y-2.5 ${
+                          rep.status === 'open' ? 'pl-3 border-l-4 border-l-[var(--warning-ink)]' : 'opacity-65'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--ink-primary)]">
+                            <Flag className="w-3.5 h-3.5 text-[var(--warning-ink)]" />
+                            {rep.targetType.toUpperCase()} by {rep.targetAuthorName}
+                          </span>
+                          <Badge variant={rep.status === 'open' ? 'warning' : rep.status === 'resolved' ? 'success' : 'neutral'}>
+                            {rep.status}
+                          </Badge>
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <div className={textPrimary}>
+                            <strong>Reason:</strong> {rep.reason} · <span className={textSecondary}>reported by {rep.reporterName}</span>
+                          </div>
+                          <p className={`p-2.5 rounded-lg bg-[var(--surface-subtle)] ${textSecondary} line-clamp-2`}>
+                            {rep.targetPreview}
+                          </p>
+                          {rep.details && <p className={textSecondary}>Note: {rep.details}</p>}
+                          {rep.resolutionAction && (
+                            <p className="text-[var(--success-ink)] font-medium">
+                              Action: {rep.resolutionAction} {rep.resolvedBy ? `by ${rep.resolvedBy}` : ''}
+                            </p>
+                          )}
+                        </div>
+
+                        {rep.status === 'open' && onResolveReport && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => onResolveReport(rep.id, { status: 'dismissed', action: 'none' })}
+                              className="px-3 min-h-[32px] rounded-lg border border-[var(--border-strong)] text-xs font-medium hover:bg-[var(--surface-subtle)] cursor-pointer"
+                            >
+                              Dismiss
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onResolveReport(rep.id, { status: 'resolved', action: 'hide' })}
+                              className="px-3 min-h-[32px] rounded-lg border border-[var(--border-strong)] text-xs font-medium hover:bg-[var(--surface-subtle)] cursor-pointer"
+                            >
+                              Hide content
+                            </button>
+                            {rep.targetType === 'post' && (
+                              <button
+                                type="button"
+                                onClick={() => onResolveReport(rep.id, { status: 'resolved', action: 'lock' })}
+                                className="px-3 min-h-[32px] rounded-lg border border-[var(--border-strong)] text-xs font-medium hover:bg-[var(--surface-subtle)] cursor-pointer"
+                              >
+                                Lock thread
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => onResolveReport(rep.id, { status: 'resolved', action: 'delete' })}
+                              className="px-3 min-h-[32px] rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] text-xs font-semibold cursor-pointer"
+                            >
+                              Delete content
+                            </button>
+                            {rep.targetAuthorId && (
+                              <button
+                                type="button"
+                                onClick={() => onResolveReport(rep.id, { status: 'resolved', action: 'mute_author' })}
+                                className="px-3 min-h-[32px] rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] text-xs font-semibold cursor-pointer"
+                              >
+                                Mute author
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* Member Help Queue */}
             <div className={`${cardClass} p-6 space-y-4`}>
               <div className="flex items-center gap-2">
                 <HelpCircle className="w-4 h-4 text-[var(--accent-600)]" />
                 <h2 className={`font-display text-base ${textPrimary}`}>Member Help Queue ({openHelp.length} open)</h2>
               </div>
               <div className={`divide-y ${borderClass}`}>
-                {[...helpRequests].sort((x, y) => Number(x.status === 'Resolved') - Number(y.status === 'Resolved')).map((h) => (
-                  <div key={h.id} className={`py-3 first:pt-0 last:pb-0 space-y-3 ${h.status === 'Resolved' ? 'opacity-60' : 'pl-3 border-l-4 border-l-[var(--spark)]'}`}>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className={textPrimary}><strong>{h.author}</strong> · {h.field}</span>
-                      <Badge variant={h.status === 'Resolved' ? 'success' : 'warning'}>{h.status}</Badge>
+                {[...helpRequests]
+                  .sort((x, y) => Number(x.status === 'Resolved') - Number(y.status === 'Resolved'))
+                  .map((h) => (
+                    <div key={h.id} className={`py-3 first:pt-0 last:pb-0 space-y-3 ${h.status === 'Resolved' ? 'opacity-60' : 'pl-3 border-l-4 border-l-[var(--spark)]'}`}>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={textPrimary}><strong>{h.author}</strong> · {h.field}</span>
+                        <Badge variant={h.status === 'Resolved' ? 'success' : 'warning'}>{h.status}</Badge>
+                      </div>
+                      <div className={`text-base font-medium ${textPrimary}`}>{h.helpNeeded}</div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={textSecondary}>{(h.responses || []).length} peer responses</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onToggleHelpResolved) {
+                              onToggleHelpResolved(h.id);
+                            } else {
+                              setHelpRequests(
+                                helpRequests.map((req) =>
+                                  req.id === h.id ? { ...req, status: req.status === 'Resolved' ? 'Open' : 'Resolved' } : req
+                                )
+                              );
+                            }
+                          }}
+                          className={btnSecondary}
+                        >
+                          {h.status === 'Resolved' ? 'Reopen' : 'Mark Resolved'}
+                        </button>
+                      </div>
                     </div>
-                    <div className={`text-base font-medium ${textPrimary}`}>{h.helpNeeded}</div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className={textSecondary}>{(h.responses || []).length} peer responses</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setHelpRequests(
-                            helpRequests.map((req) =>
-                              req.id === h.id ? { ...req, status: req.status === 'Resolved' ? 'Open' : 'Resolved' } : req
-                            )
-                          )
-                        }
-                        className={btnSecondary}
-                      >
-                        {h.status === 'Resolved' ? 'Reopen' : 'Mark Resolved'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -441,7 +653,7 @@ export const AdminSection = ({
             </button>
           </form>
 
-          <div className={`lg:col-span-7 lg:order-1 space-y-5`}>
+          <div className="lg:col-span-7 lg:order-1 space-y-5">
             <div className={`${cardClass} p-6 space-y-4`}>
               <h2 className={`font-display text-base ${textPrimary}`}>Quiz Bank ({quizzes.length})</h2>
               <div className={`divide-y ${borderClass}`}>
@@ -475,7 +687,7 @@ export const AdminSection = ({
         </div>
       )}
 
-      {/* 5. AI SETTINGS & USAGE (SERVER-ONLY KEY ARCHITECTURE) */}
+      {/* 5. AI SETTINGS & USAGE */}
       {subTab === 'admin-ai' && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

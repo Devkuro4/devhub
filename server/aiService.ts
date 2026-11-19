@@ -1227,3 +1227,93 @@ Use warm, plain, non-judgmental language.`;
     schema
   );
 }
+
+// 11. Single-File Material Excerpt Explanation (strictly capped excerpt; never processes videos or full archives)
+const excerptExplainCache = new Map<string, { value: any; expiresAt: number }>();
+
+export async function explainMaterialExcerpt(
+  userId: string,
+  input: {
+    fileName: string;
+    fileKind?: string;
+    excerpt: string;
+    question?: string;
+    skillLevel: string;
+    field: string;
+  }
+) {
+  const fileName = String(input.fileName || '').trim() || 'study-material.txt';
+  if (/\.(mp4|mov|mkv|webm|avi|m4v|wmv|flv|mpeg|mpg|3gp|m4a|mp3|wav|ogg|aac|flac)$/i.test(fileName)) {
+    throw new Error('Video and audio files are never uploaded or processed by AI.');
+  }
+  const excerpt = String(input.excerpt || '').trim().slice(0, 6000);
+  if (excerpt.length < 15) {
+    throw new Error('Provide a readable text or code excerpt (at least 15 characters) to explain.');
+  }
+
+  const question = String(input.question || '').trim().slice(0, 400);
+  const cacheKey = JSON.stringify({
+    fileName: fileName.toLowerCase(),
+    fileKind: String(input.fileKind || '').toLowerCase(),
+    excerpt: excerpt.slice(0, 2000),
+    question: question.toLowerCase(),
+    skillLevel: String(input.skillLevel || 'Beginner').toLowerCase(),
+  });
+
+  const cached = excerptExplainCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      data: cached.value as {
+        summary: string;
+        keyConcepts: string[];
+        practicePrompt: string;
+      },
+      model: runtimeSettings.model,
+      latencyMs: 1,
+    };
+  }
+
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      summary: { type: Type.STRING },
+      keyConcepts: { type: Type.ARRAY, items: { type: Type.STRING } },
+      practicePrompt: { type: Type.STRING },
+    },
+  };
+
+  const prompt = `Explain this single course file excerpt clearly in plain English for a ${input.skillLevel || 'Beginner'} developer studying ${input.field || 'software development'}.
+File name: ${fileName} (${input.fileKind || 'study file'})
+${question ? `Learner's specific question: ${question}\n` : ''}
+Excerpt (read-only study material):
+${excerpt}
+
+Return:
+- summary: 2-4 sentences explaining the main idea simply without skipping important details.
+- keyConcepts: 3-5 crisp takeaways from this excerpt.
+- practicePrompt: ONE small 10-minute exercise or check question the learner can try next based on this file.`;
+
+  const res = await runJsonOperation<{
+    summary: string;
+    keyConcepts: string[];
+    practicePrompt: string;
+  }>(
+    userId,
+    'materialExcerptExplain',
+    prompt,
+    'You are a patient coding tutor explaining a single study file excerpt cleanly in plain English. Do not execute code or claim access to external videos.',
+    schema
+  );
+
+  if (excerptExplainCache.size >= 120) {
+    const oldestKey = excerptExplainCache.keys().next().value;
+    if (oldestKey) excerptExplainCache.delete(oldestKey);
+  }
+  excerptExplainCache.set(cacheKey, {
+    value: res.data,
+    expiresAt: Date.now() + PLAN_CACHE_TTL_MS,
+  });
+
+  return res;
+}
+

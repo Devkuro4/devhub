@@ -88,6 +88,7 @@ export const HomeDashboard = ({
   independence,
   teamRoster,
   userName,
+  onViewMember,
   tutorialState,
   onStartTour,
   styles,
@@ -127,6 +128,7 @@ export const HomeDashboard = ({
   independence: IndependenceSummary;
   teamRoster: any[];
   userName: string;
+  onViewMember?: (member: any) => void;
   tutorialState?: {
     welcomeCompleted: boolean;
     tourCompleted: boolean;
@@ -602,7 +604,11 @@ export const HomeDashboard = ({
                     <span className={`block text-sm font-medium leading-tight truncate ${textPrimary}`}>{m.name}</span>
                     <span className={`block text-xs truncate ${textSecondary}`}>{m.role === 'Member' ? m.field : m.role}</span>
                   </span>
-                  <button type="button" onClick={() => onNavigate('pairing-help')} className="inline-flex items-center rounded-full px-3 min-h-8 text-xs font-semibold bg-[var(--spark)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => (onViewMember ? onViewMember(m) : onNavigate('pairing-help'))}
+                    className="inline-flex items-center rounded-full px-3 min-h-8 text-xs font-semibold bg-[var(--spark)] text-[var(--on-spark)] hover:bg-[var(--accent-700)] cursor-pointer"
+                  >
                     View
                   </button>
                 </li>

@@ -1,29 +1,25 @@
 import type { Server as HttpServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AUTH_ENABLED, DEMO_SERVER_ALLOWED, verifyAccessToken } from './auth.ts';
+import {
+  appendChatMessage,
+  deleteOrHideChatMessage,
+  getChatHistoryForRoom,
+  isUserAdmin,
+  isUserMuted,
+  listChatRoomsForUser,
+  subscribeCommunityEvents,
+} from './communityStore.ts';
+import type { StudyChatMessage, StudyChatRoom } from '../src/types.ts';
 
-export interface StudyChatRoom {
-  id: string;
-  name: string;
-  topic: string;
-}
-
-export interface StudyChatMessage {
-  id: string;
-  roomId: string;
-  senderId: string;
-  senderName: string;
-  senderField?: string;
-  text: string;
-  codeSnippet?: string;
-  createdAt: string;
-}
+export type { StudyChatMessage, StudyChatRoom };
 
 interface ClientInfo {
   ws: WebSocket;
   userId: string;
   userName: string;
   userField: string;
+  isAdmin: boolean;
   roomId: string;
   /** True once the member's login token has been checked (or demo mode is allowed). */
   verified: boolean;
@@ -32,31 +28,17 @@ interface ClientInfo {
   alive: boolean;
 }
 
-const RATE_LIMIT_COUNT = 6;
+const RATE_LIMIT_COUNT = 8;
 const RATE_LIMIT_WINDOW_MS = 10_000;
 
-const DEFAULT_ROOMS: StudyChatRoom[] = [
-  { id: 'general', name: 'General Study Hall', topic: 'Daily check-ins, study accountability & beginner Q&A' },
-  { id: 'frontend', name: 'Frontend & UI', topic: 'HTML, CSS, Flexbox, JavaScript, React & responsive design' },
-  { id: 'backend', name: 'Backend & Databases', topic: 'APIs, Node.js, SQL, authentication & architecture' },
-  { id: 'ai-python', name: 'Python & AI Builders', topic: 'Python scripts, prompts, structured outputs & ML tools' },
-  { id: 'projects', name: 'Project Pairings', topic: 'Find teammates, share repos & review each other’s builds' },
-];
-
-const rooms: StudyChatRoom[] = [...DEFAULT_ROOMS];
-const roomHistory = new Map<string, StudyChatMessage[]>();
 const clients = new Set<ClientInfo>();
 
-for (const r of rooms) {
-  roomHistory.set(r.id, []);
-}
-
-export function listChatRooms(): StudyChatRoom[] {
-  return rooms;
+export function listChatRooms(userId?: string): StudyChatRoom[] {
+  return listChatRoomsForUser(userId);
 }
 
 export function getChatHistory(roomId: string): StudyChatMessage[] {
-  return roomHistory.get(roomId) || [];
+  return getChatHistoryForRoom(roomId);
 }
 
 function getRoomPresence(roomId: string): { userId: string; userName: string; userField: string }[] {
@@ -82,10 +64,49 @@ function broadcastToRoom(roomId: string, payload: unknown, except?: ClientInfo) 
   }
 }
 
-export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[] = []) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
+function broadcastToUser(userId: string, payload: unknown) {
+  const encoded = JSON.stringify(payload);
+  for (const c of clients) {
+    if (c.verified && c.userId === userId && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(encoded);
+    }
+  }
+}
 
-  // Drop dead connections (common on mobile networks) so "online" counts stay honest
+function broadcastAllVerified(payload: unknown) {
+  const encoded = JSON.stringify(payload);
+  for (const c of clients) {
+    if (c.verified && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(encoded);
+    }
+  }
+}
+
+let subscribed = false;
+
+export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[] = []) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 24 * 1024 });
+
+  if (!subscribed) {
+    subscribed = true;
+    subscribeCommunityEvents((ev) => {
+      if (ev.type === 'community:sync') {
+        broadcastAllVerified(ev);
+      } else if (ev.type === 'notification:new') {
+        broadcastToUser(ev.recipientId, { type: 'notification:new', notification: ev.notification });
+      } else if (ev.type === 'chat:rooms') {
+        for (const c of clients) {
+          if (c.verified && c.ws.readyState === WebSocket.OPEN) {
+            c.ws.send(JSON.stringify({ type: 'chat:rooms', rooms: listChatRoomsForUser(c.userId) }));
+          }
+        }
+      } else if (ev.type === 'chat:message:updated') {
+        broadcastToRoom(ev.roomId, { type: 'chat:message:updated', roomId: ev.roomId, message: ev.message });
+      }
+    });
+  }
+
+  // Drop dead connections so "online" counts stay honest
   const heartbeat = setInterval(() => {
     for (const c of clients) {
       if (!c.alive) {
@@ -115,8 +136,6 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
       return;
     }
 
-    // Refuse connections from other websites. Same-site and the configured ALLOWED_ORIGINS are fine;
-    // clients that send no Origin header (not browsers) are let through to the login check below.
     const origin = request.headers.origin;
     if (origin) {
       const originHost = (() => {
@@ -146,6 +165,7 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
       userId: `member-${Math.random().toString(36).slice(2, 8)}`,
       userName: 'Member',
       userField: '',
+      isAdmin: false,
       roomId: 'general',
       verified: false,
       sentAt: [],
@@ -157,10 +177,17 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
       client.alive = true;
     });
 
-    // Nothing is sent until the member proves who they are with their login token (chat:join).
-    ws.send(JSON.stringify({ type: 'chat:init', rooms, roomId: client.roomId, history: [], presence: [] }));
+    // Nothing private is sent until chat:join verifies identity.
+    ws.send(
+      JSON.stringify({
+        type: 'chat:init',
+        rooms: listChatRoomsForUser(undefined),
+        roomId: client.roomId,
+        history: [],
+        presence: [],
+      })
+    );
 
-    // Serialises messages so a second message can never be handled before the login check has finished.
     let queue: Promise<void> = Promise.resolve();
     ws.on('message', (raw) => {
       queue = queue.then(() => handleMessage(raw)).catch(() => {});
@@ -183,9 +210,9 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
               ws.close(4401, 'unauthorized');
               return;
             }
-            // Identity comes from the verified account, never from what the browser says it is.
             client.userId = result.user.userId;
             client.userName = result.user.name.slice(0, 64);
+            client.isAdmin = result.user.isAdmin;
             client.verified = true;
           } else if (DEMO_SERVER_ALLOWED) {
             client.verified = true;
@@ -196,21 +223,29 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
           }
         }
         if (!AUTH_ENABLED) {
-          // Local demo only: there are no accounts, so the browser's own name and id are used.
-          if (typeof msg.userId === 'string' && msg.userId.trim()) client.userId = msg.userId.trim().slice(0, 64);
-          if (typeof msg.userName === 'string' && msg.userName.trim()) client.userName = msg.userName.trim().slice(0, 64);
+          if (typeof msg.userId === 'string' && msg.userId.trim()) client.userId = msg.userId.trim().slice(0, 120);
+          if (typeof msg.userName === 'string' && msg.userName.trim()) client.userName = msg.userName.trim().slice(0, 80);
+          client.isAdmin = isUserAdmin(client.userId);
         }
 
+        const userRooms = listChatRoomsForUser(client.userId);
         const prevRoom = client.roomId;
-        const nextRoom = typeof msg.roomId === 'string' && rooms.some((r) => r.id === msg.roomId) ? msg.roomId : 'general';
-        if (typeof msg.userField === 'string') client.userField = msg.userField.trim().slice(0, 64);
+        const requestedRoom = typeof msg.roomId === 'string' ? msg.roomId : 'general';
+        const nextRoom = userRooms.some((r) => r.id === requestedRoom) ? requestedRoom : 'general';
+        if (typeof msg.userField === 'string') client.userField = msg.userField.trim().slice(0, 80);
         client.roomId = nextRoom;
 
         ws.send(
           JSON.stringify({
+            type: 'chat:rooms',
+            rooms: userRooms,
+          })
+        );
+        ws.send(
+          JSON.stringify({
             type: 'chat:history',
             roomId: nextRoom,
-            history: getChatHistory(nextRoom),
+            history: getChatHistoryForRoom(nextRoom),
             presence: getRoomPresence(nextRoom),
           })
         );
@@ -231,7 +266,18 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
           client
         );
       } else if (msg.type === 'chat:send') {
-        // Light spam protection: a few messages per short window
+        const mute = isUserMuted(client.userId);
+        if (mute.muted) {
+          ws.send(
+            JSON.stringify({
+              type: 'chat:error',
+              code: 'muted',
+              message: `You are currently muted${mute.reason ? ` (${mute.reason})` : ''}.`,
+            })
+          );
+          return;
+        }
+
         const now = Date.now();
         client.sentAt = client.sentAt.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
         if (client.sentAt.length >= RATE_LIMIT_COUNT) {
@@ -240,32 +286,44 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
         }
         client.sentAt.push(now);
 
-        const roomId = typeof msg.roomId === 'string' && roomHistory.has(msg.roomId) ? msg.roomId : client.roomId;
+        const userRooms = listChatRoomsForUser(client.userId);
+        const roomId = typeof msg.roomId === 'string' && userRooms.some((r) => r.id === msg.roomId) ? msg.roomId : client.roomId;
         const text = String(msg.text || '').trim().slice(0, 2000);
         const codeSnippet = typeof msg.codeSnippet === 'string' ? msg.codeSnippet.trim().slice(0, 3000) : '';
         if (!text && !codeSnippet) return;
 
-        // Never trust a sender name or id from the browser: use what was verified at join time.
-        const senderName = client.userName;
-        const senderId = client.userId;
-
         const messageObj: StudyChatMessage = {
           id: typeof msg.id === 'string' && msg.id.trim() ? msg.id.trim().slice(0, 80) : `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           roomId,
-          senderId,
-          senderName,
+          senderId: client.userId,
+          senderName: client.userName,
           senderField: client.userField,
           text,
           codeSnippet: codeSnippet || undefined,
+          replyToId: typeof msg.replyToId === 'string' && msg.replyToId.trim() ? msg.replyToId.trim().slice(0, 80) : undefined,
+          replyToAuthor: typeof msg.replyToAuthor === 'string' && msg.replyToAuthor.trim() ? msg.replyToAuthor.trim().slice(0, 80) : undefined,
+          replyToText: typeof msg.replyToText === 'string' && msg.replyToText.trim() ? msg.replyToText.trim().slice(0, 140) : undefined,
           createdAt: new Date().toISOString(),
         };
 
-        const list = roomHistory.get(roomId) || [];
-        if (!list.some((m) => m.id === messageObj.id && m.senderId === messageObj.senderId)) {
-          list.push(messageObj);
-          if (list.length > 200) list.splice(0, list.length - 200);
-          roomHistory.set(roomId, list);
-          broadcastToRoom(roomId, { type: 'chat:message', roomId, message: messageObj });
+        const saved = appendChatMessage(messageObj);
+        if ('error' in saved) {
+          ws.send(JSON.stringify({ type: 'chat:error', code: 'rejected', message: saved.error }));
+          return;
+        }
+        broadcastToRoom(roomId, { type: 'chat:message', roomId, message: saved.message });
+      } else if (msg.type === 'chat:delete') {
+        const roomId = typeof msg.roomId === 'string' ? msg.roomId : client.roomId;
+        const messageId = typeof msg.messageId === 'string' ? msg.messageId : '';
+        if (!messageId) return;
+        const result = deleteOrHideChatMessage(
+          { userId: client.userId, isAdmin: client.isAdmin || isUserAdmin(client.userId) },
+          roomId,
+          messageId,
+          typeof msg.reason === 'string' ? msg.reason : undefined
+        );
+        if ('error' in result) {
+          ws.send(JSON.stringify({ type: 'chat:error', code: 'forbidden', message: result.error }));
         }
       }
     }

@@ -73,6 +73,16 @@ export interface CourseModule {
   notes?: string;
 }
 
+export type CourseLearningStatus = 'Not Started' | 'In Progress' | 'Paused' | 'Completed';
+
+export interface CourseVideoRef {
+  id: string;
+  title: string;
+  url: string;
+  completed: boolean;
+  duration?: string;
+}
+
 export interface CourseItem {
   id: string;
   title: string;
@@ -81,6 +91,7 @@ export interface CourseItem {
   instructor: string;
   field: string;
   skillLevel: string;
+  status?: CourseLearningStatus;
   goals: string;
   targetDate: string;
   progress: number;
@@ -89,6 +100,8 @@ export interface CourseItem {
   lastStudied: string;
   notes: string;
   referenceLinks?: string[];
+  videoRefs?: CourseVideoRef[];
+  linkedMaterialPackIds?: string[];
   modules: CourseModule[];
   /** Added by the personalized onboarding (optional, so older courses stay valid). */
   description?: string;
@@ -108,8 +121,11 @@ export interface CourseItem {
 export interface DailyTarget {
   id: string;
   dayLabel: string;
+  scheduledDate?: string;
   courseId: string;
   courseTitle: string;
+  sourceType?: 'course' | 'self_directed' | 'roadmap';
+  selfDirectedId?: string;
   topic: string;
   objective: string;
   recommendedLesson: string;
@@ -122,6 +138,8 @@ export interface DailyTarget {
   starterHint: string;
   isTheoryOnly: boolean;
   status: LearningStatus;
+  completedAt?: string;
+  sessionMinutesLogged?: number;
 }
 
 export interface LearningPlan {
@@ -133,6 +151,81 @@ export interface LearningPlan {
   missingRoadmapTopics: string[];
   dailyTargets: DailyTarget[];
   generatedAt: string;
+}
+
+export type ImportedMaterialFileKind =
+  | 'pdf'
+  | 'markdown'
+  | 'code'
+  | 'exercise'
+  | 'project'
+  | 'notes'
+  | 'document';
+
+export interface ImportedMaterialFile {
+  id: string;
+  path: string;
+  name: string;
+  folder: string;
+  kind: ImportedMaterialFileKind;
+  ext: string;
+  size: number;
+  contentPreview: string;
+  truncated?: boolean;
+}
+
+export interface ImportedMaterialPack {
+  id: string;
+  ownerId: string;
+  title: string;
+  archiveName: string;
+  importedAt: string;
+  totalFiles: number;
+  skippedVideoCount: number;
+  skippedVideoNames: string[];
+  skippedBlockedCount: number;
+  folders: string[];
+  files: ImportedMaterialFile[];
+  outline: string[];
+  linkedCourseId?: string;
+  linkedSelfDirectedId?: string;
+  notes?: string;
+}
+
+export interface SelfDirectedTask {
+  id: string;
+  title: string;
+  done: boolean;
+  scheduledDate?: string;
+  estimatedMinutes?: number;
+  linkedMaterialFilePath?: string;
+}
+
+export interface SelfDirectedTopic {
+  id: string;
+  title: string;
+  field: string;
+  status: CourseLearningStatus;
+  objectives: string[];
+  notes: string;
+  projectIdea: string;
+  tasks: SelfDirectedTask[];
+  references: { id: string; title: string; url: string }[];
+  linkedMaterialPackIds: string[];
+  targetDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudySessionLog {
+  id: string;
+  title: string;
+  sourceType: 'course' | 'self_directed' | 'general';
+  courseId?: string;
+  selfDirectedId?: string;
+  minutes: number;
+  dateIso: string;
+  note?: string;
 }
 
 export interface RoadmapTopic {
@@ -190,15 +283,21 @@ export interface AiCodeReviewFeedback {
 
 export interface CodeSubmission {
   id: string;
+  ownerId?: string;
   version: number;
   parentSubmissionId?: string;
   createdAt: string;
+  submittedIso?: string;
+  updatedAt?: string;
   courseId: string;
   courseTitle: string;
   topic: string;
   dayLabel: string;
   language: string;
   exerciseTitle: string;
+  assignmentInstructions?: string;
+  status?: 'Submitted' | 'Reviewed' | 'Needs Revision' | 'Demonstrated';
+  allowResubmit?: boolean;
   submissionKind: 'code' | 'files' | 'zip' | 'github' | 'notes';
   code: string;
   files: SubmittedFile[];
@@ -295,25 +394,44 @@ export interface ShowcaseProject {
   createdAt: string;
 }
 
+export type ReactionType = 'helpful' | 'insightful' | 'celebrate';
+
 export interface CommunityPostComment {
   id: string;
   author: string;
+  authorId?: string;
+  authorRole?: string;
   text: string;
+  createdAt?: string;
+  updatedAt?: string;
+  parentId?: string;
   isHelpful?: boolean;
+  helpfulBy?: string[];
+  hidden?: boolean;
+  hiddenReason?: string;
 }
 
 export interface CommunityPost {
   id: string;
   author: string;
+  authorId?: string;
   role: string;
   category: string;
+  tags?: string[];
   pinned: boolean;
+  pinnedAt?: string;
+  locked?: boolean;
+  hidden?: boolean;
+  hiddenReason?: string;
   timestamp: string;
+  createdAt?: string;
+  updatedAt?: string;
   title: string;
   content: string;
   codeSnippet?: string;
   attachmentUrl?: string;
   likes: number;
+  reactions?: Partial<Record<ReactionType, string[]>>;
   comments: CommunityPostComment[];
 }
 
@@ -321,13 +439,124 @@ export interface CommunityEvent {
   id: string;
   title: string;
   presenter: string;
+  presenterId?: string;
   topic: string;
   type: string;
   dateTime: string;
   description: string;
   resourceUrl: string;
   attendees: string[];
+  attendeeIds?: string[];
   reminders?: string[];
+  reminderIds?: string[];
+}
+
+export interface StudyGroupGoal {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+export interface StudyGroupLink {
+  id: string;
+  title: string;
+  url: string;
+  addedBy: string;
+}
+
+export interface StudyGroup {
+  id: string;
+  name: string;
+  field: string;
+  topic: string;
+  description: string;
+  level: string;
+  schedule: string;
+  creatorId: string;
+  creatorName: string;
+  memberIds: string[];
+  memberNames: string[];
+  roomId: string;
+  goals: StudyGroupGoal[];
+  sharedLinks: StudyGroupLink[];
+  createdAt: string;
+  maxMembers?: number;
+}
+
+export type NotificationType =
+  | 'reply'
+  | 'mention'
+  | 'reaction'
+  | 'help_answer'
+  | 'announcement'
+  | 'study_group'
+  | 'event'
+  | 'moderation'
+  | 'report';
+
+export interface CommunityNotification {
+  id: string;
+  recipientId: string;
+  actorId: string;
+  actorName: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  targetTab: string;
+  targetId?: string;
+  roomId?: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export type ReportTargetType = 'post' | 'comment' | 'help' | 'resource' | 'chat';
+
+export interface ContentReport {
+  id: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  parentId?: string;
+  roomId?: string;
+  targetAuthorId?: string;
+  targetAuthorName: string;
+  targetPreview: string;
+  reason: string;
+  details?: string;
+  reporterId: string;
+  reporterName: string;
+  createdAt: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  resolutionAction?: string;
+  resolutionNote?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+}
+
+export interface MemberDirectoryProfile {
+  id: string;
+  name: string;
+  username?: string;
+  role: string;
+  field: string;
+  level: string;
+  bio: string;
+  languages?: string[];
+  frameworks?: string[];
+  interests?: string[];
+  githubUrl?: string;
+  portfolioUrl?: string;
+  linkedinUrl?: string;
+  partner?: string;
+  mentor?: string;
+  badgesCount?: number;
+  streakDays?: number;
+  joinedAt?: string;
+  muted?: boolean;
+  mutedReason?: string;
+}
+
+export interface ModerationState {
+  mutedUserIds: Record<string, { reason: string; mutedBy: string; mutedAt: string }>;
 }
 
 export type BadgeCategory = 'Consistency' | 'Learning' | 'Building' | 'Community';
@@ -505,6 +734,11 @@ export interface StudyChatRoom {
   id: string;
   name: string;
   topic: string;
+  groupId?: string;
+  isDirect?: boolean;
+  participantIds?: string[];
+  participantNames?: string[];
+  createdBy?: string;
 }
 
 export interface StudyChatMessage {
@@ -515,6 +749,13 @@ export interface StudyChatMessage {
   senderField?: string;
   text: string;
   codeSnippet?: string;
+  replyToId?: string;
+  replyToAuthor?: string;
+  replyToText?: string;
+  mentions?: string[];
+  deleted?: boolean;
+  hidden?: boolean;
   createdAt: string;
 }
+
 

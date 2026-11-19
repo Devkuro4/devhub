@@ -86,10 +86,46 @@ import { RoadmapSection } from './components/RoadmapSection';
 import { LearningSection } from './components/LearningSection';
 import { ProjectsSection } from './components/ProjectsSection';
 import { CommunitySection } from './components/CommunitySection';
+import type { CommunityActionsProp } from './components/CommunitySection';
+import {
+  MemberProfileModal,
+  NotificationBell,
+  ReportModal,
+  type ReportDraftTarget,
+} from './components/CommunityModals';
 import { normalizeStore } from './lib/mentorChats';
 import { MentorSection, ProfileSection } from './components/MentorAndProfile';
 import { AdminSection } from './components/AdminSection';
-import { StudyChatProvider, StudyGroupChatWidget } from './components/StudyGroupChat';
+import { StudyChatProvider, StudyGroupChatWidget, useStudyGroupChat } from './components/StudyGroupChat';
+import {
+  apiAddComment,
+  apiAddEvent,
+  apiAddResource,
+  apiCreateHelpRequest,
+  apiCreatePost,
+  apiCreateStudyGroup,
+  apiDeleteComment,
+  apiDeletePost,
+  apiMarkAllNotificationsRead,
+  apiMarkNotificationRead,
+  apiModeratePost,
+  apiOpenDirectChat,
+  apiReactPost,
+  apiReplyHelpRequest,
+  apiResolveReport,
+  apiSetMemberMuted,
+  apiSetMemberRole,
+  apiSubmitReport,
+  apiToggleEventAction,
+  apiToggleHelpResolved,
+  apiToggleJoinStudyGroup,
+  apiUpdateComment,
+  apiUpdatePost,
+  apiUpdateStudyGroupWorkspace,
+  fetchCommunityBootstrap,
+  registerLocalSession,
+  syncDirectoryProfile,
+} from './lib/communityClient';
 import {
   FirstLearningSessionModal,
   HelpDiscoveryDrawer,
@@ -97,29 +133,79 @@ import {
   ProductTour,
   WelcomeExperience,
 } from './components/WelcomeAndTour';
+import {
+  fetchLearningState,
+  saveLearningState,
+} from './lib/learningClient';
 import type {
   AiHelpEvent,
   MentorChatStore,
   CodeSubmission,
   CommunityEvent,
+  CommunityNotification,
   CommunityPost,
+  ContentReport,
   CourseItem,
   DailyTarget,
+  ImportedMaterialPack,
   LeaderboardMap,
   LearningPlan,
   LedgerEntry,
+  MemberDirectoryProfile,
+  ModerationState,
   OnboardingProfile,
   OnboardingState,
   OnboardingDraft,
   QuizAttempt,
   QuizItem,
+  ReactionType,
   RoadmapItem,
   RoadmapTopicProgress,
+  SelfDirectedTopic,
   ShowcaseProject,
+  StudyGroup,
+  StudySessionLog,
   TutorialState,
   UserSession,
   WeeklyProjectItem,
 } from './types';
+
+function CommunityDmAndNavBridge({
+  openDmRequest,
+  onClearOpenDm,
+  openNotifRoomRequest,
+  onClearNotifRoom,
+}: {
+  openDmRequest: { peerId: string; peerName: string; actor: { userId?: string; userName?: string } } | null;
+  onClearOpenDm: () => void;
+  openNotifRoomRequest: string | null;
+  onClearNotifRoom: () => void;
+}) {
+  const { upsertRoomAndOpen, setActiveRoomId } = useStudyGroupChat();
+  useEffect(() => {
+    if (!openDmRequest) return;
+    let alive = true;
+    apiOpenDirectChat(openDmRequest.actor, openDmRequest.peerId, openDmRequest.peerName)
+      .then((res) => {
+        if (alive && res.room) upsertRoomAndOpen(res.room);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) onClearOpenDm();
+      });
+    return () => {
+      alive = false;
+    };
+  }, [openDmRequest, upsertRoomAndOpen, onClearOpenDm]);
+
+  useEffect(() => {
+    if (!openNotifRoomRequest) return;
+    setActiveRoomId(openNotifRoomRequest);
+    onClearNotifRoom();
+  }, [openNotifRoomRequest, setActiveRoomId, onClearNotifRoom]);
+
+  return null;
+}
 
 export default function App() {
   const loadSaved = () => {
@@ -175,6 +261,9 @@ export default function App() {
     saved?.roadmapProgress ?? INITIAL_ROADMAP_PROGRESS
   );
   const [learningPlans, setLearningPlans] = useState<LearningPlan[]>(saved?.learningPlans ?? []);
+  const [importedMaterials, setImportedMaterials] = useState<ImportedMaterialPack[]>(saved?.importedMaterials ?? []);
+  const [selfDirectedTopics, setSelfDirectedTopics] = useState<SelfDirectedTopic[]>(saved?.selfDirectedTopics ?? []);
+  const [studySessions, setStudySessions] = useState<StudySessionLog[]>(saved?.studySessions ?? []);
   const [dailyTarget, setDailyTarget] = useState<DailyTarget>(saved?.dailyTarget ?? INITIAL_DAILY_TARGET);
   const [codeSubmissions, setCodeSubmissions] = useState<CodeSubmission[]>(
     saved?.codeSubmissions ?? INITIAL_SUBMISSIONS
@@ -261,6 +350,24 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardMap>(
     saved?.leaderboard ?? (CLOUD ? {} : seedLeaderboard(TEAM_ROSTER, weekKeyFor(new Date())))
   );
+  // Community collaboration state (server-persisted & live-synced)
+  const [studyGroups, setStudyGroups] = useState<StudyGroup[]>(saved?.studyGroups ?? []);
+  const [memberProfiles, setMemberProfiles] = useState<Record<string, MemberDirectoryProfile>>(saved?.memberProfiles ?? {});
+  const [notifications, setNotifications] = useState<CommunityNotification[]>(saved?.notifications ?? []);
+  const [reports, setReports] = useState<ContentReport[]>(saved?.reports ?? []);
+  const [moderation, setModeration] = useState<ModerationState>(saved?.moderation ?? { mutedUserIds: {} });
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState('');
+  const [selectedMemberRef, setSelectedMemberRef] = useState<{ id: string; name?: string } | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportDraftTarget | null>(null);
+  const [focusedPostId, setFocusedPostId] = useState<string | null>(null);
+  const [openDmRequest, setOpenDmRequest] = useState<{
+    peerId: string;
+    peerName: string;
+    actor: { userId?: string; userName?: string };
+  } | null>(null);
+  const [openNotifRoomRequest, setOpenNotifRoomRequest] = useState<string | null>(null);
+
   // Everyone who has signed up (names only). Read from the profiles table.
   const [signedUpProfiles, setSignedUpProfiles] = useState<any[] | null>(null);
 
@@ -310,6 +417,9 @@ export default function App() {
           customRoadmaps,
           roadmapProgress,
           learningPlans,
+          importedMaterials,
+          selfDirectedTopics,
+          studySessions,
           dailyTarget,
           codeSubmissions,
           weeklyProjects,
@@ -359,6 +469,9 @@ export default function App() {
     customRoadmaps,
     roadmapProgress,
     learningPlans,
+    importedMaterials,
+    selfDirectedTopics,
+    studySessions,
     dailyTarget,
     codeSubmissions,
     weeklyProjects,
@@ -430,6 +543,9 @@ export default function App() {
     customRoadmaps: [customRoadmaps, setCustomRoadmaps],
     roadmapProgress: [roadmapProgress, setRoadmapProgress],
     learningPlans: [learningPlans, setLearningPlans],
+    importedMaterials: [importedMaterials, setImportedMaterials],
+    selfDirectedTopics: [selfDirectedTopics, setSelfDirectedTopics],
+    studySessions: [studySessions, setStudySessions],
     dailyTarget: [dailyTarget, setDailyTarget],
     codeSubmissions: [codeSubmissions, setCodeSubmissions],
     weeklyProjects: [weeklyProjects, setWeeklyProjects],
@@ -459,6 +575,11 @@ export default function App() {
     showcaseProjects: [showcaseProjects, setShowcaseProjects],
     teamRoster: [teamRoster, setTeamRoster],
     leaderboard: [leaderboard, setLeaderboard],
+    studyGroups: [studyGroups, setStudyGroups],
+    memberProfiles: [memberProfiles, setMemberProfiles],
+    notifications: [notifications, setNotifications],
+    reports: [reports, setReports],
+    moderation: [moderation, setModeration],
   };
   const stateRef = useRef(stateMap);
   stateRef.current = stateMap;
@@ -880,11 +1001,11 @@ export default function App() {
 
   const mainNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, match: ['dashboard'], group: 'Workspace' },
-    { id: 'today', label: 'My Learning', icon: BookOpen, match: ['today', 'courses', 'submissions', 'quizzes', 'progress'], group: 'Workspace' },
+    { id: 'today', label: 'My Learning', icon: BookOpen, match: ['today', 'courses', 'plans', 'submissions', 'quizzes', 'progress'], group: 'Workspace' },
     { id: 'roadmaps', label: 'My Roadmap', icon: MapIcon, match: ['roadmaps'], group: 'Workspace' },
     { id: 'weekly-project', label: 'Projects', icon: FolderGit2, match: ['weekly-project', 'projects', 'showcase', 'devtools'], group: 'Workspace' },
     { id: 'compete', label: 'Compete', icon: Trophy, match: ['compete', 'leaderboard', 'badges'], group: 'Community' },
-    { id: 'community-home', label: 'Community', icon: Users, match: ['community-home', 'study-chat', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'], group: 'Community' },
+    { id: 'community-home', label: 'Community', icon: Users, match: ['community-home', 'study-chat', 'community', 'study-groups', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'], group: 'Community' },
     { id: 'ai-mentor', label: 'AI Mentor', icon: Bot, match: ['ai-mentor'], group: 'Tools' },
   ];
 
@@ -896,7 +1017,11 @@ export default function App() {
     { id: 'admin-ai', label: 'AI Settings', icon: Code2, match: ['admin-ai'] },
   ];
 
+  const learningSyncedUserRef = useRef<string | null>(null);
+
   const signOut = () => {
+    setNotifications([]);
+    learningSyncedUserRef.current = null;
     if (supabase) supabase.auth.signOut();
     else setUser(null);
   };
@@ -1014,6 +1139,428 @@ export default function App() {
     }
   };
 
+  const communityActor = useMemo(
+    () => ({
+      userId: user?.id || user?.email || 'local-member',
+      userName: user?.name || profile.fullName || 'Member',
+    }),
+    [user?.id, user?.email, user?.name, profile.fullName]
+  );
+
+  const loadCommunityBootstrap = React.useCallback(
+    async (silent = false) => {
+      if (!user) return;
+      if (!silent) {
+        setCommunityLoading(true);
+        setCommunityError('');
+      }
+      try {
+        const data = await fetchCommunityBootstrap(communityActor);
+        if (Array.isArray(data.posts)) setPosts(data.posts);
+        if (Array.isArray(data.resources)) setResources(data.resources);
+        if (Array.isArray(data.presentations)) setPresentations(data.presentations);
+        if (Array.isArray(data.helpRequests)) setHelpRequests(data.helpRequests);
+        if (Array.isArray(data.studyGroups)) setStudyGroups(data.studyGroups);
+        if (Array.isArray(data.teamRoster)) setTeamRoster(data.teamRoster);
+        if (data.memberProfiles) setMemberProfiles(data.memberProfiles);
+        if (Array.isArray(data.notifications)) setNotifications(data.notifications);
+        if (Array.isArray(data.reports)) setReports(data.reports);
+        if (data.moderation) setModeration(data.moderation);
+        setCommunityError('');
+      } catch (err: any) {
+        if (!silent) {
+          setCommunityError(err?.message || 'Could not load community updates right now.');
+        }
+      } finally {
+        if (!silent) setCommunityLoading(false);
+      }
+    },
+    [user, communityActor]
+  );
+
+  // Fetch server-persisted community bootstrap whenever a user signs in
+  useEffect(() => {
+    if (!user) return;
+    loadCommunityBootstrap(false);
+  }, [user?.id, user?.email, loadCommunityBootstrap]);
+
+  // Keep member directory profile synced when user updates their profile/badges
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(() => {
+      syncDirectoryProfile(communityActor, {
+        name: user.name || profile.fullName || 'Member',
+        fullName: profile.fullName || user.name || 'Member',
+        username: profile.username,
+        field: profile.field,
+        skillLevel: profile.skillLevel,
+        bio: profile.bio,
+        languages: profile.languages,
+        frameworks: profile.frameworks,
+        interests: profile.interests,
+        githubUrl: profile.githubUrl,
+        portfolioUrl: profile.portfolioUrl,
+        linkedinUrl: profile.linkedinUrl,
+        badgesCount: milestoneSummary.earnedCount,
+        streakDays: profile.streakDays,
+      }).catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [
+    user,
+    communityActor,
+    profile.fullName,
+    profile.username,
+    profile.field,
+    profile.skillLevel,
+    profile.bio,
+    profile.languages,
+    profile.frameworks,
+    profile.interests,
+    profile.githubUrl,
+    profile.portfolioUrl,
+    profile.linkedinUrl,
+    profile.streakDays,
+    milestoneSummary.earnedCount,
+  ]);
+
+  const handleLocalLogin = async (u: { id: string; name: string; email: string; isAdmin: boolean; adminCode?: string }) => {
+    const cleanName = u.name.trim();
+    const blank = blankPersonal(cleanName, hackathon);
+    const personalKey = `dev_growth_hub_personal_${u.id}`;
+    let existingPersonal: any = null;
+    try {
+      const raw = localStorage.getItem(personalKey);
+      existingPersonal = raw ? JSON.parse(raw) : null;
+    } catch {
+      existingPersonal = null;
+    }
+
+    if (existingPersonal) {
+      setProfile(existingPersonal.profile ?? blank.profile);
+      setCourses(existingPersonal.courses ?? blank.courses);
+      setLearningPlans(existingPersonal.learningPlans ?? []);
+      setImportedMaterials(existingPersonal.importedMaterials ?? []);
+      setSelfDirectedTopics(existingPersonal.selfDirectedTopics ?? []);
+      setStudySessions(existingPersonal.studySessions ?? []);
+      if (existingPersonal.roadmapProgress) setRoadmapProgress(existingPersonal.roadmapProgress);
+      if (Array.isArray(existingPersonal.customRoadmaps)) setCustomRoadmaps(existingPersonal.customRoadmaps);
+      setDailyTarget(existingPersonal.dailyTarget ?? blank.dailyTarget);
+      setCodeSubmissions(existingPersonal.codeSubmissions ?? []);
+      setWeeklyProjects(existingPersonal.weeklyProjects ?? []);
+      setQuizAttempts(existingPersonal.quizAttempts ?? []);
+      setDailyLogs(existingPersonal.dailyLogs ?? []);
+      setSavedPostIds(existingPersonal.savedPostIds ?? []);
+      setXpLedger(existingPersonal.xpLedger ?? []);
+      setOnboarded(Boolean(existingPersonal.onboarded));
+      setOnboardingState(normalizeOnboarding(Boolean(existingPersonal.onboarded), existingPersonal.onboardingState));
+    } else {
+      setProfile(blank.profile);
+      setCourses(blank.courses);
+      setLearningPlans([]);
+      setImportedMaterials([]);
+      setSelfDirectedTopics([]);
+      setStudySessions([]);
+      setDailyTarget(blank.dailyTarget);
+      setCodeSubmissions([]);
+      setWeeklyProjects([]);
+      setQuizAttempts([]);
+      setDailyLogs([]);
+      setSavedPostIds([]);
+      setXpLedger([]);
+      setOnboarded(false);
+      setOnboardingState(normalizeOnboarding(false, blank.onboardingState as OnboardingState));
+    }
+
+    let resolvedAdmin = u.isAdmin;
+    try {
+      const reg = await registerLocalSession({ userId: u.id, userName: cleanName }, u.isAdmin, u.adminCode);
+      resolvedAdmin = Boolean(reg.isAdmin);
+    } catch {
+      /* fallback to client login role if offline */
+    }
+    const nextUser: UserSession = { id: u.id, name: cleanName, email: u.email, isAdmin: resolvedAdmin };
+    learningSyncedUserRef.current = null;
+    setUser(nextUser);
+    setRole(resolvedAdmin ? 'admin' : 'member');
+    setActiveTab(resolvedAdmin ? 'admin-dashboard' : 'dashboard');
+  };
+
+  // Persist per-user personal workspace in local mode so switching accounts stays cleanly separated
+  useEffect(() => {
+    if (CLOUD || !user?.id) return;
+    try {
+      localStorage.setItem(
+        `dev_growth_hub_personal_${user.id}`,
+        JSON.stringify({
+          profile,
+          courses,
+          learningPlans,
+          importedMaterials,
+          selfDirectedTopics,
+          studySessions,
+          roadmapProgress,
+          customRoadmaps,
+          dailyTarget,
+          codeSubmissions,
+          weeklyProjects,
+          quizAttempts,
+          dailyLogs,
+          savedPostIds,
+          xpLedger,
+          onboarded,
+          onboardingState,
+        })
+      );
+    } catch {}
+  }, [
+    user?.id,
+    profile,
+    courses,
+    learningPlans,
+    importedMaterials,
+    selfDirectedTopics,
+    studySessions,
+    roadmapProgress,
+    customRoadmaps,
+    dailyTarget,
+    codeSubmissions,
+    weeklyProjects,
+    quizAttempts,
+    dailyLogs,
+    savedPostIds,
+    xpLedger,
+    onboarded,
+    onboardingState,
+  ]);
+
+  // Hydrate server-persisted owner-isolated learning workspace in local/server mode
+  useEffect(() => {
+    if (CLOUD || !user?.id) {
+      learningSyncedUserRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    learningSyncedUserRef.current = null;
+    fetchLearningState(user.id)
+      .then((serverState) => {
+        if (cancelled) return;
+        const hasServerData =
+          (Array.isArray(serverState.courses) && serverState.courses.length > 0) ||
+          (Array.isArray(serverState.importedMaterials) && serverState.importedMaterials.length > 0) ||
+          (Array.isArray(serverState.selfDirectedTopics) && serverState.selfDirectedTopics.length > 0) ||
+          (Array.isArray(serverState.learningPlans) && serverState.learningPlans.length > 0) ||
+          (Array.isArray(serverState.codeSubmissions) && serverState.codeSubmissions.length > 0) ||
+          (Array.isArray(serverState.dailyLogs) && serverState.dailyLogs.length > 0) ||
+          (Array.isArray(serverState.studySessions) && serverState.studySessions.length > 0) ||
+          Boolean(serverState.dailyTarget);
+        if (hasServerData) {
+          if (Array.isArray(serverState.courses)) setCourses(serverState.courses);
+          if (Array.isArray(serverState.importedMaterials)) setImportedMaterials(serverState.importedMaterials);
+          if (Array.isArray(serverState.selfDirectedTopics)) setSelfDirectedTopics(serverState.selfDirectedTopics);
+          if (Array.isArray(serverState.learningPlans)) setLearningPlans(serverState.learningPlans);
+          if (Array.isArray(serverState.codeSubmissions)) setCodeSubmissions(serverState.codeSubmissions);
+          if (Array.isArray(serverState.dailyLogs)) setDailyLogs(serverState.dailyLogs);
+          if (Array.isArray(serverState.studySessions)) setStudySessions(serverState.studySessions);
+          if (serverState.dailyTarget) setDailyTarget(serverState.dailyTarget);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) {
+          learningSyncedUserRef.current = user.id;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Debounced sync of learning workspace back to owner-isolated server store
+  useEffect(() => {
+    if (CLOUD || !user?.id || learningSyncedUserRef.current !== user.id) return;
+    const uid = user.id;
+    const t = setTimeout(() => {
+      saveLearningState(uid, {
+        courses,
+        importedMaterials,
+        selfDirectedTopics,
+        learningPlans,
+        dailyTarget,
+        codeSubmissions,
+        dailyLogs,
+        studySessions,
+      }).catch(() => {});
+    }, 700);
+    return () => clearTimeout(t);
+  }, [
+    user?.id,
+    courses,
+    importedMaterials,
+    selfDirectedTopics,
+    learningPlans,
+    dailyTarget,
+    codeSubmissions,
+    dailyLogs,
+    studySessions,
+  ]);
+
+  const communityActions: CommunityActionsProp = {
+    createPost: async (input) => {
+      try {
+        const res = await apiCreatePost(communityActor, input);
+        setPosts((prev) => [res.post, ...prev.filter((p) => p.id !== res.post.id)]);
+        notify(input.category === 'Announcement' ? 'Announcement published!' : 'Posted to Community Discussions!');
+      } catch (err: any) {
+        notify(err?.message || 'Could not publish post.', 'error');
+      }
+    },
+    updatePost: async (postId, patch) => {
+      try {
+        const res = await apiUpdatePost(communityActor, postId, patch);
+        setPosts((prev) => prev.map((p) => (p.id === postId ? res.post : p)));
+        notify('Discussion updated.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not update discussion.', 'error');
+      }
+    },
+    deletePost: async (postId) => {
+      try {
+        await apiDeletePost(communityActor, postId);
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        notify('Discussion deleted.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not delete discussion.', 'error');
+      }
+    },
+    moderatePost: async (postId, action) => {
+      try {
+        const res = await apiModeratePost(communityActor, postId, action);
+        setPosts((prev) => prev.map((p) => (p.id === postId ? res.post : p)));
+        notify('Moderation updated.');
+      } catch (err: any) {
+        notify(err?.message || 'Moderation failed.', 'error');
+      }
+    },
+    reactPost: async (postId, type: ReactionType) => {
+      try {
+        const res = await apiReactPost(communityActor, postId, type);
+        setPosts((prev) => prev.map((p) => (p.id === postId ? res.post : p)));
+      } catch (err: any) {
+        notify(err?.message || 'Could not update reaction.', 'error');
+      }
+    },
+    addComment: async (postId, input) => {
+      try {
+        const res = await apiAddComment(communityActor, postId, input);
+        setPosts((prev) => prev.map((p) => (p.id === postId ? res.post : p)));
+      } catch (err: any) {
+        notify(err?.message || 'Could not add reply.', 'error');
+      }
+    },
+    updateComment: async (postId, commentId, patch) => {
+      try {
+        const res = await apiUpdateComment(communityActor, postId, commentId, patch);
+        setPosts((prev) => prev.map((p) => (p.id === postId ? res.post : p)));
+      } catch (err: any) {
+        notify(err?.message || 'Could not update reply.', 'error');
+      }
+    },
+    deleteComment: async (postId, commentId) => {
+      try {
+        const res = await apiDeleteComment(communityActor, postId, commentId);
+        setPosts((prev) => prev.map((p) => (p.id === postId ? res.post : p)));
+        notify('Reply removed.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not delete reply.', 'error');
+      }
+    },
+    createStudyGroup: async (input) => {
+      try {
+        const res = await apiCreateStudyGroup(communityActor, input);
+        setStudyGroups((prev) => [res.group, ...prev.filter((g) => g.id !== res.group.id)]);
+        notify(`Study group “${res.group.name}” created!`);
+        return res.group;
+      } catch (err: any) {
+        notify(err?.message || 'Could not create study group.', 'error');
+        return null;
+      }
+    },
+    toggleJoinStudyGroup: async (groupId) => {
+      try {
+        const res = await apiToggleJoinStudyGroup(communityActor, groupId);
+        setStudyGroups((prev) => prev.map((g) => (g.id === groupId ? res.group : g)));
+        notify(res.joined ? `Joined ${res.group.name}!` : `Left ${res.group.name}.`);
+      } catch (err: any) {
+        notify(err?.message || 'Could not update membership.', 'error');
+      }
+    },
+    updateStudyGroupWorkspace: async (groupId, input) => {
+      try {
+        const res = await apiUpdateStudyGroupWorkspace(communityActor, groupId, input);
+        setStudyGroups((prev) => prev.map((g) => (g.id === groupId ? res.group : g)));
+      } catch (err: any) {
+        notify(err?.message || 'Could not update study group workspace.', 'error');
+      }
+    },
+    createHelpRequest: async (input) => {
+      try {
+        const res = await apiCreateHelpRequest(communityActor, input);
+        setHelpRequests((prev) => [res.helpRequest, ...prev.filter((h) => h.id !== res.helpRequest.id)]);
+        notify('Question posted to peers and mentors!');
+      } catch (err: any) {
+        notify(err?.message || 'Could not post help question.', 'error');
+      }
+    },
+    replyHelpRequest: async (helpId, text) => {
+      try {
+        const res = await apiReplyHelpRequest(communityActor, helpId, text);
+        setHelpRequests((prev) => prev.map((h) => (h.id === helpId ? res.helpRequest : h)));
+        notify('Helpful response added.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not send response.', 'error');
+      }
+    },
+    toggleHelpResolved: async (helpId) => {
+      try {
+        const res = await apiToggleHelpResolved(communityActor, helpId);
+        setHelpRequests((prev) => prev.map((h) => (h.id === helpId ? res.helpRequest : h)));
+        notify(res.helpRequest.status === 'Resolved' ? 'Question marked resolved.' : 'Question reopened.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not update question status.', 'error');
+      }
+    },
+    addResource: async (input) => {
+      try {
+        const res = await apiAddResource(communityActor, input);
+        setResources((prev) => [res.resource, ...prev.filter((r) => r.id !== res.resource.id)]);
+        notify('Resource added to the community library.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not add resource.', 'error');
+      }
+    },
+    addEvent: async (input) => {
+      try {
+        const res = await apiAddEvent(communityActor, input);
+        setPresentations((prev) => [res.event, ...prev.filter((e) => e.id !== res.event.id)]);
+        notify('Session scheduled!');
+      } catch (err: any) {
+        notify(err?.message || 'Could not schedule session.', 'error');
+      }
+    },
+    toggleEventAction: async (eventId, action) => {
+      try {
+        const res = await apiToggleEventAction(communityActor, eventId, action);
+        setPresentations((prev) => prev.map((ev) => (ev.id === eventId ? res.event : ev)));
+        if (action === 'reminder') {
+          notify('Updated event reminder.');
+        }
+      } catch (err: any) {
+        notify(err?.message || 'Could not update event RSVP.', 'error');
+      }
+    },
+  };
+
   const handleQuickCheckIn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickCheckInText.trim()) return;
@@ -1028,19 +1575,11 @@ export default function App() {
     setProfile((prev) => ({ ...prev, streakDays: (prev.streakDays || 0) + 1 }));
 
     if (shareCheckInAsWin) {
-      const winPost: CommunityPost = {
-        id: `post-${Date.now()}`,
-        author: user?.name || profile.fullName || 'Member',
-        role: 'Member',
+      communityActions.createPost({
         category: 'Small Win',
-        pinned: false,
-        timestamp: 'Just now',
         title: `Today’s study check-in: ${courses[0]?.currentTopic || profile.field || 'Daily Practice'}`,
         content: quickCheckInText.trim(),
-        likes: 1,
-        comments: [],
-      };
-      setPosts([winPost, ...posts]);
+      });
     }
     setQuickCheckInText('');
     setShareCheckInAsWin(false);
@@ -1071,7 +1610,7 @@ export default function App() {
       return CLOUD ? (
         <AuthScreen initialMode={authView ?? 'in'} onBack={ADMIN_SITE ? undefined : () => setAuthView(null)} />
       ) : (
-        <LoginScreen onLogin={(u) => setUser(u)} />
+        <LoginScreen onLogin={handleLocalLogin} />
       );
     }
     return <Landing onSignIn={() => setAuthView('in')} onJoin={() => setAuthView('up')} />;
@@ -1079,8 +1618,8 @@ export default function App() {
   if (CLOUD && ADMIN_SITE && !user.isAdmin) return <NotAuthorized onSignOut={signOut} />;
   if (CLOUD && !hydrated) return <LoadingScreen error={loadError} onSignOut={signOut} />;
 
-  const isLearningSubTab = ['today', 'courses', 'submissions', 'quizzes', 'progress'].includes(activeTab);
-  const isCommunitySubTab = ['community-home', 'study-chat', 'community', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
+  const isLearningSubTab = ['today', 'courses', 'plans', 'submissions', 'quizzes', 'progress'].includes(activeTab);
+  const isCommunitySubTab = ['community-home', 'study-chat', 'community', 'study-groups', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
   const isProjectsSubTab = ['weekly-project', 'projects', 'showcase', 'devtools'].includes(activeTab);
   const isCompeteSubTab = ['compete', 'leaderboard', 'badges'].includes(activeTab);
   const isAdminSubTab = ['admin-dashboard', 'admin-members', 'admin-support', 'admin-activities', 'admin-ai'].includes(activeTab);
@@ -1090,12 +1629,14 @@ export default function App() {
     if (activeTab === 'dashboard') return { primary: 'Dashboard' };
     if (activeTab === 'today') return { primary: 'My Learning', secondary: 'Today’s Learning' };
     if (activeTab === 'courses') return { primary: 'My Learning', secondary: 'My Courses' };
+    if (activeTab === 'plans') return { primary: 'My Learning', secondary: 'Plans & Self-Directed' };
     if (activeTab === 'submissions') return { primary: 'My Learning', secondary: 'Submissions & Feedback' };
     if (activeTab === 'quizzes') return { primary: 'My Learning', secondary: 'Quizzes' };
     if (activeTab === 'progress') return { primary: 'My Learning', secondary: 'Your Progress' };
     if (activeTab === 'roadmaps') return { primary: 'My Roadmap' };
     if (activeTab === 'community-home') return { primary: 'Community', secondary: 'Community Home' };
     if (activeTab === 'study-chat') return { primary: 'Community', secondary: 'Study Group Chat' };
+    if (activeTab === 'study-groups') return { primary: 'Community', secondary: 'Study Groups' };
     if (activeTab === 'community') return { primary: 'Community', secondary: 'Discussions' };
     if (activeTab === 'announcements') return { primary: 'Community', secondary: 'Announcements' };
     if (activeTab === 'resources') return { primary: 'Community', secondary: 'Learning Resources' };
@@ -1152,10 +1693,91 @@ export default function App() {
     setTourActive(true);
   };
 
+  const openMemberById = (id: string, name?: string) => {
+    setSelectedMemberRef({ id, name });
+  };
+
+  const resolvedSelectedMember: MemberDirectoryProfile | null = selectedMemberRef
+    ? (() => {
+        const direct = memberProfiles[selectedMemberRef.id];
+        if (direct) return direct;
+        const rosterMatch = members.find((m: any) => m.id === selectedMemberRef.id || m.name === (selectedMemberRef.name || selectedMemberRef.id));
+        if (rosterMatch) {
+          return {
+            id: rosterMatch.id || selectedMemberRef.id,
+            name: rosterMatch.name || selectedMemberRef.name || 'Member',
+            username: rosterMatch.username || (rosterMatch.name || 'member').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            role: rosterMatch.role || 'Member',
+            field: rosterMatch.field || '',
+            level: rosterMatch.level || '',
+            bio: rosterMatch.bio || '',
+            partner: rosterMatch.partner || '',
+            mentor: rosterMatch.mentor || '',
+          };
+        }
+        return {
+          id: selectedMemberRef.id,
+          name: selectedMemberRef.name || 'Member',
+          role: 'Member',
+          field: '',
+          level: '',
+          bio: '',
+        };
+      })()
+    : null;
+
+  const handleSelectNotification = (n: CommunityNotification) => {
+    if (n.roomId) {
+      setOpenNotifRoomRequest(n.roomId);
+      setActiveTab('study-chat');
+      return;
+    }
+    if (n.targetId && (n.targetTab === 'community' || n.targetTab === 'announcements')) {
+      setFocusedPostId(n.targetId);
+    }
+    setActiveTab(n.targetTab || 'community-home');
+  };
+
+  const notificationBellNode = (compact = false) => (
+    <NotificationBell
+      notifications={notifications}
+      loading={communityLoading}
+      compact={compact}
+      onMarkRead={async (notifId) => {
+        setNotifications((prev) => prev.map((n) => (n.id === notifId ? { ...n, read: true } : n)));
+        try {
+          const res = await apiMarkNotificationRead(communityActor, notifId);
+          setNotifications(res.notifications);
+        } catch {}
+      }}
+      onMarkAllRead={async () => {
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        try {
+          const res = await apiMarkAllNotificationsRead(communityActor);
+          setNotifications(res.notifications);
+        } catch {}
+      }}
+      onSelectNotification={handleSelectNotification}
+    />
+  );
+
   return (
     <MotionConfig reducedMotion="user">
     <DarkCtx.Provider value={darkMode}>
-    <StudyChatProvider user={user} profile={profile}>
+    <StudyChatProvider
+      user={user}
+      profile={profile}
+      onCommunitySync={() => loadCommunityBootstrap(true)}
+      onLiveNotification={(n) => {
+        setNotifications((prev) => [n, ...prev.filter((x) => x.id !== n.id)].slice(0, 120));
+      }}
+    >
+      <CommunityDmAndNavBridge
+        openDmRequest={openDmRequest}
+        onClearOpenDm={() => setOpenDmRequest(null)}
+        openNotifRoomRequest={openNotifRoomRequest}
+        onClearNotifRoom={() => setOpenNotifRoomRequest(null)}
+      />
       <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-dvh app-backdrop lg:p-6 ${textPrimary}`}>
         <div className="app-frame min-h-dvh lg:min-h-[calc(100vh-3rem)] flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
@@ -1350,6 +1972,7 @@ export default function App() {
                   </>
                 )}
               </span>
+              {notificationBellNode(true)}
               <HelpTriggerButton
                 compact
                 hasPausedTour={hasPausedTour}
@@ -1438,7 +2061,7 @@ export default function App() {
           {/* Main Workspace Container */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Breadcrumb bar (the home screen has its own search bar instead) */}
-            {!onDashboardHome && (
+            {!onDashboardHome ? (
               <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-10 items-center justify-between gap-4 border-b ${borderClass} bg-[var(--surface-bg)]/90 backdrop-blur rounded-tr-[28px]`}>
                 <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
                   <span className={textSecondary}>Dev Hub</span>
@@ -1453,11 +2076,18 @@ export default function App() {
                     </>
                   )}
                 </nav>
-                <HelpTriggerButton
-                  onClick={() => setHelpDrawerOpen(true)}
-                  hasPausedTour={hasPausedTour}
-                />
+                <div className="flex items-center gap-2.5">
+                  {notificationBellNode(false)}
+                  <HelpTriggerButton
+                    onClick={() => setHelpDrawerOpen(true)}
+                    hasPausedTour={hasPausedTour}
+                  />
+                </div>
               </header>
+            ) : (
+              <div className="hidden lg:flex items-center justify-end gap-2.5 px-10 pt-6 -mb-4">
+                {notificationBellNode(false)}
+              </div>
             )}
 
             <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "main-pad-mobile lg:pb-20" : "main-pad-mobile lg:pb-24"}`}>
@@ -1515,8 +2145,9 @@ export default function App() {
                         milestones={milestoneSummary}
                         gamification={gamification}
                         independence={independence}
-                        teamRoster={teamRoster}
+                        teamRoster={members}
                         userName={user.name || ''}
+                        onViewMember={(m: any) => openMemberById(m.id || m.name, m.name)}
                         tutorialState={tutorialState}
                         onStartTour={startTourFromStep}
                         styles={styles}
@@ -1535,6 +2166,12 @@ export default function App() {
                         roadmapProgress={roadmapProgress}
                         learningPlans={learningPlans}
                         setLearningPlans={setLearningPlans}
+                        importedMaterials={importedMaterials}
+                        setImportedMaterials={setImportedMaterials}
+                        selfDirectedTopics={selfDirectedTopics}
+                        setSelfDirectedTopics={setSelfDirectedTopics}
+                        studySessions={studySessions}
+                        setStudySessions={setStudySessions}
                         dailyTarget={dailyTarget}
                         setDailyTarget={setDailyTarget}
                         codeSubmissions={codeSubmissions}
@@ -1545,6 +2182,7 @@ export default function App() {
                         setQuizAttempts={setQuizAttempts}
                         weeklyProjects={weeklyProjects}
                         dailyLogs={dailyLogs}
+                        setDailyLogs={setDailyLogs}
                         weeklyReports={weeklyReports}
                         setWeeklyReports={setWeeklyReports}
                         onAskMentor={handleAskMentor}
@@ -1607,8 +2245,19 @@ export default function App() {
                         setChallenges={setChallenges}
                         helpRequests={helpRequests}
                         setHelpRequests={setHelpRequests}
+                        studyGroups={studyGroups}
                         teamRoster={members}
+                        memberProfiles={memberProfiles}
+                        moderation={moderation}
                         pairingState={pairingState}
+                        communityLoading={communityLoading}
+                        communityError={communityError}
+                        onRetryCommunityLoad={() => loadCommunityBootstrap(false)}
+                        focusedPostId={focusedPostId}
+                        onClearFocusedPost={() => setFocusedPostId(null)}
+                        onOpenMemberProfile={openMemberById}
+                        onReportContent={(target) => setReportTarget(target)}
+                        actions={communityActions}
                         onNotify={notify}
                         styles={styles}
                       />
@@ -1688,6 +2337,42 @@ export default function App() {
                         setQuizzes={setQuizzes}
                         weeklyActivities={weeklyActivities}
                         setWeeklyActivities={setWeeklyActivities}
+                        reports={reports}
+                        moderation={moderation}
+                        onCreateAnnouncement={(title, body) =>
+                          communityActions.createPost({ category: 'Announcement', title, content: body, pinned: true })
+                        }
+                        onModeratePost={communityActions.moderatePost}
+                        onDeletePost={communityActions.deletePost}
+                        onToggleHelpResolved={communityActions.toggleHelpResolved}
+                        onResolveReport={async (reportId, input) => {
+                          try {
+                            await apiResolveReport(communityActor, reportId, input);
+                            await loadCommunityBootstrap(true);
+                            notify('Report updated.');
+                          } catch (err: any) {
+                            notify(err?.message || 'Could not resolve report.', 'error');
+                          }
+                        }}
+                        onSetMemberMuted={async (userId, muted, reason) => {
+                          try {
+                            await apiSetMemberMuted(communityActor, userId, muted, reason);
+                            await loadCommunityBootstrap(true);
+                            notify(muted ? 'Member muted.' : 'Member unmuted.');
+                          } catch (err: any) {
+                            notify(err?.message || 'Could not update mute state.', 'error');
+                          }
+                        }}
+                        onSetMemberRole={async (userId, newRole) => {
+                          try {
+                            await apiSetMemberRole(communityActor, userId, newRole);
+                            await loadCommunityBootstrap(true);
+                            notify(`Updated role to ${newRole}.`);
+                          } catch (err: any) {
+                            notify(err?.message || 'Could not update member role.', 'error');
+                          }
+                        }}
+                        onViewMember={openMemberById}
                         onNotify={notify}
                         styles={styles}
                       />
@@ -1760,10 +2445,68 @@ export default function App() {
       <StudyGroupChatWidget
         styles={styles}
         currentUserId={user.id || user.email || 'me'}
+        mutedReason={moderation?.mutedUserIds?.[user.id || user.email || 'me']?.reason}
         hidden={role === 'admin' || showOnboardingWizard || showWelcome || tourActive || showFirstSession || activeTab === 'study-chat'}
         onOpenFullRoom={() => {
           setShowOnboardingWizard(false);
           setActiveTab('study-chat');
+        }}
+      />
+
+      <MemberProfileModal
+        open={Boolean(selectedMemberRef)}
+        onClose={() => setSelectedMemberRef(null)}
+        member={resolvedSelectedMember}
+        currentUserId={user.id || user.email || 'me'}
+        isAdminMode={role === 'admin' || user.isAdmin}
+        isMuted={Boolean(resolvedSelectedMember && moderation?.mutedUserIds?.[resolvedSelectedMember.id])}
+        mutedReason={resolvedSelectedMember ? moderation?.mutedUserIds?.[resolvedSelectedMember.id]?.reason : undefined}
+        memberPosts={
+          resolvedSelectedMember
+            ? posts.filter(
+                (p) => !p.hidden && (p.authorId === resolvedSelectedMember.id || p.author === resolvedSelectedMember.name)
+              )
+            : []
+        }
+        memberShowcase={
+          resolvedSelectedMember
+            ? showcaseProjects.filter((sp) => sp.author === resolvedSelectedMember.name)
+            : []
+        }
+        onStartDirectChat={(member) => {
+          setOpenDmRequest({ peerId: member.id, peerName: member.name, actor: communityActor });
+          setActiveTab('study-chat');
+        }}
+        onOpenPost={(postId) => {
+          setFocusedPostId(postId);
+          setActiveTab('community');
+        }}
+        onToggleMute={async (member, muted, reason) => {
+          try {
+            await apiSetMemberMuted(communityActor, member.id, muted, reason);
+            await loadCommunityBootstrap(true);
+            notify(muted ? `Muted ${member.name}.` : `Unmuted ${member.name}.`);
+          } catch (err: any) {
+            notify(err?.message || 'Could not update mute state.', 'error');
+          }
+        }}
+      />
+
+      <ReportModal
+        open={Boolean(reportTarget)}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+        onSubmit={async (target, reason, details) => {
+          try {
+            await apiSubmitReport(communityActor, {
+              ...target,
+              reason,
+              details,
+            });
+            notify('Report submitted to community moderators.');
+          } catch (err: any) {
+            notify(err?.message || 'Could not submit report.', 'error');
+          }
         }}
       />
 

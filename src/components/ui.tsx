@@ -443,14 +443,20 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
   );
 };
 
-export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: string; isAdmin: boolean }) => void }) => {
+export const LoginScreen = ({
+  onLogin,
+}: {
+  onLogin: (u: { id: string; name: string; email: string; isAdmin: boolean; adminCode?: string }) => void;
+}) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [wantAdmin, setWantAdmin] = useState(ADMIN_SITE);
   const [code, setCode] = useState('');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const needsCode = ADMIN_SITE && !!ADMIN_CODE;
+  const isAdminLogin = ADMIN_SITE || wantAdmin;
+  const needsCode = isAdminLogin && !!ADMIN_CODE;
   const errors = {
     name: !name.trim() ? 'Enter your full name so we know what to call you.' : '',
     email: !email.trim()
@@ -471,7 +477,15 @@ export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: s
       document.getElementById(`demo-${first}`)?.focus();
       return;
     }
-    onLogin({ name: name.trim(), email: email.trim(), isAdmin: ADMIN_SITE });
+    const cleanEmail = email.trim().toLowerCase();
+    const id = isAdminLogin ? `admin:${cleanEmail}` : `member:${cleanEmail}`;
+    onLogin({
+      id,
+      name: name.trim(),
+      email: cleanEmail,
+      isAdmin: isAdminLogin,
+      adminCode: isAdminLogin ? code : undefined,
+    });
   };
 
   return (
@@ -510,6 +524,17 @@ export const LoginScreen = ({ onLogin }: { onLogin: (u: { name: string; email: s
             aria-describedby={show('email') ? 'demo-email-msg' : undefined}
           />
         </AuthField>
+        {!ADMIN_SITE && (
+          <label className="flex items-center gap-2.5 text-sm text-[var(--ink-secondary)] cursor-pointer select-none pt-1">
+            <input
+              type="checkbox"
+              checked={wantAdmin}
+              onChange={(e) => setWantAdmin(e.target.checked)}
+              className="rounded border-[var(--border-strong)]"
+            />
+            <span>Sign in as Community Admin (demo)</span>
+          </label>
+        )}
         {needsCode && (
           <AuthField id="demo-code" label="Team lead code" error={show('code')}>
             <input

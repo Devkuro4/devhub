@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import { supabase } from './supabase';
 
 // Where the AI server lives. Empty means "the same site" (normal setup).
@@ -79,14 +80,24 @@ export async function inspectCourseUrl(url: string) {
   return postJson<CourseUrlInspection>('/api/course-metadata', { url });
 }
 
-export async function fetchChatRooms() {
-  const res = await fetch(`${API_BASE}/api/chat/rooms`, { headers: await authHeaders() });
+export async function fetchChatRooms(userId?: string) {
+  const res = await fetch(`${API_BASE}/api/chat/rooms`, {
+    headers: {
+      ...(await authHeaders()),
+      ...(userId ? { 'X-Devhub-User': userId } : {}),
+    },
+  });
   if (!res.ok) throw new Error('Could not load study chat rooms.');
   return res.json();
 }
 
-export async function fetchChatHistory(roomId: string) {
-  const res = await fetch(`${API_BASE}/api/chat/history?roomId=${encodeURIComponent(roomId)}`, { headers: await authHeaders() });
+export async function fetchChatHistory(roomId: string, userId?: string) {
+  const res = await fetch(`${API_BASE}/api/chat/history?roomId=${encodeURIComponent(roomId)}`, {
+    headers: {
+      ...(await authHeaders()),
+      ...(userId ? { 'X-Devhub-User': userId } : {}),
+    },
+  });
   if (!res.ok) throw new Error('Could not load study chat history.');
   return res.json();
 }
@@ -372,7 +383,60 @@ export interface MaterialExtraction {
   note: string;
 }
 
+const VIDEO_OR_AUDIO_EXT_RE = /\.(mp4|mov|mkv|webm|avi|m4v|wmv|flv|mpeg|mpg|3gp|m4a|mp3|wav|ogg|aac|flac)$/i;
+const BLOCKED_EXT_RE = /\.(exe|dll|bat|cmd|ps1|msi|vbs|vbe|jar|com|scr|pif|app|dmg|pkg|deb|rpm|so|dylib|elf|bin|wasm|iso|img|sys|drv|cpl|hta|reg)$/i;
+
 export async function extractCourseMaterial(file: File, userId?: string): Promise<MaterialExtraction> {
+  if (VIDEO_OR_AUDIO_EXT_RE.test(file.name)) {
+    return {
+      readable: false,
+      kind: 'unsupported',
+      text: '',
+      outline: [],
+      skippedVideoCount: 1,
+      note: 'Video and audio files remain on your device and are never uploaded or processed by AI.',
+    };
+  }
+
+  let bodyPayload: Blob = file;
+  let extraSkippedVideos = 0;
+
+  // Strip videos locally in the browser BEFORE transmitting a .zip to the server
+  if (/\.zip$/i.test(file.name)) {
+    const zip = await JSZip.loadAsync(file);
+    const cleanZip = new JSZip();
+    let kept = 0;
+    for (const [entryName, entry] of Object.entries(zip.files)) {
+      if (entry.dir) continue;
+      if (entryName.includes('\0') || entryName.includes('\\') || /^[A-Za-z]:/.test(entryName) || entryName.startsWith('/') || entryName.split('/').some((s) => s === '..')) {
+        throw new Error(`Archive rejected: unsafe path "${entryName}".`);
+      }
+      if (VIDEO_OR_AUDIO_EXT_RE.test(entryName)) {
+        extraSkippedVideos += 1;
+        continue;
+      }
+      if (BLOCKED_EXT_RE.test(entryName)) continue;
+      const bytes = await entry.async('uint8array');
+      cleanZip.file(entryName, bytes);
+      kept += 1;
+    }
+    if (kept === 0) {
+      return {
+        readable: false,
+        kind: 'zip',
+        text: '',
+        outline: [],
+        skippedVideoCount: extraSkippedVideos,
+        note: extraSkippedVideos > 0
+          ? `Skipped ${extraSkippedVideos} video/audio file(s) locally (never uploaded). No text, PDF, Markdown, or code files found.`
+          : 'No readable study files found in that ZIP archive.',
+      };
+    }
+    if (extraSkippedVideos > 0) {
+      bodyPayload = await cleanZip.generateAsync({ type: 'blob' });
+    }
+  }
+
   const res = await fetch(`${API_BASE}/api/ai/extract-materials`, {
     method: 'POST',
     headers: {
@@ -381,9 +445,36 @@ export async function extractCourseMaterial(file: File, userId?: string): Promis
       ...(await authHeaders()),
       ...(userId ? { 'X-Devhub-User': userId } : {}),
     },
-    body: file,
+    body: bodyPayload,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || `Could not read that file (${res.status})`);
-  return data as MaterialExtraction;
+  const result = data as MaterialExtraction;
+  if (extraSkippedVideos > 0) {
+    result.skippedVideoCount = (result.skippedVideoCount || 0) + extraSkippedVideos;
+    result.note = `${result.note} (${extraSkippedVideos} video/audio file(s) stayed on your device and were not uploaded.)`;
+  }
+  return result;
+}
+
+export async function requestExplainExcerpt(
+  input: {
+    fileName: string;
+    fileKind?: string;
+    excerpt: string;
+    question?: string;
+    skillLevel: string;
+    field: string;
+  },
+  userId?: string
+) {
+  return postJson<{
+    data: {
+      summary: string;
+      keyConcepts: string[];
+      practicePrompt: string;
+    };
+    model: string;
+    latencyMs: number;
+  }>('/api/ai/explain-excerpt', input, userId);
 }

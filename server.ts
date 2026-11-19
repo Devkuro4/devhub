@@ -19,11 +19,60 @@ import {
   testAiConnection,
   updateAiSettings,
   evaluateShortAnswer,
+  explainMaterialExcerpt,
 } from './server/aiService.ts';
-import { MAX_MATERIAL_BYTES, extractMaterial } from './server/materialService.ts';
+import {
+  MAX_MATERIAL_BYTES,
+  UnsafeArchiveError,
+  buildPackFromSanitizedFiles,
+  extractMaterial,
+  parseArchiveToMaterialPack,
+} from './server/materialService.ts';
+import {
+  deleteImportedMaterialPack,
+  getImportedMaterialFile,
+  getImportedMaterialPack,
+  getLearningState,
+  getSubmissionById,
+  saveImportedMaterialPack,
+  saveLearningState,
+  updateImportedMaterialPack,
+  upsertSubmission,
+} from './server/learningStore.ts';
 import { listOfficialRoadmaps, lookupRoadmapSh } from './server/roadmapService.ts';
 import { setupChatServer, listChatRooms, getChatHistory } from './server/chatServer.ts';
-import { ANON_KEY_TYPE, AUTH_ENABLED, SUPABASE_HOST, requireAdmin, requireUser } from './server/auth.ts';
+import { ANON_KEY_TYPE, AUTH_ENABLED, SUPABASE_HOST, requireAdmin, requireUser, setLocalAdminChecker } from './server/auth.ts';
+import {
+  addEventItem,
+  addPostComment,
+  addResourceItem,
+  createHelpRequest,
+  createPost,
+  createStudyGroup,
+  deleteOrHideChatMessage,
+  deletePost,
+  getCommunityBootstrap,
+  getOrCreateDirectRoom,
+  isUserAdmin,
+  markAllNotificationsRead,
+  markNotificationRead,
+  moderatePost,
+  registerOrUpdateMemberProfile,
+  replyToHelpRequest,
+  resolveContentReport,
+  setMemberMuted,
+  setMemberRole,
+  submitContentReport,
+  toggleEventAction,
+  toggleHelpResolved,
+  toggleJoinStudyGroup,
+  togglePostReaction,
+  updateOrModerateComment,
+  updatePost,
+  updateStudyGroupWorkspace,
+} from './server/communityStore.ts';
+
+setLocalAdminChecker(isUserAdmin);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -31,7 +80,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
 app.disable('x-powered-by');
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '6mb' }));
 
 // Basic browser hardening. No CSP here on purpose: the app loads Vite assets, YouTube embeds and
 // Supabase, and a wrong CSP would break the site. These headers are safe for all of them.
@@ -56,8 +105,8 @@ app.use('/api', (req, res, next) => {
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Devhub-User, X-Filename');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Devhub-User, X-Devhub-Name, X-Filename, X-Material-Title, X-Course-Id, X-Skipped-Videos, X-Skipped-Blocked');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Max-Age', '86400');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -269,13 +318,247 @@ app.post('/api/course-metadata', requireUser, async (req, res) => {
 // ============================================================================
 // Chat rooms and history are for signed-in members only.
 app.use('/api/chat', requireUser);
-app.get('/api/chat/rooms', (_req, res) => {
-  res.json({ rooms: listChatRooms() });
+app.get('/api/chat/rooms', (req, res) => {
+  res.json({ rooms: listChatRooms(getUserId(req, res)) });
 });
 
 app.get('/api/chat/history', (req, res) => {
+  const userId = getUserId(req, res);
   const roomId = String(req.query.roomId || 'general');
+  const allowed = listChatRooms(userId).some((r) => r.id === roomId);
+  if (!allowed) return res.status(403).json({ error: 'You do not have access to this room.' });
   res.json({ roomId, messages: getChatHistory(roomId) });
+});
+
+app.post('/api/chat/dm', (req, res) => {
+  const actor = {
+    userId: getUserId(req, res),
+    userName: String(res.locals.userName || 'Member'),
+  };
+  const out = getOrCreateDirectRoom(actor, String(req.body?.peerId || ''), String(req.body?.peerName || 'Peer'));
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ room: out.room });
+});
+
+app.delete('/api/chat/messages/:roomId/:messageId', (req, res) => {
+  const out = deleteOrHideChatMessage(
+    { userId: getUserId(req, res), isAdmin: Boolean(res.locals.isAdmin) },
+    req.params.roomId,
+    req.params.messageId,
+    typeof req.body?.reason === 'string' ? req.body.reason : undefined
+  );
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ message: out.message });
+});
+
+// ============================================================================
+// COMMUNITY & COLLABORATION API (PERSISTENT & ROLE-VERIFIED)
+// ============================================================================
+app.use('/api/community', requireUser);
+
+function actorOf(res: express.Response) {
+  return {
+    userId: String(res.locals.userId),
+    userName: String(res.locals.userName || 'Member'),
+    isAdmin: Boolean(res.locals.isAdmin),
+  };
+}
+
+// Register or refresh session profile in local mode (enforces admin code if configured)
+app.post('/api/community/session', (req, res) => {
+  const userId = getUserId(req, res);
+  const name = String(req.body?.name || res.locals.userName || 'Member');
+  const wantAdmin = Boolean(req.body?.wantAdmin);
+  const adminCode = String(req.body?.adminCode || '');
+  const expectedCode = String(process.env.VITE_ADMIN_CODE || '');
+  if (!AUTH_ENABLED && wantAdmin && expectedCode && adminCode !== expectedCode) {
+    return res.status(403).json({ error: 'Invalid team lead code.' });
+  }
+  const allowDemoAdmin = !AUTH_ENABLED && !isProd && wantAdmin && (!expectedCode || adminCode === expectedCode);
+  const profile = registerOrUpdateMemberProfile({
+    id: userId,
+    name,
+    role: allowDemoAdmin ? 'Community Admin' : undefined,
+    allowRoleOverride: allowDemoAdmin,
+  });
+  res.json({ profile, isAdmin: isUserAdmin(userId) });
+});
+
+app.get('/api/community/bootstrap', (req, res) => {
+  const actor = actorOf(res);
+  res.json(getCommunityBootstrap(actor.userId, actor.isAdmin));
+});
+
+app.put('/api/community/profile', (req, res) => {
+  const actor = actorOf(res);
+  const saved = registerOrUpdateMemberProfile({
+    id: actor.userId,
+    name: String(req.body?.fullName || req.body?.name || actor.userName),
+    username: req.body?.username,
+    field: req.body?.field,
+    level: req.body?.skillLevel ?? req.body?.level,
+    bio: req.body?.bio,
+    languages: req.body?.languages,
+    frameworks: req.body?.frameworks,
+    interests: req.body?.interests,
+    githubUrl: req.body?.githubUrl,
+    portfolioUrl: req.body?.portfolioUrl,
+    linkedinUrl: req.body?.linkedinUrl,
+    badgesCount: req.body?.badgesCount,
+    streakDays: req.body?.streakDays,
+  });
+  res.json({ profile: saved });
+});
+
+// Posts, Comments, Reactions & Moderation
+app.post('/api/community/posts', (req, res) => {
+  const out = createPost(actorOf(res), req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ post: out.post });
+});
+
+app.patch('/api/community/posts/:id', (req, res) => {
+  const out = updatePost(actorOf(res), req.params.id, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ post: out.post });
+});
+
+app.delete('/api/community/posts/:id', (req, res) => {
+  const out = deletePost(actorOf(res), req.params.id);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ ok: true });
+});
+
+app.post('/api/community/posts/:id/moderate', requireAdmin, (req, res) => {
+  const out = moderatePost(actorOf(res), req.params.id, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ post: out.post });
+});
+
+app.post('/api/community/posts/:id/react', (req, res) => {
+  const reaction = String(req.body?.type || 'helpful');
+  if (!['helpful', 'insightful', 'celebrate'].includes(reaction)) {
+    return res.status(400).json({ error: 'Unknown reaction type.' });
+  }
+  const out = togglePostReaction(actorOf(res), req.params.id, reaction as any);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ post: out.post });
+});
+
+app.post('/api/community/posts/:id/comments', (req, res) => {
+  const out = addPostComment(actorOf(res), req.params.id, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ post: out.post, comment: out.comment });
+});
+
+app.patch('/api/community/posts/:postId/comments/:commentId', (req, res) => {
+  const out = updateOrModerateComment(actorOf(res), req.params.postId, req.params.commentId, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ post: out.post });
+});
+
+app.delete('/api/community/posts/:postId/comments/:commentId', (req, res) => {
+  const out = updateOrModerateComment(actorOf(res), req.params.postId, req.params.commentId, { delete: true });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ post: out.post });
+});
+
+// Study Groups
+app.post('/api/community/study-groups', (req, res) => {
+  const out = createStudyGroup(actorOf(res), req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ group: out.group, room: out.room });
+});
+
+app.post('/api/community/study-groups/:id/join', (req, res) => {
+  const out = toggleJoinStudyGroup(actorOf(res), req.params.id);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ group: out.group, joined: out.joined });
+});
+
+app.patch('/api/community/study-groups/:id', (req, res) => {
+  const out = updateStudyGroupWorkspace(actorOf(res), req.params.id, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ group: out.group });
+});
+
+// Peer Help, Resources & Events
+app.post('/api/community/help', (req, res) => {
+  const out = createHelpRequest(actorOf(res), req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ helpRequest: out.helpRequest });
+});
+
+app.post('/api/community/help/:id/reply', (req, res) => {
+  const out = replyToHelpRequest(actorOf(res), req.params.id, String(req.body?.text || ''));
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ helpRequest: out.helpRequest });
+});
+
+app.post('/api/community/help/:id/resolve', (req, res) => {
+  const out = toggleHelpResolved(actorOf(res), req.params.id);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ helpRequest: out.helpRequest });
+});
+
+app.post('/api/community/resources', (req, res) => {
+  const out = addResourceItem(actorOf(res), req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ resource: out.resource });
+});
+
+app.post('/api/community/events', (req, res) => {
+  const out = addEventItem(actorOf(res), req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ event: out.event });
+});
+
+app.post('/api/community/events/:id/:action', (req, res) => {
+  const action = req.params.action === 'reminder' ? 'reminder' : 'rsvp';
+  const out = toggleEventAction(actorOf(res), req.params.id, action);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ event: out.event });
+});
+
+// Notifications
+app.post('/api/community/notifications/:id/read', (req, res) => {
+  const notifications = markNotificationRead(getUserId(req, res), req.params.id);
+  res.json({ notifications });
+});
+
+app.post('/api/community/notifications/read-all', (req, res) => {
+  const notifications = markAllNotificationsRead(getUserId(req, res));
+  res.json({ notifications });
+});
+
+// Reports & Admin Moderation
+app.post('/api/community/reports', (req, res) => {
+  const out = submitContentReport(actorOf(res), req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ report: out.report });
+});
+
+app.post('/api/community/reports/:id/resolve', requireAdmin, (req, res) => {
+  const out = resolveContentReport(actorOf(res), req.params.id, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ report: out.report });
+});
+
+app.post('/api/community/moderation/mute', requireAdmin, (req, res) => {
+  const out = setMemberMuted(
+    actorOf(res),
+    String(req.body?.userId || ''),
+    Boolean(req.body?.muted),
+    req.body?.reason
+  );
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ ok: true });
+});
+
+app.post('/api/community/members/:id/role', requireAdmin, (req, res) => {
+  const out = setMemberRole(actorOf(res), req.params.id, String(req.body?.role || ''));
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ ok: true });
 });
 
 // ============================================================================
@@ -393,10 +676,135 @@ app.post(
       }
       res.json(await extractMaterial(name, req.body));
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'Could not read that file.' });
+      const status = err instanceof UnsafeArchiveError ? err.status : 500;
+      res.status(status).json({ error: err?.message || 'Could not read that file.' });
     }
   }
 );
+
+app.post('/api/ai/explain-excerpt', async (req, res) => {
+  try {
+    const out = await explainMaterialExcerpt(getUserId(req, res), req.body || {});
+    res.json(out);
+  } catch (err: any) {
+    const msg = err?.message || 'Could not explain that excerpt.';
+    const status = /video|at least 15|required/i.test(msg) ? 400 : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+// ============================================================================
+// LEARNING EXPERIENCE, COURSE MATERIALS & SUBMISSIONS API (OWNER-ISOLATED)
+// ============================================================================
+app.use('/api/learning', requireUser);
+
+app.get('/api/learning/state', (req, res) => {
+  const userId = getUserId(req, res);
+  res.json(getLearningState(userId));
+});
+
+app.put('/api/learning/state', (req, res) => {
+  const userId = getUserId(req, res);
+  const updated = saveLearningState(userId, req.body || {});
+  res.json(updated);
+});
+
+app.post(
+  '/api/learning/materials/import',
+  express.raw({ type: 'application/octet-stream', limit: MAX_MATERIAL_BYTES }),
+  async (req, res) => {
+    try {
+      const userId = getUserId(req, res);
+      if (Buffer.isBuffer(req.body)) {
+        const filename = decodeURIComponent(String(req.headers['x-filename'] || 'course-archive.zip'));
+        const title = req.headers['x-material-title']
+          ? decodeURIComponent(String(req.headers['x-material-title']))
+          : undefined;
+        const linkedCourseId = req.headers['x-course-id']
+          ? decodeURIComponent(String(req.headers['x-course-id']))
+          : undefined;
+        const pack = await parseArchiveToMaterialPack(userId, filename, req.body, {
+          title,
+          linkedCourseId,
+        });
+        const extraSkippedRaw = req.headers['x-skipped-videos'];
+        if (typeof extraSkippedRaw === 'string' && extraSkippedRaw) {
+          try {
+            const parsedNames = JSON.parse(decodeURIComponent(extraSkippedRaw));
+            if (Array.isArray(parsedNames)) {
+              const merged = Array.from(new Set([...pack.skippedVideoNames, ...parsedNames.map(String)])).slice(0, 60);
+              pack.skippedVideoNames = merged;
+              pack.skippedVideoCount = merged.length;
+            }
+          } catch {}
+        }
+        const extraBlockedRaw = Number(req.headers['x-skipped-blocked'] || 0);
+        if (Number.isFinite(extraBlockedRaw) && extraBlockedRaw > 0) {
+          pack.skippedBlockedCount += extraBlockedRaw;
+        }
+        const saved = saveImportedMaterialPack(userId, pack);
+        return res.status(201).json(saved);
+      }
+
+      const body = req.body || {};
+      const pack = buildPackFromSanitizedFiles(userId, {
+        archiveName: String(body.archiveName || 'course-archive.zip'),
+        title: typeof body.title === 'string' ? body.title : undefined,
+        skippedVideoNames: Array.isArray(body.skippedVideoNames) ? body.skippedVideoNames : [],
+        skippedBlockedCount: Number(body.skippedBlockedCount || 0),
+        linkedCourseId: typeof body.linkedCourseId === 'string' ? body.linkedCourseId : undefined,
+        linkedSelfDirectedId:
+          typeof body.linkedSelfDirectedId === 'string' ? body.linkedSelfDirectedId : undefined,
+        safeFiles: Array.isArray(body.safeFiles) ? body.safeFiles : [],
+      });
+      const saved = saveImportedMaterialPack(userId, pack);
+      return res.status(201).json(saved);
+    } catch (err: any) {
+      const status = err instanceof UnsafeArchiveError ? err.status : 400;
+      res.status(status).json({ error: err?.message || 'Could not import course archive.' });
+    }
+  }
+);
+
+app.get('/api/learning/materials/:packId', (req, res) => {
+  const out = getImportedMaterialPack(getUserId(req, res), req.params.packId);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ pack: out.pack });
+});
+
+app.get('/api/learning/materials/:packId/files/:fileId', (req, res) => {
+  const out = getImportedMaterialFile(getUserId(req, res), req.params.packId, req.params.fileId);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ file: out.file, packTitle: out.pack.title });
+});
+
+app.patch('/api/learning/materials/:packId', (req, res) => {
+  const out = updateImportedMaterialPack(getUserId(req, res), req.params.packId, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ pack: out.pack });
+});
+
+app.delete('/api/learning/materials/:packId', (req, res) => {
+  const out = deleteImportedMaterialPack(getUserId(req, res), req.params.packId);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ ok: true });
+});
+
+app.get('/api/learning/submissions/:id', (req, res) => {
+  const out = getSubmissionById(
+    getUserId(req, res),
+    req.params.id,
+    Boolean(res.locals.isAdmin)
+  );
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ submission: out.submission });
+});
+
+app.post('/api/learning/submissions', (req, res) => {
+  const out = upsertSubmission(getUserId(req, res), req.body?.submission || req.body);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.status(201).json({ submission: out.submission, submissions: out.submissions });
+});
 
 // Bad JSON or oversized bodies get a clear JSON error instead of an HTML stack trace.
 app.use('/api', (err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

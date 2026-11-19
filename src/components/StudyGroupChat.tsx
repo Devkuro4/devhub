@@ -3,19 +3,32 @@ import {
   ArrowDown,
   Check,
   ChevronDown,
+  Clock,
   Code2,
   Copy,
+  CornerUpLeft,
+  Flag,
   Hash,
+  Lock,
   MessageSquare,
   RefreshCw,
   Send,
+  ShieldAlert,
+  Trash2,
+  UserCheck,
   Users,
   Wifi,
   WifiOff,
   X,
 } from 'lucide-react';
 import { fetchChatHistory, fetchChatRooms, getAccessToken, getChatWsUrl } from '../lib/aiClient';
-import type { OnboardingProfile, StudyChatMessage, StudyChatRoom, UserSession } from '../types';
+import type {
+  CommunityNotification,
+  OnboardingProfile,
+  StudyChatMessage,
+  StudyChatRoom,
+  UserSession,
+} from '../types';
 
 export interface OnlinePeer {
   userId: string;
@@ -23,24 +36,48 @@ export interface OnlinePeer {
   userField: string;
 }
 
+export interface MentionCandidate {
+  id: string;
+  name: string;
+  username?: string;
+}
+
+interface OutboxItem {
+  id: string;
+  roomId: string;
+  text: string;
+  codeSnippet?: string;
+  replyToId?: string;
+  replyToAuthor?: string;
+  replyToText?: string;
+  createdAt: string;
+}
+
 interface StudyChatContextValue {
   rooms: StudyChatRoom[];
+  setRooms: React.Dispatch<React.SetStateAction<StudyChatRoom[]>>;
   activeRoomId: string;
   setActiveRoomId: (roomId: string) => void;
   messages: StudyChatMessage[];
+  pendingMessages: StudyChatMessage[];
   presence: OnlinePeer[];
   connectionStatus: 'connecting' | 'connected' | 'reconnecting' | 'offline';
-  sendMessage: (text: string, codeSnippet?: string) => boolean;
+  sendMessage: (
+    text: string,
+    codeSnippet?: string,
+    replyTo?: { id: string; senderName: string; text: string }
+  ) => boolean;
+  deleteMessage: (messageId: string, reason?: string) => void;
   isWidgetOpen: boolean;
   setIsWidgetOpen: React.Dispatch<React.SetStateAction<boolean>>;
   unreadCount: number;
+  unreadByRoom: Record<string, number>;
   clearUnread: () => void;
-  /** Names of people currently typing in the active room (never includes you) */
   typingNames: string[];
   notifyTyping: () => void;
-  /** Short-lived message such as "slow down" */
   notice: string | null;
   reconnectNow: () => void;
+  upsertRoomAndOpen: (room: StudyChatRoom) => void;
 }
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -59,20 +96,24 @@ const StudyChatContext = createContext<StudyChatContextValue | null>(null);
 export const StudyChatProvider: React.FC<{
   user: UserSession | null;
   profile: OnboardingProfile;
+  onCommunitySync?: () => void;
+  onLiveNotification?: (notification: CommunityNotification) => void;
   children: React.ReactNode;
-}> = ({ user, profile, children }) => {
+}> = ({ user, profile, onCommunitySync, onLiveNotification, children }) => {
   const [rooms, setRooms] = useState<StudyChatRoom[]>(DEFAULT_ROOMS);
   const [activeRoomId, setActiveRoomIdState] = useState<string>('general');
   const [messagesByRoom, setMessagesByRoom] = useState<Record<string, StudyChatMessage[]>>({});
+  const [outbox, setOutbox] = useState<OutboxItem[]>([]);
   const [presenceByRoom, setPresenceByRoom] = useState<Record<string, OnlinePeer[]>>({});
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting');
   const [isWidgetOpen, setIsWidgetOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadByRoom, setUnreadByRoom] = useState<Record<string, number>>({});
   const [typingPeers, setTypingPeers] = useState<{ userId: string; userName: string; roomId: string; until: number }[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+
   const lastTypingSentRef = useRef(0);
   const connectRef = useRef<() => void>(() => {});
-
   const wsRef = useRef<WebSocket | null>(null);
   const activeRoomRef = useRef(activeRoomId);
   activeRoomRef.current = activeRoomId;
@@ -80,45 +121,88 @@ export const StudyChatProvider: React.FC<{
   widgetOpenRef.current = isWidgetOpen;
   const userRef = useRef({ user, profile });
   userRef.current = { user, profile };
+  const outboxRef = useRef<OutboxItem[]>(outbox);
+  outboxRef.current = outbox;
+  const callbacksRef = useRef({ onCommunitySync, onLiveNotification });
+  callbacksRef.current = { onCommunitySync, onLiveNotification };
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const mergeMessages = useCallback((roomId: string, incoming: StudyChatMessage[]) => {
+  const myUserId = user?.id || user?.email || 'member';
+
+  const mergeMessages = useCallback((roomId: string, incoming: StudyChatMessage[], replaceOrder = false) => {
     setMessagesByRoom((prev) => {
       const existing = prev[roomId] || [];
+      const byId = new Map<string, StudyChatMessage>();
+      if (replaceOrder) {
+        for (const m of existing) byId.set(m.id, m);
+        for (const m of incoming) byId.set(m.id, m);
+        const merged = Array.from(byId.values()).sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        return { ...prev, [roomId]: merged.slice(-300) };
+      }
       const seen = new Set(existing.map((m) => m.id));
       const next = [...existing];
       for (const m of incoming) {
-        if (!seen.has(m.id)) {
+        if (seen.has(m.id)) {
+          const i = next.findIndex((x) => x.id === m.id);
+          if (i >= 0) next[i] = m;
+        } else {
           seen.add(m.id);
           next.push(m);
         }
       }
-      return { ...prev, [roomId]: next.slice(-200) };
+      return { ...prev, [roomId]: next.slice(-300) };
     });
+  }, []);
+
+  const flushOutbox = useCallback((ws: WebSocket) => {
+    if (ws.readyState !== WebSocket.OPEN || outboxRef.current.length === 0) return;
+    const currentUser = userRef.current.user;
+    const currentProfile = userRef.current.profile;
+    const queue = [...outboxRef.current];
+    for (const item of queue) {
+      ws.send(
+        JSON.stringify({
+          type: 'chat:send',
+          id: item.id,
+          roomId: item.roomId,
+          senderId: currentUser?.id || currentUser?.email || 'member',
+          senderName: currentUser?.name || currentProfile.fullName || 'Member',
+          senderField: currentProfile.field || '',
+          text: item.text,
+          codeSnippet: item.codeSnippet || undefined,
+          replyToId: item.replyToId,
+          replyToAuthor: item.replyToAuthor,
+          replyToText: item.replyToText,
+        })
+      );
+    }
+    setOutbox([]);
   }, []);
 
   // Load initial HTTP room list & history gracefully
   useEffect(() => {
     if (!user) return;
     let alive = true;
-    fetchChatRooms()
+    fetchChatRooms(myUserId)
       .then((res) => {
         if (alive && Array.isArray(res.rooms) && res.rooms.length > 0) {
           setRooms(res.rooms);
         }
       })
       .catch(() => {});
-    fetchChatHistory(activeRoomId)
+    fetchChatHistory(activeRoomId, myUserId)
       .then((res) => {
-        if (alive && Array.isArray(res.history)) {
-          setMessagesByRoom((prev) => ({ ...prev, [activeRoomId]: res.history }));
+        if (alive && Array.isArray(res.messages)) {
+          mergeMessages(activeRoomId, res.messages, true);
         }
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [user, activeRoomId]);
+  }, [user, myUserId, activeRoomId, mergeMessages]);
 
   useEffect(() => {
     if (!user) {
@@ -158,7 +242,6 @@ export const StudyChatProvider: React.FC<{
         setConnectionStatus('connected');
         const currentUser = userRef.current.user;
         const currentProfile = userRef.current.profile;
-        // The server learns who this is from the login token, not from the fields below.
         const token = await getAccessToken().catch(() => '');
         if (cancelled || ws.readyState !== WebSocket.OPEN) return;
         ws.send(
@@ -171,6 +254,12 @@ export const StudyChatProvider: React.FC<{
             roomId: activeRoomRef.current,
           })
         );
+        // Flush any messages queued while offline/reconnecting
+        setTimeout(() => {
+          if (!cancelled && ws.readyState === WebSocket.OPEN) {
+            flushOutbox(ws);
+          }
+        }, 120);
       };
 
       ws.onmessage = (event) => {
@@ -180,19 +269,19 @@ export const StudyChatProvider: React.FC<{
         } catch {
           return;
         }
-        if (payload.type === 'chat:init') {
+        if (payload.type === 'chat:init' || payload.type === 'chat:rooms') {
           if (Array.isArray(payload.rooms) && payload.rooms.length > 0) {
             setRooms(payload.rooms);
           }
           if (payload.roomId && Array.isArray(payload.history)) {
-            setMessagesByRoom((prev) => ({ ...prev, [payload.roomId]: payload.history }));
+            mergeMessages(payload.roomId, payload.history, true);
           }
           if (payload.roomId && Array.isArray(payload.presence)) {
             setPresenceByRoom((prev) => ({ ...prev, [payload.roomId]: payload.presence }));
           }
         } else if (payload.type === 'chat:history') {
           if (payload.roomId && Array.isArray(payload.history)) {
-            setMessagesByRoom((prev) => ({ ...prev, [payload.roomId]: payload.history }));
+            mergeMessages(payload.roomId, payload.history, true);
           }
           if (payload.roomId && Array.isArray(payload.presence)) {
             setPresenceByRoom((prev) => ({ ...prev, [payload.roomId]: payload.presence }));
@@ -203,13 +292,22 @@ export const StudyChatProvider: React.FC<{
           }
         } else if (payload.type === 'chat:message' && payload.message) {
           const msg = payload.message as StudyChatMessage;
-          mergeMessages(msg.roomId || payload.roomId || activeRoomRef.current, [msg]);
+          const msgRoom = msg.roomId || payload.roomId || activeRoomRef.current;
+          mergeMessages(msgRoom, [msg]);
+          setOutbox((prev) => prev.filter((item) => item.id !== msg.id));
           const myId = userRef.current.user?.id || userRef.current.user?.email || 'member';
-          if (!widgetOpenRef.current && msg.senderId !== myId) {
-            setUnreadCount((c) => Math.min(99, c + 1));
+          if (msg.senderId !== myId) {
+            if (!widgetOpenRef.current || msgRoom !== activeRoomRef.current) {
+              setUnreadCount((c) => Math.min(99, c + 1));
+            }
+            if (msgRoom !== activeRoomRef.current) {
+              setUnreadByRoom((prev) => ({ ...prev, [msgRoom]: Math.min(99, (prev[msgRoom] || 0) + 1) }));
+            }
           }
-          // Someone who just sent a message is no longer "typing"
           setTypingPeers((prev) => prev.filter((p) => p.userId !== msg.senderId));
+        } else if (payload.type === 'chat:message:updated' && payload.message) {
+          const msg = payload.message as StudyChatMessage;
+          mergeMessages(msg.roomId || payload.roomId || activeRoomRef.current, [msg]);
         } else if (payload.type === 'chat:typing' && payload.userId && payload.roomId) {
           const myId = userRef.current.user?.id || userRef.current.user?.email || 'member';
           if (payload.userId === myId) return;
@@ -224,12 +322,14 @@ export const StudyChatProvider: React.FC<{
           ]);
         } else if (payload.type === 'chat:error') {
           setNotice(String(payload.message || 'Your message could not be sent.'));
+        } else if (payload.type === 'community:sync') {
+          callbacksRef.current.onCommunitySync?.();
+        } else if (payload.type === 'notification:new' && payload.notification) {
+          callbacksRef.current.onLiveNotification?.(payload.notification as CommunityNotification);
         }
       };
 
-      ws.onerror = () => {
-        // Error handler followed by close handler
-      };
+      ws.onerror = () => {};
 
       ws.onclose = () => {
         if (cancelled) return;
@@ -240,7 +340,7 @@ export const StudyChatProvider: React.FC<{
         }
         attempt += 1;
         setConnectionStatus('reconnecting');
-        const delay = Math.min(10_000, 1000 * Math.pow(1.6, Math.min(attempt, 5)));
+        const delay = Math.min(8_000, 800 * Math.pow(1.5, Math.min(attempt, 5)));
         reconnectTimerRef.current = setTimeout(connect, delay);
       };
     };
@@ -266,11 +366,17 @@ export const StudyChatProvider: React.FC<{
         wsRef.current = null;
       }
     };
-  }, [user?.id, user?.email, mergeMessages]);
+  }, [user?.id, user?.email, mergeMessages, flushOutbox]);
 
   const setActiveRoomId = useCallback(
     async (roomId: string) => {
       setActiveRoomIdState(roomId);
+      setUnreadByRoom((prev) => {
+        if (!prev[roomId]) return prev;
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         const token = await getAccessToken().catch(() => '');
@@ -290,25 +396,60 @@ export const StudyChatProvider: React.FC<{
     [user, profile.fullName, profile.field]
   );
 
+  const upsertRoomAndOpen = useCallback(
+    (room: StudyChatRoom) => {
+      setRooms((prev) => (prev.some((r) => r.id === room.id) ? prev : [...prev, room]));
+      setActiveRoomId(room.id);
+    },
+    [setActiveRoomId]
+  );
+
   const sendMessage = useCallback(
-    (text: string, codeSnippet?: string) => {
+    (
+      text: string,
+      codeSnippet?: string,
+      replyTo?: { id: string; senderName: string; text: string }
+    ) => {
       const cleanText = text.trim();
       const cleanCode = (codeSnippet || '').trim();
       if (!cleanText && !cleanCode) return false;
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
       const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const roomId = activeRoomRef.current;
+      const ws = wsRef.current;
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // Queue message cleanly so offline/reconnecting sends are delivered automatically on reconnect
+        setOutbox((prev) => [
+          ...prev,
+          {
+            id: msgId,
+            roomId,
+            text: cleanText,
+            codeSnippet: cleanCode || undefined,
+            replyToId: replyTo?.id,
+            replyToAuthor: replyTo?.senderName,
+            replyToText: replyTo?.text?.slice(0, 120),
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+        setNotice('Reconnecting — your message is queued and will send automatically.');
+        return true;
+      }
+
       ws.send(
         JSON.stringify({
           type: 'chat:send',
           id: msgId,
-          roomId: activeRoomRef.current,
+          roomId,
           senderId: user?.id || user?.email || 'member',
           senderName: user?.name || profile.fullName || 'Member',
           senderField: profile.field || '',
           text: cleanText,
           codeSnippet: cleanCode || undefined,
+          replyToId: replyTo?.id,
+          replyToAuthor: replyTo?.senderName,
+          replyToText: replyTo?.text?.slice(0, 120),
         })
       );
       return true;
@@ -316,9 +457,29 @@ export const StudyChatProvider: React.FC<{
     [user, profile.fullName, profile.field]
   );
 
-  const clearUnread = useCallback(() => setUnreadCount(0), []);
+  const deleteMessage = useCallback((messageId: string, reason?: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(
+      JSON.stringify({
+        type: 'chat:delete',
+        roomId: activeRoomRef.current,
+        messageId,
+        reason,
+      })
+    );
+  }, []);
 
-  // "Someone is typing…" expires on its own if they stop
+  const clearUnread = useCallback(() => {
+    setUnreadCount(0);
+    setUnreadByRoom((prev) => {
+      if (!prev[activeRoomRef.current]) return prev;
+      const next = { ...prev };
+      delete next[activeRoomRef.current];
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (typingPeers.length === 0) return;
     const t = setInterval(() => {
@@ -362,39 +523,68 @@ export const StudyChatProvider: React.FC<{
     [typingPeers, activeRoomId]
   );
 
+  const pendingMessages = useMemo<StudyChatMessage[]>(
+    () =>
+      outbox
+        .filter((o) => o.roomId === activeRoomId)
+        .map((o) => ({
+          id: o.id,
+          roomId: o.roomId,
+          senderId: myUserId,
+          senderName: user?.name || profile.fullName || 'You',
+          senderField: profile.field || '',
+          text: o.text,
+          codeSnippet: o.codeSnippet,
+          replyToId: o.replyToId,
+          replyToAuthor: o.replyToAuthor,
+          replyToText: o.replyToText,
+          createdAt: o.createdAt,
+        })),
+    [outbox, activeRoomId, myUserId, user?.name, profile.fullName, profile.field]
+  );
+
   const value = useMemo<StudyChatContextValue>(
     () => ({
       rooms,
+      setRooms,
       activeRoomId,
       setActiveRoomId,
       messages: messagesByRoom[activeRoomId] || [],
+      pendingMessages,
       presence: presenceByRoom[activeRoomId] || [],
       connectionStatus,
       sendMessage,
+      deleteMessage,
       isWidgetOpen,
       setIsWidgetOpen,
       unreadCount,
+      unreadByRoom,
       clearUnread,
       typingNames,
       notifyTyping,
       notice,
       reconnectNow,
+      upsertRoomAndOpen,
     }),
     [
       rooms,
       activeRoomId,
       setActiveRoomId,
       messagesByRoom,
+      pendingMessages,
       presenceByRoom,
       connectionStatus,
       sendMessage,
+      deleteMessage,
       isWidgetOpen,
       unreadCount,
+      unreadByRoom,
       clearUnread,
       typingNames,
       notifyTyping,
       notice,
       reconnectNow,
+      upsertRoomAndOpen,
     ]
   );
 
@@ -447,7 +637,6 @@ const initialsOf = (name: string) =>
 
 const URL_RE = /(https?:\/\/[^\s<>"']+)/g;
 
-/** Plain text with http(s) links made clickable. Nothing else is interpreted. */
 const LinkifiedText: React.FC<{ text: string; mine: boolean }> = ({ text, mine }) => (
   <>
     {text.split(URL_RE).map((part, i) => {
@@ -478,9 +667,7 @@ const CodeBlock: React.FC<{ code: string; mine: boolean; compact?: boolean }> = 
       await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard blocked: nothing to do */
-    }
+    } catch {}
   };
   return (
     <div className="relative">
@@ -509,14 +696,15 @@ const CodeBlock: React.FC<{ code: string; mine: boolean; compact?: boolean }> = 
 const ConnectionBanner: React.FC<{
   status: StudyChatContextValue['connectionStatus'];
   notice: string | null;
+  pendingCount?: number;
   onRetry: () => void;
-}> = ({ status, notice, onRetry }) => {
-  if (status === 'connected' && !notice) return null;
+}> = ({ status, notice, pendingCount = 0, onRetry }) => {
+  if (status === 'connected' && !notice && pendingCount === 0) return null;
   const text =
     status === 'offline'
-      ? 'You are offline. Your message stays in the box until you are back.'
+      ? `You are offline.${pendingCount ? ` ${pendingCount} message${pendingCount === 1 ? '' : 's'} queued for reconnect.` : ' Messages sent now queue until you reconnect.'}`
       : status !== 'connected'
-        ? 'Reconnecting to study chat…'
+        ? `Reconnecting to study chat…${pendingCount ? ` (${pendingCount} queued)` : ''}`
         : notice;
   return (
     <div
@@ -539,12 +727,31 @@ const ConnectionBanner: React.FC<{
 
 const ChatMessages: React.FC<{
   messages: StudyChatMessage[];
+  pendingIds?: Set<string>;
   currentUserId: string;
+  isAdmin?: boolean;
   resetKey: string;
   typingNames: string[];
   empty: React.ReactNode;
   compact?: boolean;
-}> = ({ messages, currentUserId, resetKey, typingNames, empty, compact }) => {
+  onReply?: (msg: StudyChatMessage) => void;
+  onDelete?: (msg: StudyChatMessage, asMod?: boolean) => void;
+  onReport?: (msg: StudyChatMessage) => void;
+  onSelectMember?: (userId: string, userName: string) => void;
+}> = ({
+  messages,
+  pendingIds,
+  currentUserId,
+  isAdmin,
+  resetKey,
+  typingNames,
+  empty,
+  compact,
+  onReply,
+  onDelete,
+  onReport,
+  onSelectMember,
+}) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const lastCountRef = useRef(messages.length);
@@ -556,7 +763,6 @@ const ChatMessages: React.FC<{
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
   }, []);
 
-  // New room: start at the latest message
   useEffect(() => {
     stickRef.current = true;
     lastCountRef.current = messages.length;
@@ -565,8 +771,6 @@ const ChatMessages: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
-  // New messages: follow along only if you are already at the bottom (or you sent it).
-  // Otherwise leave your scroll position alone and offer a jump button.
   useEffect(() => {
     const added = messages.length - lastCountRef.current;
     lastCountRef.current = messages.length;
@@ -620,6 +824,9 @@ const ChatMessages: React.FC<{
                 prev.senderId === m.senderId &&
                 new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
               const mine = m.senderId === currentUserId;
+              const isPending = pendingIds?.has(m.id);
+              const removed = Boolean(m.deleted || m.hidden);
+
               return (
                 <React.Fragment key={m.id}>
                   {newDay && (
@@ -629,23 +836,35 @@ const ChatMessages: React.FC<{
                       <span className="h-px flex-1 bg-[var(--border-hairline)]" />
                     </div>
                   )}
-                  <div className={`flex gap-2.5 ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-1' : idx === 0 || newDay ? '' : 'mt-4'}`}>
+                  <div className={`group/msg flex gap-2.5 ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-1' : idx === 0 || newDay ? '' : 'mt-4'}`}>
                     {!mine && !compact && (
                       <div className="w-8 shrink-0">
                         {!grouped && (
-                          <span
-                            aria-hidden="true"
-                            className="w-8 h-8 rounded-full bg-[var(--accent-100)] text-[var(--accent-700)] text-xs font-semibold flex items-center justify-center"
+                          <button
+                            type="button"
+                            onClick={() => onSelectMember?.(m.senderId, m.senderName)}
+                            aria-label={`View ${m.senderName}'s profile`}
+                            className="w-8 h-8 rounded-full bg-[var(--accent-100)] text-[var(--accent-700)] text-xs font-semibold flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-[var(--accent-600)]"
                           >
                             {initialsOf(m.senderName)}
-                          </span>
+                          </button>
                         )}
                       </div>
                     )}
                     <div className={`min-w-0 max-w-[85%] sm:max-w-[78%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
                       {!grouped && (
                         <div className="flex items-baseline gap-2 mb-1 px-1 max-w-full">
-                          <span className="text-xs font-semibold text-[var(--ink-primary)] truncate">{mine ? 'You' : m.senderName}</span>
+                          {mine ? (
+                            <span className="text-xs font-semibold text-[var(--ink-primary)] truncate">You</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onSelectMember?.(m.senderId, m.senderName)}
+                              className="text-xs font-semibold text-[var(--ink-primary)] hover:text-[var(--accent-600)] hover:underline truncate cursor-pointer"
+                            >
+                              {m.senderName}
+                            </button>
+                          )}
                           {m.senderField && !compact && !mine && (
                             <span className="text-[11px] text-[var(--ink-muted)] truncate hidden sm:inline">{m.senderField}</span>
                           )}
@@ -655,18 +874,67 @@ const ChatMessages: React.FC<{
                       <div
                         title={formatTime(m.createdAt)}
                         className={`rounded-2xl px-3.5 py-2 leading-relaxed space-y-2 border min-w-0 max-w-full ${compact ? 'text-xs' : 'text-sm'} ${
-                          mine
-                            ? 'bg-[var(--accent-600)] text-white border-transparent'
-                            : 'bg-[var(--surface-subtle)] border-[var(--border-hairline)] text-[var(--ink-primary)]'
-                        }`}
+                          removed
+                            ? 'bg-[var(--surface-subtle)] border-[var(--border-hairline)] text-[var(--ink-muted)] italic'
+                            : mine
+                              ? 'bg-[var(--accent-600)] text-white border-transparent'
+                              : 'bg-[var(--surface-subtle)] border-[var(--border-hairline)] text-[var(--ink-primary)]'
+                        } ${isPending ? 'opacity-75' : ''}`}
                       >
+                        {m.replyToText && !removed && (
+                          <div
+                            className={`text-xs px-2.5 py-1 rounded-lg border-l-2 ${
+                              mine ? 'bg-black/15 border-white/60 text-white/90' : 'bg-[var(--surface-elevated)] border-[var(--accent-600)] text-[var(--ink-secondary)]'
+                            }`}
+                          >
+                            <span className="font-semibold">{m.replyToAuthor || 'Reply'}:</span> {m.replyToText}
+                          </div>
+                        )}
                         {m.text && (
                           <p className="whitespace-pre-wrap break-words">
-                            <LinkifiedText text={m.text} mine={mine} />
+                            {removed ? m.text : <LinkifiedText text={m.text} mine={mine} />}
                           </p>
                         )}
-                        {m.codeSnippet && <CodeBlock code={m.codeSnippet} mine={mine} compact={compact} />}
+                        {m.codeSnippet && !removed && <CodeBlock code={m.codeSnippet} mine={mine} compact={compact} />}
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1 text-[11px] opacity-85">
+                            <Clock className="w-3 h-3" aria-hidden="true" /> Queued for send
+                          </span>
+                        )}
                       </div>
+
+                      {!compact && !removed && !isPending && (onReply || onDelete || onReport) && (
+                        <div className="mt-1 px-1 flex items-center gap-2 opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity text-[11px] text-[var(--ink-muted)]">
+                          {onReply && (
+                            <button
+                              type="button"
+                              onClick={() => onReply(m)}
+                              className="inline-flex items-center gap-1 hover:text-[var(--accent-600)] cursor-pointer"
+                            >
+                              <CornerUpLeft className="w-3 h-3" aria-hidden="true" /> Reply
+                            </button>
+                          )}
+                          {(mine || isAdmin) && onDelete && (
+                            <button
+                              type="button"
+                              onClick={() => onDelete(m, !mine && isAdmin)}
+                              className="inline-flex items-center gap-1 hover:text-[var(--danger-ink)] cursor-pointer"
+                            >
+                              {!mine && isAdmin ? <ShieldAlert className="w-3 h-3" aria-hidden="true" /> : <Trash2 className="w-3 h-3" aria-hidden="true" />}
+                              {!mine && isAdmin ? 'Moderate' : 'Delete'}
+                            </button>
+                          )}
+                          {!mine && onReport && (
+                            <button
+                              type="button"
+                              onClick={() => onReport(m)}
+                              className="inline-flex items-center gap-1 hover:text-[var(--warning-ink)] cursor-pointer"
+                            >
+                              <Flag className="w-3 h-3" aria-hidden="true" /> Report
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </React.Fragment>
@@ -709,20 +977,41 @@ const ChatMessages: React.FC<{
 
 const ChatComposer: React.FC<{
   roomId: string;
+  roomLabel?: string;
   value: string;
   onChange: (v: string) => void;
   code?: string;
   onCodeChange?: (v: string) => void;
   showCode?: boolean;
   onToggleCode?: () => void;
+  replyTo?: { id: string; senderName: string; text: string } | null;
+  onCancelReply?: () => void;
+  mentionCandidates?: MentionCandidate[];
   onSubmit: () => void;
   onTyping: () => void;
   connected: boolean;
+  mutedReason?: string;
   compact?: boolean;
-}> = ({ roomId, value, onChange, code = '', onCodeChange, showCode, onToggleCode, onSubmit, onTyping, connected, compact }) => {
+}> = ({
+  roomId,
+  roomLabel,
+  value,
+  onChange,
+  code = '',
+  onCodeChange,
+  showCode,
+  onToggleCode,
+  replyTo,
+  onCancelReply,
+  mentionCandidates = [],
+  onSubmit,
+  onTyping,
+  connected,
+  mutedReason,
+  compact,
+}) => {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Grow with the text, up to about six lines
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
@@ -730,11 +1019,27 @@ const ChatComposer: React.FC<{
     el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
   }, [value]);
 
-  const canSend = connected && (value.trim().length > 0 || (showCode && code.trim().length > 0));
+  const mentionMatch = !compact ? value.match(/(?:^|\s)@([a-z0-9._-]{0,24})$/i) : null;
+  const mentionHits = useMemo(() => {
+    if (!mentionMatch || mentionCandidates.length === 0) return [];
+    const q = mentionMatch[1].toLowerCase();
+    return mentionCandidates
+      .filter((m) => !q || m.name.toLowerCase().includes(q) || (m.username && m.username.toLowerCase().includes(q)))
+      .slice(0, 5);
+  }, [mentionMatch, mentionCandidates]);
+
+  const insertMention = (candidate: MentionCandidate) => {
+    const handle = candidate.username || candidate.name.replace(/\s+/g, '');
+    const next = value.replace(/(^|\s)@[a-z0-9._-]{0,24}$/i, `$1@${handle} `);
+    onChange(next);
+    taRef.current?.focus();
+  };
+
+  const hasContent = value.trim().length > 0 || (showCode && code.trim().length > 0);
+  const canSend = !mutedReason && hasContent;
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
-    // On phones Enter is a new line (the Send button sends). On desktop Enter sends.
     const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
     if (touch) return;
     e.preventDefault();
@@ -750,8 +1055,37 @@ const ChatComposer: React.FC<{
         e.preventDefault();
         if (canSend) onSubmit();
       }}
-      className={`border-t border-[var(--border-hairline)] ${compact ? 'p-2.5' : 'p-3 sm:p-4'} space-y-2`}
+      className={`border-t border-[var(--border-hairline)] ${compact ? 'p-2.5' : 'p-3 sm:p-4'} space-y-2 relative`}
     >
+      {mentionHits.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1">
+          <span className="text-[11px] text-[var(--ink-muted)]">Mention:</span>
+          {mentionHits.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => insertMention(m)}
+              className="px-2.5 py-1 rounded-md text-xs font-medium bg-[var(--accent-50)] text-[var(--accent-700)] hover:bg-[var(--accent-100)] cursor-pointer"
+            >
+              @{m.username || m.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {replyTo && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-[var(--surface-subtle)] border border-[var(--border-hairline)] text-xs">
+          <span className="truncate text-[var(--ink-secondary)]">
+            Replying to <strong className="text-[var(--ink-primary)]">{replyTo.senderName}</strong>: {replyTo.text}
+          </span>
+          {onCancelReply && (
+            <button type="button" onClick={onCancelReply} aria-label="Cancel reply" className="p-1 text-[var(--ink-muted)] hover:text-[var(--ink-primary)] cursor-pointer">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {showCode && onCodeChange && (
         <textarea
           rows={3}
@@ -764,47 +1098,59 @@ const ChatComposer: React.FC<{
           className={`${fieldClass} px-3 py-2 font-mono text-xs !min-h-0`}
         />
       )}
-      <div className="flex items-end gap-2">
-        {onToggleCode && (
+
+      {mutedReason ? (
+        <div className="px-3.5 py-2.5 rounded-xl bg-[var(--danger-bg)] border border-[var(--danger-border)] text-xs text-[var(--danger-ink)] flex items-center gap-2">
+          <Lock className="w-3.5 h-3.5 shrink-0" />
+          <span>Chat is muted for your account ({mutedReason}).</span>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2">
+          {onToggleCode && (
+            <button
+              type="button"
+              onClick={onToggleCode}
+              aria-label="Attach code snippet"
+              aria-pressed={showCode}
+              title="Attach code snippet"
+              className={`min-h-[44px] min-w-[44px] rounded-xl border flex items-center justify-center cursor-pointer shrink-0 ${
+                showCode
+                  ? 'bg-[var(--accent-50)] text-[var(--accent-600)] border-[var(--accent-600)]'
+                  : 'border-[var(--border-strong)] text-[var(--ink-secondary)] hover:bg-[var(--surface-subtle)]'
+              }`}
+            >
+              <Code2 className="w-4 h-4" />
+            </button>
+          )}
+          <textarea
+            ref={taRef}
+            rows={1}
+            value={value}
+            maxLength={MAX_MESSAGE_LENGTH}
+            onChange={(e) => {
+              onChange(e.target.value);
+              if (e.target.value) onTyping();
+            }}
+            onKeyDown={onKeyDown}
+            aria-label={`Message ${roomLabel || `#${roomId}`}`}
+            placeholder={
+              connected
+                ? `Message ${roomLabel || `#${roomId}`}… (type @ to mention)`
+                : 'Reconnecting — messages queue automatically…'
+            }
+            className={`${fieldClass} px-3.5 py-2.5 text-base sm:text-sm leading-6 flex-1 min-w-0 !min-h-[44px]`}
+          />
           <button
-            type="button"
-            onClick={onToggleCode}
-            aria-label="Attach code snippet"
-            aria-pressed={showCode}
-            title="Attach code snippet"
-            className={`min-h-[44px] min-w-[44px] rounded-xl border flex items-center justify-center cursor-pointer shrink-0 ${
-              showCode
-                ? 'bg-[var(--accent-50)] text-[var(--accent-600)] border-[var(--accent-600)]'
-                : 'border-[var(--border-strong)] text-[var(--ink-secondary)] hover:bg-[var(--surface-subtle)]'
-            }`}
+            type="submit"
+            disabled={!canSend}
+            aria-label="Send message"
+            className="min-h-[44px] min-w-[44px] px-3.5 rounded-xl bg-[var(--accent-600)] text-white font-semibold text-sm inline-flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-50 hover:bg-[var(--accent-700)]"
           >
-            <Code2 className="w-4 h-4" />
+            <Send className="w-4 h-4" aria-hidden="true" />
+            {!compact && <span className="hidden sm:inline">Send</span>}
           </button>
-        )}
-        <textarea
-          ref={taRef}
-          rows={1}
-          value={value}
-          maxLength={MAX_MESSAGE_LENGTH}
-          onChange={(e) => {
-            onChange(e.target.value);
-            if (e.target.value) onTyping();
-          }}
-          onKeyDown={onKeyDown}
-          aria-label={`Message #${roomId}`}
-          placeholder={connected ? `Message #${roomId}…` : 'Reconnecting…'}
-          className={`${fieldClass} px-3.5 py-2.5 text-base sm:text-sm leading-6 flex-1 min-w-0 !min-h-[44px]`}
-        />
-        <button
-          type="submit"
-          disabled={!canSend}
-          aria-label="Send message"
-          className="min-h-[44px] min-w-[44px] px-3.5 rounded-xl bg-[var(--accent-600)] text-white font-semibold text-sm inline-flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-50 hover:bg-[var(--accent-700)]"
-        >
-          <Send className="w-4 h-4" aria-hidden="true" />
-          {!compact && <span className="hidden sm:inline">Send</span>}
-        </button>
-      </div>
+        </div>
+      )}
       {(value.length > MAX_MESSAGE_LENGTH - 300 || (!compact && value.length > 0)) && (
         <div className="flex items-center justify-between gap-3 text-[11px] text-[var(--ink-muted)] px-1">
           <span className="hidden sm:inline">{compact ? '' : 'Enter to send · Shift+Enter for a new line'}</span>
@@ -826,42 +1172,58 @@ const ChatComposer: React.FC<{
 export const StudyGroupChatPanel: React.FC<{
   styles: any;
   currentUserId: string;
-}> = ({ styles, currentUserId }) => {
+  isAdmin?: boolean;
+  mutedReason?: string;
+  mentionCandidates?: MentionCandidate[];
+  onReportMessage?: (msg: StudyChatMessage) => void;
+  onSelectMember?: (userId: string, userName: string) => void;
+}> = ({ styles, currentUserId, isAdmin, mutedReason, mentionCandidates = [], onReportMessage, onSelectMember }) => {
   const { cardClass, borderClass, textPrimary, textSecondary } = styles;
   const {
     rooms,
     activeRoomId,
     setActiveRoomId,
     messages,
+    pendingMessages,
     presence,
     connectionStatus,
     sendMessage,
+    deleteMessage,
     clearUnread,
+    unreadByRoom,
     typingNames,
     notifyTyping,
     notice,
     reconnectNow,
   } = useStudyGroupChat();
 
-  // One draft per room so switching rooms never loses what you were writing
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [codeDraft, setCodeDraft] = useState('');
   const [showCodeBox, setShowCodeBox] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; senderName: string; text: string } | null>(null);
   const draft = drafts[activeRoomId] || '';
   const connected = connectionStatus === 'connected';
 
   useEffect(() => {
     clearUnread();
-  }, [clearUnread, messages.length]);
+  }, [clearUnread, messages.length, activeRoomId]);
+
+  useEffect(() => {
+    setReplyTo(null);
+  }, [activeRoomId]);
 
   const activeRoom = rooms.find((r) => r.id === activeRoomId) || rooms[0];
 
+  const combinedMessages = useMemo(() => [...messages, ...pendingMessages], [messages, pendingMessages]);
+  const pendingIds = useMemo(() => new Set(pendingMessages.map((m) => m.id)), [pendingMessages]);
+
   const submit = () => {
-    if (sendMessage(draft, showCodeBox ? codeDraft : undefined)) {
+    if (sendMessage(draft, showCodeBox ? codeDraft : undefined, replyTo || undefined)) {
       setDrafts((d) => ({ ...d, [activeRoomId]: '' }));
       setCodeDraft('');
       setShowCodeBox(false);
+      setReplyTo(null);
     }
   };
 
@@ -870,10 +1232,14 @@ export const StudyGroupChatPanel: React.FC<{
       {presence.map((peer) => (
         <li key={`${peer.userId}-${peer.userName}`} className="flex items-center gap-2 text-xs min-w-0">
           <span className="w-2 h-2 rounded-full bg-[var(--success-ink)] shrink-0" aria-hidden="true" />
-          <span className={`font-medium truncate ${textPrimary}`}>
+          <button
+            type="button"
+            onClick={() => onSelectMember?.(peer.userId, peer.userName)}
+            className={`font-medium truncate hover:text-[var(--accent-600)] hover:underline cursor-pointer ${textPrimary}`}
+          >
             {peer.userName}
             {peer.userId === currentUserId && <span className={`font-normal ${textSecondary}`}> (you)</span>}
-          </span>
+          </button>
           {peer.userField && <span className={`truncate ${textSecondary}`}>· {peer.userField}</span>}
         </li>
       ))}
@@ -894,7 +1260,7 @@ export const StudyGroupChatPanel: React.FC<{
             {connected ? (
               <><Wifi className="w-3.5 h-3.5" aria-hidden="true" /> Live</>
             ) : (
-              <><WifiOff className="w-3.5 h-3.5" aria-hidden="true" /> {connectionStatus === 'offline' ? 'Offline' : 'Connecting'}</>
+              <><WifiOff className="w-3.5 h-3.5" aria-hidden="true" /> {connectionStatus === 'offline' ? 'Offline' : 'Reconnecting'}</>
             )}
           </span>
         </div>
@@ -906,6 +1272,7 @@ export const StudyGroupChatPanel: React.FC<{
         >
           {rooms.map((room) => {
             const active = room.id === activeRoomId;
+            const roomUnread = unreadByRoom[room.id] || 0;
             return (
               <button
                 key={room.id}
@@ -919,9 +1286,24 @@ export const StudyGroupChatPanel: React.FC<{
                     : `${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)]`
                 }`}
               >
-                <div className="flex items-center gap-2 font-semibold text-sm whitespace-nowrap lg:whitespace-normal">
-                  <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                  <span className="lg:truncate">{room.name}</span>
+                <div className="flex items-center justify-between gap-2 font-semibold text-sm whitespace-nowrap lg:whitespace-normal">
+                  <span className="flex items-center gap-2 min-w-0">
+                    {room.isDirect ? (
+                      <UserCheck className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="lg:truncate">{room.name}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 shrink-0">
+                    {room.groupId && <span className="text-[11px] font-medium opacity-75">Group</span>}
+                    {room.isDirect && <span className="text-[11px] font-medium opacity-75">Direct</span>}
+                    {roomUnread > 0 && !active && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-[var(--accent-600)] text-white text-[11px] font-bold tabular-nums">
+                        {roomUnread}
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <p className={`hidden lg:block text-xs mt-0.5 line-clamp-1 ${active ? 'opacity-85' : textSecondary}`}>{room.topic}</p>
               </button>
@@ -947,7 +1329,11 @@ export const StudyGroupChatPanel: React.FC<{
         <div className={`px-4 sm:px-5 py-3.5 border-b ${borderClass} flex items-center justify-between gap-3`}>
           <div className="min-w-0">
             <h3 className={`text-base sm:text-lg font-semibold flex items-center gap-2 ${textPrimary}`}>
-              <Hash className="w-4 h-4 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
+              {activeRoom?.isDirect ? (
+                <UserCheck className="w-4 h-4 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
+              ) : (
+                <Hash className="w-4 h-4 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
+              )}
               <span className="truncate">{activeRoom?.name || 'Study Room'}</span>
             </h3>
             <p className={`text-xs truncate ${textSecondary}`}>{activeRoom?.topic}</p>
@@ -971,13 +1357,30 @@ export const StudyGroupChatPanel: React.FC<{
           </div>
         )}
 
-        <ConnectionBanner status={connectionStatus} notice={notice} onRetry={reconnectNow} />
+        <ConnectionBanner
+          status={connectionStatus}
+          notice={notice}
+          pendingCount={pendingMessages.length}
+          onRetry={reconnectNow}
+        />
 
         <ChatMessages
-          messages={messages}
+          messages={combinedMessages}
+          pendingIds={pendingIds}
           currentUserId={currentUserId}
+          isAdmin={isAdmin}
           resetKey={activeRoomId}
           typingNames={typingNames}
+          onReply={(m) =>
+            setReplyTo({
+              id: m.id,
+              senderName: m.senderName,
+              text: m.text || (m.codeSnippet ? '[Code snippet]' : ''),
+            })
+          }
+          onDelete={(m, asMod) => deleteMessage(m.id, asMod ? 'Removed by moderator' : undefined)}
+          onReport={onReportMessage}
+          onSelectMember={onSelectMember}
           empty={
             <div className={`h-full flex flex-col items-center justify-center text-center px-4 py-8 ${textSecondary}`}>
               <MessageSquare className="w-8 h-8 mb-2 opacity-40" aria-hidden="true" />
@@ -991,15 +1394,20 @@ export const StudyGroupChatPanel: React.FC<{
 
         <ChatComposer
           roomId={activeRoom?.id || 'general'}
+          roomLabel={activeRoom?.name}
           value={draft}
           onChange={(v) => setDrafts((d) => ({ ...d, [activeRoomId]: v }))}
           code={codeDraft}
           onCodeChange={setCodeDraft}
           showCode={showCodeBox}
           onToggleCode={() => setShowCodeBox((v) => !v)}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          mentionCandidates={mentionCandidates}
           onSubmit={submit}
           onTyping={notifyTyping}
           connected={connected}
+          mutedReason={mutedReason}
         />
       </section>
     </div>
@@ -1014,14 +1422,16 @@ export const StudyGroupChatWidget: React.FC<{
   styles: any;
   currentUserId: string;
   hidden?: boolean;
+  mutedReason?: string;
   onOpenFullRoom?: () => void;
-}> = ({ styles, currentUserId, hidden, onOpenFullRoom }) => {
+}> = ({ styles, currentUserId, hidden, mutedReason, onOpenFullRoom }) => {
   const { borderClass } = styles;
   const {
     rooms,
     activeRoomId,
     setActiveRoomId,
     messages,
+    pendingMessages,
     presence,
     connectionStatus,
     sendMessage,
@@ -1037,6 +1447,8 @@ export const StudyGroupChatWidget: React.FC<{
 
   const [draft, setDraft] = useState('');
   const connected = connectionStatus === 'connected';
+  const combinedMessages = useMemo(() => [...messages, ...pendingMessages], [messages, pendingMessages]);
+  const pendingIds = useMemo(() => new Set(pendingMessages.map((m) => m.id)), [pendingMessages]);
 
   useEffect(() => {
     if (isWidgetOpen) clearUnread();
@@ -1072,7 +1484,7 @@ export const StudyGroupChatWidget: React.FC<{
                   connected ? 'bg-emerald-500/20 text-emerald-200' : 'bg-amber-500/20 text-amber-200'
                 }`}
               >
-                {connected ? `${presence.length} online` : 'Connecting'}
+                {connected ? `${presence.length} online` : 'Reconnecting'}
               </span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -1112,16 +1524,22 @@ export const StudyGroupChatWidget: React.FC<{
                     : 'bg-[var(--surface-subtle)] text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
                 }`}
               >
-                #{r.id}
+                {r.isDirect ? r.name : `#${r.groupId ? r.name : r.id}`}
               </button>
             ))}
           </div>
 
-          <ConnectionBanner status={connectionStatus} notice={notice} onRetry={reconnectNow} />
+          <ConnectionBanner
+            status={connectionStatus}
+            notice={notice}
+            pendingCount={pendingMessages.length}
+            onRetry={reconnectNow}
+          />
 
           <ChatMessages
             compact
-            messages={messages}
+            messages={combinedMessages}
+            pendingIds={pendingIds}
             currentUserId={currentUserId}
             resetKey={`${activeRoomId}-${isWidgetOpen}`}
             typingNames={typingNames}
@@ -1135,6 +1553,7 @@ export const StudyGroupChatWidget: React.FC<{
           <ChatComposer
             compact
             roomId={activeRoomId}
+            roomLabel={activeRoom?.name}
             value={draft}
             onChange={setDraft}
             onSubmit={() => {
@@ -1142,6 +1561,7 @@ export const StudyGroupChatWidget: React.FC<{
             }}
             onTyping={notifyTyping}
             connected={connected}
+            mutedReason={mutedReason}
           />
         </div>
       )}

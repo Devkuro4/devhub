@@ -1,32 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
   BookOpen,
+  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Circle,
   Clock,
+  Edit3,
   ExternalLink,
   FileCode2,
+  FileText,
   Flag,
   FolderArchive,
   HelpCircle,
   Loader2,
+  Pause,
   Play,
   Plus,
   Repeat,
+  Search,
   Send,
   Sparkles,
+  Trash2,
   Upload,
+  Video,
   X,
 } from 'lucide-react';
-import { Badge, EmptyState, Modal, PageHeader, ProgressBar, SectionTabs } from './ui';
+import { Badge, EmptyState, Modal, PageHeader, SectionTabs } from './ui';
 import { getUrlError } from '../lib/url';
 import {
   evaluateShortQuizAnswer,
-  extractCourseMaterial,
   inspectCourseUrl,
   requestAiQuiz,
   requestCodeReview,
@@ -34,22 +40,29 @@ import {
   requestLearningPlan,
   requestWeeklySummary,
 } from '../lib/aiClient';
+import { preScreenAndImportMaterial, saveLearningSubmission } from '../lib/learningClient';
 import { readSubmittedFiles, runSafeJavaScriptSandbox } from '../lib/sandbox';
+import { CourseMaterialsModal } from './CourseMaterialsModal';
+import { CourseEditModal, SelfDirectedAndPlansPanel } from './CoursesAndPlansPanel';
 import type {
   CodeSubmission,
   CourseItem,
+  CourseLearningStatus,
   DailyTarget,
+  ImportedMaterialPack,
   LearningPlan,
   OnboardingProfile,
   QuizAttempt,
   QuizItem,
   RoadmapItem,
   RoadmapTopicProgress,
+  SelfDirectedTopic,
+  StudySessionLog,
   SubmittedFile,
   WeeklyProjectItem,
 } from '../types';
 
-type LearningSubTab = 'today' | 'courses' | 'submissions' | 'quizzes' | 'progress';
+type LearningSubTab = 'today' | 'courses' | 'plans' | 'submissions' | 'quizzes' | 'progress';
 type DailyStage = 1 | 2 | 3 | 4 | 5;
 
 export const LearningSection = ({
@@ -63,6 +76,12 @@ export const LearningSection = ({
   roadmapProgress,
   learningPlans,
   setLearningPlans,
+  importedMaterials,
+  setImportedMaterials,
+  selfDirectedTopics,
+  setSelfDirectedTopics,
+  studySessions,
+  setStudySessions,
   dailyTarget,
   setDailyTarget,
   codeSubmissions,
@@ -73,6 +92,7 @@ export const LearningSection = ({
   setQuizAttempts,
   weeklyProjects,
   dailyLogs,
+  setDailyLogs,
   weeklyReports,
   setWeeklyReports,
   onAskMentor,
@@ -84,21 +104,28 @@ export const LearningSection = ({
   profile: OnboardingProfile;
   user: { id?: string; name: string; email: string };
   courses: CourseItem[];
-  setCourses: (c: CourseItem[]) => void;
+  setCourses: React.Dispatch<React.SetStateAction<CourseItem[]>>;
   selectedRoadmap: RoadmapItem;
   roadmapProgress: Record<string, RoadmapTopicProgress>;
   learningPlans: LearningPlan[];
-  setLearningPlans: (lp: LearningPlan[]) => void;
+  setLearningPlans: React.Dispatch<React.SetStateAction<LearningPlan[]>>;
+  importedMaterials: ImportedMaterialPack[];
+  setImportedMaterials: React.Dispatch<React.SetStateAction<ImportedMaterialPack[]>>;
+  selfDirectedTopics: SelfDirectedTopic[];
+  setSelfDirectedTopics: React.Dispatch<React.SetStateAction<SelfDirectedTopic[]>>;
+  studySessions: StudySessionLog[];
+  setStudySessions: React.Dispatch<React.SetStateAction<StudySessionLog[]>>;
   dailyTarget: DailyTarget;
   setDailyTarget: (dt: DailyTarget) => void;
   codeSubmissions: CodeSubmission[];
-  setCodeSubmissions: (s: CodeSubmission[]) => void;
+  setCodeSubmissions: React.Dispatch<React.SetStateAction<CodeSubmission[]>>;
   quizzes: QuizItem[];
   setQuizzes: (q: QuizItem[]) => void;
   quizAttempts: QuizAttempt[];
   setQuizAttempts: (a: QuizAttempt[]) => void;
   weeklyProjects: WeeklyProjectItem[];
   dailyLogs: any[];
+  setDailyLogs: React.Dispatch<React.SetStateAction<any[]>>;
   weeklyReports: any[];
   setWeeklyReports: (r: any[]) => void;
   onAskMentor: (prompt: string) => void;
@@ -208,22 +235,135 @@ export const LearningSection = ({
     }
   };
 
+  // Manual Study Session Timer (tracks real seconds studied without faking completion)
+  const [sessionRunning, setSessionRunning] = useState(false);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+  useEffect(() => {
+    if (!sessionRunning) return;
+    const t = setInterval(() => setSessionSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [sessionRunning]);
+
+  const handleSaveStudySession = () => {
+    const mins = Math.max(1, Math.round(sessionSeconds / 60) || 1);
+    const entry: StudySessionLog = {
+      id: `sess-${Date.now()}`,
+      title: dailyTarget.topic,
+      sourceType: dailyTarget.sourceType === 'self_directed' ? 'self_directed' : dailyTarget.courseId ? 'course' : 'general',
+      courseId: dailyTarget.courseId || undefined,
+      selfDirectedId: dailyTarget.selfDirectedId,
+      minutes: mins,
+      dateIso: new Date().toISOString().slice(0, 10),
+    };
+    setStudySessions((prev) => [entry, ...prev]);
+    setDailyTarget({
+      ...dailyTarget,
+      sessionMinutesLogged: (dailyTarget.sessionMinutesLogged || 0) + mins,
+    });
+    setDailyLogs((prev) => [
+      {
+        id: `dl-${Date.now()}`,
+        date: 'Today',
+        module: dailyTarget.topic,
+        summary: `Focused study session logged (${mins} min) on ${dailyTarget.courseTitle || 'Daily Lesson'}.`,
+        repoLink: '',
+      },
+      ...prev,
+    ]);
+    setSessionRunning(false);
+    setSessionSeconds(0);
+    onNotify(`Logged ${mins} min study session for "${dailyTarget.topic}".`);
+  };
+
+  const handleMarkLessonComplete = () => {
+    const nowIso = new Date().toISOString();
+    setDailyTarget({
+      ...dailyTarget,
+      status: 'Demonstrated',
+      completedAt: nowIso,
+    });
+    // Update matching scheduled plan target
+    setLearningPlans((prev) =>
+      prev.map((p) => ({
+        ...p,
+        dailyTargets: p.dailyTargets.map((dt) =>
+          dt.id === dailyTarget.id || (dt.courseId === dailyTarget.courseId && dt.topic === dailyTarget.topic)
+            ? { ...dt, status: 'Demonstrated', completedAt: nowIso }
+            : dt
+        ),
+      }))
+    );
+    // Update matching self-directed task if any
+    if (dailyTarget.selfDirectedId) {
+      setSelfDirectedTopics((prev) =>
+        prev.map((sd) =>
+          sd.id === dailyTarget.selfDirectedId
+            ? {
+                ...sd,
+                updatedAt: nowIso,
+                tasks: sd.tasks.map((t) =>
+                  t.id === dailyTarget.id || t.title === dailyTarget.topic ? { ...t, done: true } : t
+                ),
+              }
+            : sd
+        )
+      );
+    }
+    // Check off matching module inside the course if present and recalculate real progress
+    if (dailyTarget.courseId) {
+      setCourses((prev) =>
+        prev.map((c) => {
+          if (c.id !== dailyTarget.courseId) return c;
+          const idx = c.modules.findIndex(
+            (m) =>
+              !m.completed &&
+              (m.title.toLowerCase() === dailyTarget.topic.toLowerCase() ||
+                m.title.toLowerCase() === dailyTarget.recommendedLesson.toLowerCase())
+          );
+          if (idx === -1) return { ...c, lastStudied: 'Today' };
+          const nextModules = c.modules.map((m, i) => (i === idx ? { ...m, completed: true } : m));
+          const doneCount = nextModules.filter((m) => m.completed).length;
+          const nextProgress = nextModules.length ? Math.round((doneCount / nextModules.length) * 100) : c.progress;
+          return {
+            ...c,
+            modules: nextModules,
+            progress: nextProgress,
+            status: nextProgress === 100 ? 'Completed' : 'In Progress',
+            currentTopic: nextModules.find((m) => !m.completed)?.title || c.currentTopic,
+            lastStudied: 'Today',
+          };
+        })
+      );
+    }
+    setDailyLogs((prev) => [
+      {
+        id: `dl-${Date.now()}`,
+        date: 'Today',
+        module: dailyTarget.topic,
+        summary: `Completed lesson: ${dailyTarget.topic}`,
+        repoLink: '',
+      },
+      ...prev,
+    ]);
+    onNotify(`Marked "${dailyTarget.topic}" complete!`);
+  };
+
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
-    const { files, warnings } = await readSubmittedFiles(e.target.files);
+    const { files, warnings } = await readSubmittedFiles(e.target.files, user.id);
     if (files.length > 0) {
       setUploadedFiles((prev) => [...prev, ...files]);
       if (!codeDraft.trim()) {
         setCodeDraft(files.map((f) => `// File: ${f.name}\n${f.content}`).join('\n\n'));
       }
-      onNotify(`Loaded ${files.length} code file(s) ready for submission.`);
+      onNotify(`Loaded ${files.length} file(s) ready for submission.`);
     }
     setUploadFeedback({
       accepted: files.map((f) => ({ name: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)) })),
       warnings,
     });
     if (warnings.length > 0 && files.length === 0) {
-      onNotify(warnings[0]);
+      onNotify(warnings[0], 'error');
     }
     e.target.value = '';
   };
@@ -319,17 +459,32 @@ export const LearningSection = ({
       };
     }
 
+    const statusFromReview: CodeSubmission['status'] =
+      aiReview?.recommendedStatus === 'Demonstrated'
+        ? 'Demonstrated'
+        : aiReview?.recommendedStatus === 'Needs Revision'
+          ? 'Needs Revision'
+          : aiReview
+            ? 'Reviewed'
+            : 'Submitted';
+
     const newSub: CodeSubmission = {
       id: `sub-${Date.now()}`,
+      ownerId: user.id || 'local-member',
       version: nextVersion,
       parentSubmissionId: resubmitParentId,
       createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · Just now',
+      submittedIso: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       courseId: activeCourse?.id || '',
       courseTitle: activeCourse?.title || dailyTarget.courseTitle,
       topic: dailyTarget.topic,
       dayLabel: dailyTarget.dayLabel,
       language: submissionKind === 'notes' ? 'Written Notes' : submissionLang,
       exerciseTitle: dailyTarget.exerciseTitle,
+      assignmentInstructions: dailyTarget.exerciseInstructions,
+      status: statusFromReview,
+      allowResubmit: true,
       submissionKind,
       code: combinedCode,
       files: uploadedFiles,
@@ -341,6 +496,7 @@ export const LearningSection = ({
     };
 
     setCodeSubmissions([newSub, ...codeSubmissions]);
+    saveLearningSubmission(newSub, user.id).catch(() => {});
     setDailyTarget({
       ...dailyTarget,
       status: aiReview?.recommendedStatus === 'Demonstrated' ? 'Demonstrated' : aiReview?.recommendedStatus === 'Needs Revision' ? 'Needs Revision' : 'Practised',
@@ -361,9 +517,22 @@ export const LearningSection = ({
   };
 
   // ============================================================================
-  // COURSES + YOUTUBE / URL METADATA + AI LEARNING PLAN
+  // COURSES + DOWNLOADED MATERIALS + URL METADATA + AI LEARNING PLAN
   // ============================================================================
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<CourseItem | null>(null);
+  const [confirmDeleteCourseId, setConfirmDeleteCourseId] = useState<string | null>(null);
+  const [newModuleDraftByCourse, setNewModuleDraftByCourse] = useState<Record<string, string>>({});
+  const [courseSearch, setCourseSearch] = useState('');
+  const [coursePlatformFilter, setCoursePlatformFilter] = useState('ALL');
+  const [courseStatusFilter, setCourseStatusFilter] = useState<'ALL' | CourseLearningStatus>('ALL');
+  const [submissionStatusFilter, setSubmissionStatusFilter] = useState<string>('ALL');
+
+  const [showMaterialsModal, setShowMaterialsModal] = useState(false);
+  const [materialsModalMode, setMaterialsModalMode] = useState<'import' | 'browse'>('browse');
+  const [materialsModalPackId, setMaterialsModalPackId] = useState<string | null>(null);
+  const [materialsModalCourseId, setMaterialsModalCourseId] = useState<string | null>(null);
+
   const [openCourseIds, setOpenCourseIds] = useState<Record<string, boolean>>(() =>
     courses[0]?.id ? { [courses[0].id]: true } : {}
   );
@@ -373,6 +542,7 @@ export const LearningSection = ({
   const [showEmbedForId, setShowEmbedForId] = useState<Record<string, boolean>>({});
   const [courseUploadBusy, setCourseUploadBusy] = useState(false);
   const [courseUploadNote, setCourseUploadNote] = useState('');
+  const [pendingPackIdForNewCourse, setPendingPackIdForNewCourse] = useState<string | null>(null);
   const [courseSourcesDraft, setCourseSourcesDraft] = useState<string[]>(['YouTube']);
   const [courseMetaDraft, setCourseMetaDraft] = useState<{
     embedUrl?: string;
@@ -389,6 +559,8 @@ export const LearningSection = ({
     instructor: '',
     field: profile.field || 'Frontend Development',
     skillLevel: profile.skillLevel || 'Beginner',
+    status: 'In Progress' as CourseLearningStatus,
+    targetDate: 'Self-paced',
     currentTopic: '',
     goals: '',
     referenceLink: '',
@@ -437,17 +609,22 @@ export const LearningSection = ({
     const notes: string[] = [];
     for (const f of Array.from(files)) {
       if (/\.(mp4|mkv|mov|avi|webm|m4v|flv|wmv|mp3|wav|m4a|aac|flac|ogg)$/i.test(f.name)) {
-        notes.push(`${f.name}: Skipped video/audio file — Dev Hub never uploads or processes video files.`);
+        notes.push(`${f.name}: Skipped — videos remain on your device and are never uploaded.`);
         continue;
       }
       try {
-        const res = await extractCourseMaterial(f, user.id);
-        notes.push(`${f.name}: ${res.note}`);
-        if (res.readable && res.outline.length > 0) {
+        const { pack } = await preScreenAndImportMaterial(f, user.id);
+        setImportedMaterials((prev) => [pack, ...prev.filter((p) => p.id !== pack.id)]);
+        setPendingPackIdForNewCourse(pack.id);
+        notes.push(
+          `${f.name}: Imported ${pack.totalFiles} study file(s)${pack.skippedVideoCount ? ` (${pack.skippedVideoCount} video(s) skipped locally)` : ''}.`
+        );
+        if (pack.outline.length > 0) {
           setNewCourseForm((prev) => ({
             ...prev,
-            title: prev.title.trim() ? prev.title : f.name.replace(/\.[^.]+$/, ''),
-            modulesText: res.outline.join('\n'),
+            title: prev.title.trim() ? prev.title : pack.title,
+            platform: prev.platform === 'YouTube' ? 'Downloaded Course' : prev.platform,
+            modulesText: pack.outline.join('\n'),
           }));
         }
         if (!courseSourcesDraft.includes('Downloaded Course')) {
@@ -474,22 +651,27 @@ export const LearningSection = ({
       newCourseForm.platform === 'Other' && newCourseForm.customPlatform.trim()
         ? newCourseForm.customPlatform.trim()
         : newCourseForm.platform;
+    const courseId = `course-${Date.now()}`;
     const created: CourseItem = {
-      id: `course-${Date.now()}`,
+      id: courseId,
       title: newCourseForm.title.trim(),
       platform: primaryPlatform,
       url: newCourseForm.url.trim(),
       instructor: newCourseForm.instructor.trim() || 'Self-Paced',
       field: newCourseForm.field,
       skillLevel: newCourseForm.skillLevel,
+      status: newCourseForm.status || 'In Progress',
       goals: newCourseForm.goals.trim() || 'Understand the core ideas and build small practice projects.',
-      targetDate: 'Self-paced',
+      description: newCourseForm.goals.trim() || 'Understand the core ideas and build small practice projects.',
+      targetDate: newCourseForm.targetDate.trim() || 'Self-paced',
       progress: 0,
       currentTopic: newCourseForm.currentTopic.trim() || modules[0]?.title || 'Getting Started',
       weeklyTarget: 'Finish next lesson & submit a short practice exercise',
       lastStudied: 'Just added',
       notes: '',
       referenceLinks: newCourseForm.referenceLink.trim() ? [newCourseForm.referenceLink.trim()] : [],
+      linkedMaterialPackIds: pendingPackIdForNewCourse ? [pendingPackIdForNewCourse] : [],
+      videoRefs: [],
       modules: modules.length ? modules : [{ id: `mod-${Date.now()}`, title: 'Lesson 1: Basics', completed: false }],
       sources: Array.from(new Set([primaryPlatform, ...courseSourcesDraft].filter(Boolean))),
       embedUrl: courseMetaDraft.embedUrl,
@@ -498,6 +680,13 @@ export const LearningSection = ({
       isPlaylist: courseMetaDraft.isPlaylist,
       metadataNote: courseMetaDraft.note,
     };
+
+    if (pendingPackIdForNewCourse) {
+      setImportedMaterials((prev) =>
+        prev.map((p) => (p.id === pendingPackIdForNewCourse ? { ...p, linkedCourseId: courseId } : p))
+      );
+      setPendingPackIdForNewCourse(null);
+    }
 
     setCourses([created, ...courses]);
     setOpenCourseIds((prev) => ({ ...prev, [created.id]: true }));
@@ -514,6 +703,8 @@ export const LearningSection = ({
       instructor: '',
       field: profile.field || 'Frontend Development',
       skillLevel: profile.skillLevel || 'Beginner',
+      status: 'In Progress',
+      targetDate: 'Self-paced',
       currentTopic: '',
       goals: '',
       referenceLink: '',
@@ -771,10 +962,114 @@ export const LearningSection = ({
     }
   };
 
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const pendingScheduledCount = useMemo(() => {
+    const planPending = learningPlans.reduce(
+      (sum, p) => sum + p.dailyTargets.filter((dt) => dt.status !== 'Demonstrated' && dt.status !== 'Practised').length,
+      0
+    );
+    const sdPending = selfDirectedTopics.reduce(
+      (sum, sd) => sum + sd.tasks.filter((t) => !t.done).length,
+      0
+    );
+    return planPending + sdPending;
+  }, [learningPlans, selfDirectedTopics]);
+
+  const plannedForTodayCount = useMemo(() => {
+    const pCount = learningPlans.reduce(
+      (sum, p) =>
+        sum +
+        p.dailyTargets.filter(
+          (dt) => (!dt.scheduledDate || dt.scheduledDate <= todayIso) && dt.status !== 'Demonstrated' && dt.status !== 'Practised'
+        ).length,
+      0
+    );
+    const sdCount = selfDirectedTopics.reduce(
+      (sum, sd) => sum + sd.tasks.filter((t) => !t.done && (!t.scheduledDate || t.scheduledDate <= todayIso)).length,
+      0
+    );
+    return Math.max(dailyTarget.status === 'Demonstrated' ? 0 : 1, pCount + sdCount);
+  }, [learningPlans, selfDirectedTopics, todayIso, dailyTarget.status]);
+
+  const completedTodayCount = useMemo(() => {
+    const logsToday = dailyLogs.filter((d) => d.date === 'Today' || d.date === todayIso).length;
+    const planDoneToday = learningPlans.reduce(
+      (sum, p) => sum + p.dailyTargets.filter((dt) => dt.completedAt?.slice(0, 10) === todayIso).length,
+      0
+    );
+    return logsToday + planDoneToday;
+  }, [dailyLogs, learningPlans, todayIso]);
+
+  const revisionSubmissions = useMemo(
+    () =>
+      codeSubmissions.filter(
+        (s) => s.status === 'Needs Revision' || s.review?.recommendedStatus === 'Needs Revision'
+      ),
+    [codeSubmissions]
+  );
+
+  const totalStudyMinutes = useMemo(
+    () => studySessions.reduce((sum, s) => sum + (Number(s.minutes) || 0), 0),
+    [studySessions]
+  );
+
+  const activeDailyCourse = useMemo(
+    () => courses.find((c) => c.id === dailyTarget.courseId) || courses[0] || null,
+    [courses, dailyTarget.courseId]
+  );
+
+  const activeDailyMaterials = useMemo(
+    () =>
+      importedMaterials.filter(
+        (p) =>
+          (activeDailyCourse && (p.linkedCourseId === activeDailyCourse.id || (activeDailyCourse.linkedMaterialPackIds || []).includes(p.id))) ||
+          (dailyTarget.selfDirectedId && p.linkedSelfDirectedId === dailyTarget.selfDirectedId)
+      ),
+    [importedMaterials, activeDailyCourse, dailyTarget.selfDirectedId]
+  );
+
+  const filteredCourses = useMemo(() => {
+    const q = courseSearch.trim().toLowerCase();
+    return courses.filter((c) => {
+      const derivedStatus: CourseLearningStatus =
+        c.status || (c.progress === 100 ? 'Completed' : c.progress > 0 ? 'In Progress' : 'Not Started');
+      if (coursePlatformFilter !== 'ALL') {
+        const matchesPlatform =
+          c.platform.toLowerCase().includes(coursePlatformFilter.toLowerCase()) ||
+          (c.sources || []).some((s) => s.toLowerCase().includes(coursePlatformFilter.toLowerCase()));
+        if (!matchesPlatform) return false;
+      }
+      if (courseStatusFilter !== 'ALL' && derivedStatus !== courseStatusFilter) return false;
+      if (q) {
+        const hay = `${c.title} ${c.platform} ${c.instructor} ${c.field} ${c.currentTopic}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [courses, courseSearch, coursePlatformFilter, courseStatusFilter]);
+
+  const filteredSubmissions = useMemo(() => {
+    if (submissionStatusFilter === 'ALL') return codeSubmissions;
+    return codeSubmissions.filter((sub) => {
+      const s =
+        sub.status ||
+        (sub.review?.recommendedStatus === 'Needs Revision'
+          ? 'Needs Revision'
+          : sub.review?.recommendedStatus === 'Demonstrated'
+            ? 'Demonstrated'
+            : sub.review
+              ? 'Reviewed'
+              : 'Submitted');
+      return s === submissionStatusFilter;
+    });
+  }, [codeSubmissions, submissionStatusFilter]);
+
   // Persistent Sub-navigation tabs inside My Learning
   const learningTabs: { id: LearningSubTab; label: string; badge?: number }[] = [
     { id: 'today', label: 'Today’s Learning' },
     { id: 'courses', label: 'My Courses', badge: courses.length },
+    { id: 'plans', label: 'Plans & Self-Directed', badge: selfDirectedTopics.length + pendingScheduledCount || undefined },
     { id: 'submissions', label: 'Submissions & Feedback', badge: codeSubmissions.length },
     { id: 'quizzes', label: 'Quizzes', badge: quizzes.length },
     { id: 'progress', label: 'Your Progress' },
@@ -969,7 +1264,7 @@ export const LearningSection = ({
   );
 
   const pipelineSteps: { n: DailyStage; label: string; hint: string; done: boolean }[] = [
-    { n: 1, label: 'Learn', hint: 'Understand the idea', done: dailyStage > 1 || topicHasSubmission },
+    { n: 1, label: 'Learn', hint: 'Understand the idea', done: dailyStage > 1 || topicHasSubmission || dailyTarget.status === 'Demonstrated' },
     { n: 2, label: 'Practise', hint: 'Try the small exercise', done: Boolean(codeDraft.trim() || uploadedFiles.length || topicHasSubmission) },
     { n: 3, label: 'Submit Code', hint: 'Share your attempt', done: topicHasSubmission },
     { n: 4, label: 'Take Quiz', hint: 'Check what clicked', done: topicHasQuiz },
@@ -997,12 +1292,26 @@ export const LearningSection = ({
     <div className="space-y-6">
       <PageHeader
         title="My Learning"
-        description="Work through your daily target step by step, link your courses, submit practice code, and track what you have mastered."
+        description="Work through your daily target step by step, manage external and downloaded courses, schedule study plans, and get feedback."
         action={
           subTab === 'courses' ? (
-            <button type="button" onClick={() => setShowAddCourseModal(true)} className={btnPrimary}>
-              <Plus className="w-4 h-4" /> Add a Course
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMaterialsModalMode('import');
+                  setMaterialsModalPackId(importedMaterials[0]?.id || null);
+                  setMaterialsModalCourseId(null);
+                  setShowMaterialsModal(true);
+                }}
+                className={btnSecondary}
+              >
+                <FolderArchive className="w-4 h-4" /> Import Course ZIP
+              </button>
+              <button type="button" onClick={() => setShowAddCourseModal(true)} className={btnPrimary}>
+                <Plus className="w-4 h-4" /> Add a Course
+              </button>
+            </div>
           ) : subTab === 'submissions' ? (
             <button
               type="button"
@@ -1025,9 +1334,116 @@ export const LearningSection = ({
 
       <SectionTabs tabs={learningTabs} active={subTab} onChange={setSubTab} />
 
-      {/* 1. TODAY'S LEARNING (5-STAGE INTERACTIVE STEPPER) */}
+      {/* 1. TODAY'S LEARNING (OVERVIEW + 5-STAGE STEPPER) */}
       {subTab === 'today' && (
-        <div data-tour="learning-today" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div data-tour="learning-today" className="space-y-6">
+          {/* Today's Learning Overview Strip + Study Session Tracker */}
+          <div className={`${cardClass} p-5 space-y-4`}>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-1">
+                <div>
+                  <div className={`text-xs ${textSecondary}`}>Planned & Pending</div>
+                  <div className={`font-display text-2xl tabular-nums ${textPrimary}`}>{plannedForTodayCount}</div>
+                </div>
+                <div>
+                  <div className={`text-xs ${textSecondary}`}>Completed Today</div>
+                  <div className="font-display text-2xl tabular-nums text-[var(--success-ink)]">{completedTodayCount}</div>
+                </div>
+                <div>
+                  <div className={`text-xs ${textSecondary}`}>Needs Revision</div>
+                  <div className={`font-display text-2xl tabular-nums ${revisionSubmissions.length > 0 ? 'text-[var(--warning-ink)]' : textPrimary}`}>
+                    {revisionSubmissions.length}
+                  </div>
+                </div>
+                <div>
+                  <div className={`text-xs ${textSecondary}`}>Next Recommended</div>
+                  <div className={`text-sm font-semibold truncate ${textPrimary}`}>
+                    {revisionSubmissions[0]
+                      ? `Revise ${revisionSubmissions[0].topic}`
+                      : activeDailyCourse?.currentTopic || dailyTarget.topic}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {/* Real Study Timer */}
+                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${borderClass} ${subtleBgClass} text-xs`}>
+                  <Clock className="w-3.5 h-3.5 text-[var(--accent-600)]" />
+                  <span className={`font-mono tabular-nums font-semibold ${textPrimary}`}>
+                    {String(Math.floor(sessionSeconds / 60)).padStart(2, '0')}:{String(sessionSeconds % 60).padStart(2, '0')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSessionRunning((r) => !r)}
+                    className="text-[var(--accent-600)] font-semibold hover:underline cursor-pointer"
+                  >
+                    {sessionRunning ? <span className="inline-flex items-center gap-1"><Pause className="w-3 h-3" /> Pause</span> : 'Start Timer'}
+                  </button>
+                  {sessionSeconds > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSaveStudySession}
+                      className="text-[var(--success-ink)] font-semibold hover:underline cursor-pointer"
+                    >
+                      Save Session
+                    </button>
+                  )}
+                </div>
+
+                {dailyTarget.status !== 'Demonstrated' && (
+                  <button
+                    type="button"
+                    onClick={handleMarkLessonComplete}
+                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> Mark Lesson Complete
+                  </button>
+                )}
+
+                {revisionSubmissions[0] && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rev = revisionSubmissions[0];
+                      setResubmitParentId(rev.id);
+                      setCodeDraft(rev.code);
+                      setDailyStage(3);
+                    }}
+                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
+                  >
+                    <Repeat className="w-3.5 h-3.5 text-[var(--warning-ink)]" /> Continue Unfinished Work
+                  </button>
+                )}
+
+                {activeDailyCourse?.url && (
+                  <a
+                    href={activeDailyCourse.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
+                  >
+                    Open Resource <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+
+                {activeDailyMaterials.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMaterialsModalMode('browse');
+                      setMaterialsModalPackId(activeDailyMaterials[0].id);
+                      setShowMaterialsModal(true);
+                    }}
+                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
+                  >
+                    <FolderArchive className="w-3.5 h-3.5" /> Open Materials
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Lesson rail: where you are in today's five steps */}
           <aside className="lg:col-span-3 lg:sticky lg:top-6 space-y-4 min-w-0">
             <div className={`${cardClass} p-5 space-y-3`}>
@@ -1249,18 +1665,18 @@ export const LearningSection = ({
                     )}
                     <span className="space-y-0.5">
                       <span className={`block text-base font-medium ${textPrimary}`}>
-                        {submissionKind === 'zip' ? 'Choose a .zip of your practice project' : 'Choose one or more code files'}
+                        {submissionKind === 'zip' ? 'Choose a .zip of your practice project' : 'Choose code or document attachments'}
                       </span>
                       <span className={`block text-sm ${textSecondary}`}>
                         {submissionKind === 'zip'
-                          ? 'Up to 2 MB. node_modules is skipped for you.'
-                          : '.js, .ts, .py, .html, .css, .java, .c, .cpp or .php'}
+                          ? 'Up to 10 MB. Videos & executables are blocked automatically.'
+                          : '.js, .ts, .py, .html, .css, .md, .txt, .pdf, .docx'}
                       </span>
                     </span>
                     <input
                       type="file"
                       multiple={submissionKind === 'files'}
-                      accept={submissionKind === 'zip' ? '.zip' : '.js,.jsx,.ts,.tsx,.py,.html,.css,.java,.c,.cpp,.php,.json,.md,.txt'}
+                      accept={submissionKind === 'zip' ? '.zip' : '.js,.jsx,.ts,.tsx,.py,.html,.css,.java,.c,.cpp,.php,.json,.md,.txt,.pdf,.docx'}
                       onChange={handleFileInputChange}
                       className="sr-only"
                     />
@@ -1605,6 +2021,8 @@ export const LearningSection = ({
                                       : sub
                                   );
                                   setCodeSubmissions(updated);
+                                  const changed = updated.find((u) => u.id === latestTopicSubmission.id);
+                                  if (changed) saveLearningSubmission(changed, user.id).catch(() => {});
                                   onNotify('Saved your explanation!');
                                 }}
                                 className={stageSecondary}
@@ -1648,56 +2066,287 @@ export const LearningSection = ({
           )}
           </div>
         </div>
+        </div>
       )}
 
-      {/* 2. MY COURSES */}
+      {/* 2. MY COURSES & IMPORTED MATERIALS */}
       {subTab === 'courses' && (
         <div data-tour="learning-courses" className="space-y-6">
+          {/* Course Filter & Search Controls */}
+          <div className={`${cardClass} p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-center`}>
+            <div className="relative md:col-span-5">
+              <Search className={`w-4 h-4 absolute left-3 top-3 ${textSecondary}`} />
+              <input
+                type="text"
+                value={courseSearch}
+                onChange={(e) => setCourseSearch(e.target.value)}
+                placeholder="Search courses by title, instructor, or subject..."
+                className={`${inputClass} !pl-9`}
+              />
+            </div>
+            <div className="md:col-span-4">
+              <select
+                aria-label="Filter by platform"
+                value={coursePlatformFilter}
+                onChange={(e) => setCoursePlatformFilter(e.target.value)}
+                className={inputClass}
+              >
+                <option value="ALL">All Platforms & Sources</option>
+                <option value="Udemy">Udemy</option>
+                <option value="Coursera">Coursera</option>
+                <option value="YouTube">YouTube</option>
+                <option value="Downloaded Course">Downloaded Course</option>
+                <option value="Self-Directed">Self-Directed</option>
+                <option value="freeCodeCamp">freeCodeCamp</option>
+              </select>
+            </div>
+            <div className="md:col-span-3">
+              <select
+                aria-label="Filter by learning status"
+                value={courseStatusFilter}
+                onChange={(e) => setCourseStatusFilter(e.target.value as any)}
+                className={inputClass}
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Not Started">Not Started</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Paused">Paused</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Imported Course Materials Library Strip */}
+          {importedMaterials.length > 0 && (
+            <div className={`${cardClass} p-5 space-y-3`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <FolderArchive className="w-4 h-4 text-[var(--accent-600)]" />
+                  <h2 className={`text-base font-semibold ${textPrimary}`}>
+                    Downloaded Course Materials ({importedMaterials.length})
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMaterialsModalMode('browse');
+                    setMaterialsModalPackId(importedMaterials[0]?.id || null);
+                    setShowMaterialsModal(true);
+                  }}
+                  className={`${btnSecondary} !px-3 !py-1.5 text-xs`}
+                >
+                  Browse All Packs
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {importedMaterials.map((pack) => {
+                  const linkedCourse = courses.find((c) => c.id === pack.linkedCourseId);
+                  return (
+                    <div key={pack.id} className={`p-3.5 rounded-xl border ${borderClass} ${subtleBgClass} space-y-2`}>
+                      <div className={`text-sm font-semibold truncate ${textPrimary}`}>{pack.title}</div>
+                      <div className={`text-xs ${textSecondary}`}>
+                        {pack.totalFiles} files · {pack.folders.length} folder{pack.folders.length === 1 ? '' : 's'}
+                        {pack.skippedVideoCount > 0 ? ` · ${pack.skippedVideoCount} videos kept local` : ''}
+                      </div>
+                      {linkedCourse && (
+                        <div className="text-xs text-[var(--accent-600)] truncate">Linked to: {linkedCourse.title}</div>
+                      )}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMaterialsModalMode('browse');
+                            setMaterialsModalPackId(pack.id);
+                            setShowMaterialsModal(true);
+                          }}
+                          className={`${btnSecondary} !px-3 !py-1.5 text-xs`}
+                        >
+                          Browse Files
+                        </button>
+                        {!linkedCourse && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cid = `course-${Date.now()}`;
+                              const created: CourseItem = {
+                                id: cid,
+                                title: pack.title,
+                                platform: 'Downloaded Course',
+                                url: '',
+                                instructor: 'Local Course Archive',
+                                field: profile.field || 'Software Development',
+                                skillLevel: profile.skillLevel || 'Beginner',
+                                status: 'In Progress',
+                                goals: `Study imported course materials (${pack.totalFiles} files)`,
+                                description: `Imported from ${pack.archiveName}`,
+                                targetDate: 'Self-paced',
+                                progress: 0,
+                                currentTopic: pack.outline[0] || pack.files[0]?.name || 'Getting Started',
+                                weeklyTarget: 'Work through imported chapters & exercises',
+                                lastStudied: 'Just added',
+                                notes: '',
+                                linkedMaterialPackIds: [pack.id],
+                                videoRefs: [],
+                                modules: (pack.outline.length ? pack.outline : pack.files.slice(0, 12).map((f) => f.name)).map(
+                                  (title, idx) => ({ id: `mod-${Date.now()}-${idx}`, title, completed: false })
+                                ),
+                              };
+                              setCourses((prev) => [created, ...prev]);
+                              setImportedMaterials((prev) =>
+                                prev.map((p) => (p.id === pack.id ? { ...p, linkedCourseId: cid } : p))
+                              );
+                              onNotify(`Created course "${created.title}" from imported archive.`);
+                            }}
+                            className={`${btnPrimary} !px-3 !py-1.5 text-xs`}
+                          >
+                            Create Course
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {courses.length === 0 ? (
             <EmptyState
               title="No courses linked yet"
-              description="Learning from YouTube, Udemy, Coursera, freeCodeCamp, or downloaded notes? Add it here so Dev Hub can break it into daily lessons and spot any roadmap gaps."
+              description="Learning from Udemy, Coursera, YouTube, downloaded ZIP archives, or self-directed notes? Add a course or import materials here."
               actionLabel="Add a Course"
               onAction={() => setShowAddCourseModal(true)}
             />
+          ) : filteredCourses.length === 0 ? (
+            <EmptyState
+              title="No matching courses"
+              description="Try clearing the search or platform filter to view all courses."
+              actionLabel="Reset Filters"
+              onAction={() => {
+                setCourseSearch('');
+                setCoursePlatformFilter('ALL');
+                setCourseStatusFilter('ALL');
+              }}
+            />
           ) : (
             <div className="space-y-5">
-              {courses.map((course) => {
+              {filteredCourses.map((course) => {
                 const plan = learningPlans.find((p) => p.courseId === course.id);
                 const busyPlan = planBusyId === course.id;
                 const modulesOpen = openCourseIds[course.id] ?? false;
                 const embedOpen = showEmbedForId[course.id] ?? false;
+                const courseStatus: CourseLearningStatus =
+                  course.status || (course.progress === 100 ? 'Completed' : course.progress > 0 ? 'In Progress' : 'Not Started');
+                const linkedPacks = importedMaterials.filter(
+                  (p) => p.linkedCourseId === course.id || (course.linkedMaterialPackIds || []).includes(p.id)
+                );
+                const videoRefs = course.videoRefs || [];
+                const newModTitle = newModuleDraftByCourse[course.id] || '';
 
                 return (
                   <div key={course.id} className={`${cardClass} p-5 sm:p-6 space-y-5`}>
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
-                      <div className="space-y-3 max-w-2xl min-w-0">
+                      <div className="space-y-2.5 max-w-2xl min-w-0">
                         <p className={`text-xs flex flex-wrap items-center gap-1.5 ${textSecondary}`}>
                           <span className="font-semibold text-[var(--accent-600)]">{course.platform}</span>
                           {course.sources && course.sources.length > 1 && (
                             <span>({course.sources.join(' + ')})</span>
                           )}
                           <span>· {course.skillLevel} · {course.field}</span>
+                          {course.instructor && <span>· {course.instructor}</span>}
                           {course.isPlaylist && <Badge variant="info">Playlist</Badge>}
                         </p>
                         <h2 className={`text-2xl break-words ${textPrimary}`}>{course.title}</h2>
-                        <p className={`text-sm ${textSecondary}`}>
-                          Now on <strong className={textPrimary}>{course.currentTopic}</strong>
-                        </p>
-                        {course.goals && <p className={`text-sm leading-relaxed max-w-[62ch] ${textSecondary}`}>{course.goals}</p>}
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                          <span className={textSecondary}>
+                            Now on <strong className={textPrimary}>{course.currentTopic}</strong>
+                          </span>
+                          <select
+                            aria-label={`Learning status for ${course.title}`}
+                            value={courseStatus}
+                            onChange={(e) =>
+                              setCourses(
+                                courses.map((c) =>
+                                  c.id === course.id ? { ...c, status: e.target.value as CourseLearningStatus } : c
+                                )
+                              )
+                            }
+                            className={`${inputClass} !w-auto !py-1 !px-2.5 text-xs`}
+                          >
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Paused">Paused</option>
+                            <option value="Completed">Completed</option>
+                          </select>
+                        </div>
+                        {(course.description || course.goals) && (
+                          <p className={`text-sm leading-relaxed max-w-[62ch] ${textSecondary}`}>
+                            {course.description || course.goals}
+                          </p>
+                        )}
                       </div>
-                      <div className="md:text-right shrink-0">
-                        <div className={`font-display text-5xl leading-none tabular-nums ${textPrimary}`}>{course.progress}<span className="text-2xl">%</span></div>
-                        <div className={`mt-1 text-xs tabular-nums ${textSecondary}`}>
-                          {course.modules.filter((m) => m.completed).length} of {course.modules.length} modules
+                      <div className="md:text-right shrink-0 space-y-2">
+                        <div>
+                          <div className={`font-display text-5xl leading-none tabular-nums ${textPrimary}`}>
+                            {course.progress}<span className="text-2xl">%</span>
+                          </div>
+                          <div className={`mt-1 text-xs tabular-nums ${textSecondary}`}>
+                            {course.modules.filter((m) => m.completed).length} of {course.modules.length} modules
+                          </div>
+                        </div>
+                        <div className="flex md:justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingCourse(course)}
+                            className={`${btnSecondary} !px-2.5 !py-1.5 text-xs`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          {confirmDeleteCourseId === course.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCourses(courses.filter((c) => c.id !== course.id));
+                                  setConfirmDeleteCourseId(null);
+                                  onNotify(`Removed "${course.title}".`);
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--danger-ink)] text-white cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteCourseId(null)}
+                                className={`${btnSecondary} !px-2.5 !py-1.5 text-xs`}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`Remove ${course.title}`}
+                              onClick={() => setConfirmDeleteCourseId(course.id)}
+                              className={`${btnSecondary} !px-2.5 !py-1.5 text-xs hover:text-[var(--danger-ink)]`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* One segment per module: progress you can count */}
+                    {/* One segment per module */}
                     <div className="flex gap-1" role="img" aria-label={`${course.progress}% of modules complete`}>
                       {course.modules.map((m) => (
-                        <span key={m.id} title={m.title} className={`h-2.5 flex-1 rounded-sm ${m.completed ? 'bg-[var(--spark)]' : course.currentTopic === m.title ? 'bg-[var(--accent-500)]' : 'bg-[var(--border-hairline)]'}`} />
+                        <span
+                          key={m.id}
+                          title={m.title}
+                          className={`h-2.5 flex-1 rounded-sm ${
+                            m.completed ? 'bg-[var(--spark)]' : course.currentTopic === m.title ? 'bg-[var(--accent-500)]' : 'bg-[var(--border-hairline)]'
+                          }`}
+                        />
                       ))}
                     </div>
 
@@ -1725,6 +2374,37 @@ export const LearningSection = ({
                       </div>
                     )}
 
+                    {/* Connected Materials + Manual Video Bookmarks */}
+                    {(linkedPacks.length > 0 || videoRefs.length > 0) && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {linkedPacks.map((pack) => (
+                          <button
+                            key={pack.id}
+                            type="button"
+                            onClick={() => {
+                              setMaterialsModalMode('browse');
+                              setMaterialsModalPackId(pack.id);
+                              setShowMaterialsModal(true);
+                            }}
+                            className={`${btnSecondary} !px-3 !py-1.5 text-xs`}
+                          >
+                            <FolderArchive className="w-3.5 h-3.5 text-[var(--accent-600)]" />
+                            {pack.title} ({pack.totalFiles} files)
+                          </button>
+                        ))}
+                        {videoRefs.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingCourse(course)}
+                            className={`${btnSecondary} !px-3 !py-1.5 text-xs`}
+                          >
+                            <Video className="w-3.5 h-3.5 text-[var(--accent-600)]" />
+                            {videoRefs.filter((v) => v.completed).length}/{videoRefs.length} Video Links Tracked
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Actions + Notes */}
                     <div className={`pt-4 border-t ${borderClass} grid grid-cols-1 lg:grid-cols-12 gap-5 items-start`}>
                       <div className="lg:col-span-5 space-y-4">
@@ -1734,6 +2414,18 @@ export const LearningSection = ({
                               Open Resource <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMaterialsModalMode('import');
+                              setMaterialsModalCourseId(course.id);
+                              setMaterialsModalPackId(linkedPacks[0]?.id || null);
+                              setShowMaterialsModal(true);
+                            }}
+                            className={btnSecondary}
+                          >
+                            <Upload className="w-3.5 h-3.5" /> Import ZIP
+                          </button>
                           <button
                             type="button"
                             disabled={busyPlan}
@@ -1774,76 +2466,117 @@ export const LearningSection = ({
                         </button>
 
                         {modulesOpen && (
-                          <div className={`divide-y ${borderClass} border-t ${borderClass}`}>
-                            {course.modules.map((mod) => {
-                              const isCurrent = course.currentTopic === mod.title && !mod.completed;
-                              return (
-                                <div
-                                  key={mod.id}
-                                  className="py-2.5 flex flex-wrap items-center justify-between gap-2"
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const nextModules = course.modules.map((m) =>
-                                        m.id === mod.id ? { ...m, completed: !m.completed } : m
-                                      );
-                                      const done = nextModules.filter((m) => m.completed).length;
-                                      const nextProgress = Math.round((done / nextModules.length) * 100);
-                                      setCourses(
-                                        courses.map((c) =>
-                                          c.id === course.id
-                                            ? {
-                                                ...c,
-                                                modules: nextModules,
-                                                progress: nextProgress,
-                                                currentTopic: nextModules.find((m) => !m.completed)?.title || c.currentTopic,
-                                                lastStudied: 'Today',
-                                              }
-                                            : c
-                                        )
-                                      );
-                                    }}
-                                    className="flex items-center gap-2.5 text-left flex-1 cursor-pointer min-w-0"
+                          <div className="space-y-3">
+                            <div className={`divide-y ${borderClass} border-t ${borderClass}`}>
+                              {course.modules.map((mod) => {
+                                const isCurrent = course.currentTopic === mod.title && !mod.completed;
+                                return (
+                                  <div
+                                    key={mod.id}
+                                    className="py-2.5 flex flex-wrap items-center justify-between gap-2"
                                   >
-                                    {mod.completed ? (
-                                      <CheckCircle2 className="w-4 h-4 text-[var(--success-ink)] shrink-0" />
-                                    ) : (
-                                      <Circle className={`w-4 h-4 shrink-0 ${isCurrent ? 'text-[var(--accent-600)]' : textSecondary}`} />
-                                    )}
-                                    <span
-                                      className={`text-xs truncate ${
-                                        mod.completed
-                                          ? 'line-through opacity-60'
-                                          : isCurrent
-                                            ? 'font-semibold text-[var(--accent-600)]'
-                                            : `font-medium ${textPrimary}`
-                                      }`}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextModules = course.modules.map((m) =>
+                                          m.id === mod.id ? { ...m, completed: !m.completed } : m
+                                        );
+                                        const done = nextModules.filter((m) => m.completed).length;
+                                        const nextProgress = Math.round((done / nextModules.length) * 100);
+                                        setCourses(
+                                          courses.map((c) =>
+                                            c.id === course.id
+                                              ? {
+                                                  ...c,
+                                                  modules: nextModules,
+                                                  progress: nextProgress,
+                                                  status: nextProgress === 100 ? 'Completed' : nextProgress > 0 ? 'In Progress' : c.status,
+                                                  currentTopic: nextModules.find((m) => !m.completed)?.title || c.currentTopic,
+                                                  lastStudied: 'Today',
+                                                }
+                                              : c
+                                          )
+                                        );
+                                      }}
+                                      className="flex items-center gap-2.5 text-left flex-1 cursor-pointer min-w-0"
                                     >
-                                      {mod.title}
-                                    </span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDailyTarget({
-                                        ...dailyTarget,
-                                        courseId: course.id,
-                                        courseTitle: course.title,
-                                        topic: mod.title,
-                                        recommendedLesson: mod.title,
-                                        status: 'In Progress',
-                                      });
-                                      setDailyStage(1);
-                                      setSubTab('today');
-                                    }}
-                                    className="text-xs font-medium text-[var(--accent-600)] hover:underline shrink-0 cursor-pointer"
-                                  >
-                                    Study Today →
-                                  </button>
-                                </div>
-                              );
-                            })}
+                                      {mod.completed ? (
+                                        <CheckCircle2 className="w-4 h-4 text-[var(--success-ink)] shrink-0" />
+                                      ) : (
+                                        <Circle className={`w-4 h-4 shrink-0 ${isCurrent ? 'text-[var(--accent-600)]' : textSecondary}`} />
+                                      )}
+                                      <span
+                                        className={`text-xs truncate ${
+                                          mod.completed
+                                            ? 'line-through opacity-60'
+                                            : isCurrent
+                                              ? 'font-semibold text-[var(--accent-600)]'
+                                              : `font-medium ${textPrimary}`
+                                        }`}
+                                      >
+                                        {mod.title}
+                                      </span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDailyTarget({
+                                          ...dailyTarget,
+                                          courseId: course.id,
+                                          courseTitle: course.title,
+                                          sourceType: 'course',
+                                          topic: mod.title,
+                                          recommendedLesson: mod.title,
+                                          status: 'In Progress',
+                                        });
+                                        setDailyStage(1);
+                                        setSubTab('today');
+                                      }}
+                                      className="text-xs font-medium text-[var(--accent-600)] hover:underline shrink-0 cursor-pointer"
+                                    >
+                                      Study Today →
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newModTitle}
+                                onChange={(e) =>
+                                  setNewModuleDraftByCourse((prev) => ({ ...prev, [course.id]: e.target.value }))
+                                }
+                                placeholder="Add a module or lesson..."
+                                className={`${inputClass} !py-1.5 text-xs`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!newModTitle.trim()) return;
+                                  const nextModules = [
+                                    ...course.modules,
+                                    { id: `mod-${Date.now()}`, title: newModTitle.trim(), completed: false },
+                                  ];
+                                  const done = nextModules.filter((m) => m.completed).length;
+                                  setCourses(
+                                    courses.map((c) =>
+                                      c.id === course.id
+                                        ? {
+                                            ...c,
+                                            modules: nextModules,
+                                            progress: Math.round((done / nextModules.length) * 100),
+                                          }
+                                        : c
+                                    )
+                                  );
+                                  setNewModuleDraftByCourse((prev) => ({ ...prev, [course.id]: '' }));
+                                }}
+                                className={`${btnSecondary} !py-1.5 text-xs`}
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Add
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1933,14 +2666,14 @@ export const LearningSection = ({
                 <input
                   type="file"
                   multiple
-                  accept=".zip,.pdf,.doc,.docx,.txt,.md,.ppt,.pptx"
+                  accept=".zip,.pdf,.doc,.docx,.txt,.md"
                   onChange={(e) => {
                     handleCourseMaterialUpload(e.target.files);
                     e.target.value = '';
                   }}
                   className={`block w-full text-xs ${textSecondary} file:mr-3 file:min-h-10 file:px-3.5 file:rounded-lg file:border ${borderClass} file:bg-[var(--surface-elevated)] file:text-[var(--ink-primary)] file:cursor-pointer`}
                 />
-                <p className={`text-[11px] mt-1 ${textSecondary}`}>Extracts folders, PDFs, notes & starter code automatically. Video/audio files are skipped.</p>
+                <p className={`text-[11px] mt-1 ${textSecondary}`}>Extracts folders, PDFs, notes & starter code safely. Video/audio files remain on your device.</p>
                 {courseUploadBusy && <p className={`text-xs mt-1 ${textSecondary}`}>Reading course archive…</p>}
                 {courseUploadNote && <p className={`text-xs mt-1 ${textSecondary}`}>{courseUploadNote}</p>}
               </div>
@@ -1968,9 +2701,9 @@ export const LearningSection = ({
                     <option value="YouTube">YouTube (Video or Playlist)</option>
                     <option value="Udemy">Udemy</option>
                     <option value="Coursera">Coursera</option>
-                    <option value="freeCodeCamp">freeCodeCamp</option>
                     <option value="Downloaded Course">Downloaded Course (.zip / Local)</option>
-                    <option value="PDF / Personal Notes">PDF / Personal Notes</option>
+                    <option value="Self-Directed">Self-Directed</option>
+                    <option value="freeCodeCamp">freeCodeCamp</option>
                     <option value="Official Documentation">Official Documentation</option>
                     <option value="Other">Other</option>
                   </select>
@@ -1985,12 +2718,35 @@ export const LearningSection = ({
                     className={inputClass}
                   />
                 </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Instructor / Creator</label>
+                  <input
+                    type="text"
+                    value={newCourseForm.instructor}
+                    onChange={(e) => setNewCourseForm({ ...newCourseForm, instructor: e.target.value })}
+                    placeholder="e.g., Brad Traversy / Self-Paced"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Status</label>
+                  <select
+                    value={newCourseForm.status}
+                    onChange={(e) => setNewCourseForm({ ...newCourseForm, status: e.target.value as CourseLearningStatus })}
+                    className={inputClass}
+                  >
+                    <option value="Not Started">Not Started</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Paused">Paused</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
               </div>
 
               <div>
                 <span className={`block text-xs font-medium mb-1.5 ${textSecondary}`}>Combine Multiple Sources (Optional)</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {['YouTube', 'Udemy', 'Coursera', 'Downloaded Course', 'Official Docs'].map((src) => {
+                  {['YouTube', 'Udemy', 'Coursera', 'Downloaded Course', 'Self-Directed'].map((src) => {
                     const active = courseSourcesDraft.includes(src);
                     return (
                       <button
@@ -2022,7 +2778,7 @@ export const LearningSection = ({
               </div>
 
               <div>
-                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Short Description / Goal</label>
+                <label className={`block text-xs font-medium mb-1 ${textSecondary}`}>Description / Goal</label>
                 <input
                   type="text"
                   value={newCourseForm.goals}
@@ -2063,13 +2819,41 @@ export const LearningSection = ({
         </div>
       )}
 
+      {/* 2B. PLANS & SELF-DIRECTED LEARNING */}
+      {subTab === 'plans' && (
+        <SelfDirectedAndPlansPanel
+          profile={profile}
+          courses={courses}
+          selectedRoadmap={selectedRoadmap}
+          learningPlans={learningPlans}
+          setLearningPlans={setLearningPlans}
+          selfDirectedTopics={selfDirectedTopics}
+          setSelfDirectedTopics={setSelfDirectedTopics}
+          importedMaterials={importedMaterials}
+          dailyTarget={dailyTarget}
+          setDailyTarget={setDailyTarget}
+          onStartDailyTask={(task) => {
+            setDailyTarget(task);
+            setDailyStage(1);
+            setSubTab('today');
+          }}
+          onOpenMaterialsModal={(packId) => {
+            setMaterialsModalMode('browse');
+            setMaterialsModalPackId(packId || importedMaterials[0]?.id || null);
+            setShowMaterialsModal(true);
+          }}
+          onNotify={onNotify}
+          styles={styles}
+        />
+      )}
+
       {/* 3. SUBMISSIONS & FEEDBACK HISTORY */}
       {subTab === 'submissions' && (
         <div className="space-y-4">
           {codeSubmissions.length === 0 ? (
             <EmptyState
-              title="No code submissions yet"
-              description="Finish today’s small exercise and submit your code or notes to get step-by-step feedback."
+              title="No submissions yet"
+              description="Finish today’s small exercise and submit your code, documents, or notes to get step-by-step feedback."
               actionLabel="Go to today’s learning"
               onAction={() => {
                 setDailyStage(2);
@@ -2078,70 +2862,139 @@ export const LearningSection = ({
             />
           ) : (
             <>
-              <p className={`text-sm ${textSecondary}`}>{codeSubmissions.length} submission{codeSubmissions.length === 1 ? '' : 's'}, newest first. Open one to see your code beside the feedback.</p>
-              {codeSubmissions.map((sub, i) => (
-                <details key={sub.id} open={i === 0} className={`${cardClass} group overflow-hidden`}>
-                  <summary className="list-none cursor-pointer px-5 py-4 flex flex-wrap items-center gap-x-4 gap-y-1 [&::-webkit-details-marker]:hidden">
-                    <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90 text-[var(--accent-600)]" />
-                    <span className="min-w-0 flex-1">
-                      <span className={`block text-xs ${textSecondary}`}>v{sub.version} · {sub.language} · {sub.createdAt}{sub.review ? ` · ${sub.review.analysisTypeLabel}` : ''}</span>
-                      <span className={`block text-base font-semibold ${textPrimary}`}>{sub.exerciseTitle} <span className={`font-normal ${textSecondary}`}>({sub.topic})</span></span>
-                    </span>
-                    <Badge variant={sub.review ? 'success' : 'info'}>{sub.review ? 'Reviewed' : 'Waiting'}</Badge>
-                  </summary>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className={`text-sm ${textSecondary}`}>
+                  {filteredSubmissions.length} of {codeSubmissions.length} submission{codeSubmissions.length === 1 ? '' : 's'}, newest first.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['ALL', 'Needs Revision', 'Reviewed', 'Demonstrated', 'Submitted'] as const).map((statusOpt) => (
+                    <button
+                      key={statusOpt}
+                      type="button"
+                      onClick={() => setSubmissionStatusFilter(statusOpt)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
+                        submissionStatusFilter === statusOpt
+                          ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)]'
+                          : `${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)]`
+                      }`}
+                    >
+                      {statusOpt === 'ALL' ? 'All' : statusOpt}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                  <div className={`border-t ${borderClass} p-5 space-y-4`}>
-                    {sub.explanation && (
-                      <p className={`text-sm ${textSecondary}`}><strong className={textPrimary}>Your notes:</strong> {sub.explanation}</p>
-                    )}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-                      <div className="space-y-4 min-w-0">
-                        {sub.code && (
-                          <pre className={`p-4 border ${borderClass} ${subtleBgClass} text-xs overflow-x-auto max-h-96 ${textPrimary}`}>{sub.code}</pre>
-                        )}
-                        {sub.sandboxExecuted && (
-                          <div className={`p-3 rounded-lg ${subtleBgClass} text-xs`}>
-                            <span className="font-semibold text-[var(--accent-600)]">Sandbox output:</span>{' '}
-                            <span className={`font-mono ${textSecondary}`}>{sub.sandboxOutput}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-4 min-w-0">
-                        {sub.review ? (
-                          <>
-                            <div className="border-l-4 border-[var(--success-ink)] pl-4 space-y-1">
-                              <div className="text-sm font-semibold text-[var(--success-ink)]">What you did well</div>
-                              <p className={`text-sm leading-relaxed ${textPrimary}`}>{sub.review.whatYouDidWell}</p>
+              {filteredSubmissions.map((sub, i) => {
+                const subStatus =
+                  sub.status ||
+                  (sub.review?.recommendedStatus === 'Needs Revision'
+                    ? 'Needs Revision'
+                    : sub.review?.recommendedStatus === 'Demonstrated'
+                      ? 'Demonstrated'
+                      : sub.review
+                        ? 'Reviewed'
+                        : 'Submitted');
+                const badgeVariant =
+                  subStatus === 'Demonstrated' || subStatus === 'Reviewed'
+                    ? 'success'
+                    : subStatus === 'Needs Revision'
+                      ? 'warning'
+                      : 'info';
+
+                return (
+                  <details key={sub.id} open={i === 0} className={`${cardClass} group overflow-hidden`}>
+                    <summary className="list-none cursor-pointer px-5 py-4 flex flex-wrap items-center gap-x-4 gap-y-1 [&::-webkit-details-marker]:hidden">
+                      <ChevronRight className="w-4 h-4 shrink-0 transition-transform group-open:rotate-90 text-[var(--accent-600)]" />
+                      <span className="min-w-0 flex-1">
+                        <span className={`block text-xs ${textSecondary}`}>
+                          v{sub.version} · {sub.language} · {sub.createdAt}
+                          {sub.files?.length ? ` · ${sub.files.length} attachment(s)` : ''}
+                          {sub.review ? ` · ${sub.review.analysisTypeLabel}` : ''}
+                        </span>
+                        <span className={`block text-base font-semibold ${textPrimary}`}>
+                          {sub.exerciseTitle} <span className={`font-normal ${textSecondary}`}>({sub.topic})</span>
+                        </span>
+                      </span>
+                      <Badge variant={badgeVariant}>{subStatus}</Badge>
+                    </summary>
+
+                    <div className={`border-t ${borderClass} p-5 space-y-4`}>
+                      {sub.assignmentInstructions && (
+                        <div className={`p-3 rounded-lg ${subtleBgClass} text-xs`}>
+                          <strong className={textPrimary}>Assignment Instructions:</strong>{' '}
+                          <span className={textSecondary}>{sub.assignmentInstructions}</span>
+                        </div>
+                      )}
+                      {sub.explanation && (
+                        <p className={`text-sm ${textSecondary}`}><strong className={textPrimary}>Your notes:</strong> {sub.explanation}</p>
+                      )}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                        <div className="space-y-4 min-w-0">
+                          {sub.code && (
+                            <pre className={`p-4 border ${borderClass} ${subtleBgClass} text-xs overflow-x-auto max-h-96 ${textPrimary}`}>{sub.code}</pre>
+                          )}
+                          {sub.files && sub.files.length > 0 && (
+                            <div className="space-y-2">
+                              <div className={`text-xs font-semibold ${textPrimary}`}>Attached Files ({sub.files.length})</div>
+                              {sub.files.map((f, fIdx) => (
+                                <div key={fIdx} className={`p-2.5 rounded-lg border ${borderClass} ${subtleBgClass} text-xs space-y-1`}>
+                                  <div className={`font-medium flex items-center gap-1.5 ${textPrimary}`}>
+                                    <FileText className="w-3.5 h-3.5 text-[var(--accent-600)]" />
+                                    <span>{f.name}</span>
+                                    <span className={textSecondary}>({Math.max(1, Math.round(f.size / 1024))} KB)</span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            <div className="border-l-4 border-[var(--spark)] pl-4 space-y-1">
-                              <div className="text-sm font-semibold text-[var(--warning-ink)]">What to improve next</div>
-                              <p className={`text-sm leading-relaxed ${textPrimary}`}>{sub.review.whatNeedsImprovement}</p>
+                          )}
+                          {sub.sandboxExecuted && (
+                            <div className={`p-3 rounded-lg ${subtleBgClass} text-xs`}>
+                              <span className="font-semibold text-[var(--accent-600)]">Sandbox output:</span>{' '}
+                              <span className={`font-mono ${textSecondary}`}>{sub.sandboxOutput}</span>
                             </div>
-                          </>
-                        ) : (
-                          <p className={`text-sm ${textSecondary}`}>No feedback yet.</p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setResubmitParentId(sub.id);
-                            setSubmissionLang(sub.language === 'Written Notes' ? 'JavaScript' : sub.language);
-                            setCodeDraft(sub.code);
-                            setRepoDraft(sub.repoUrl);
-                            setExplanationDraft('');
-                            setDailyStage(3);
-                            setSubTab('today');
-                            onNotify(`Loaded v${sub.version}. Make improvements and submit v${sub.version + 1}.`);
-                          }}
-                          className={btnSecondary}
-                        >
-                          <Repeat className="w-3.5 h-3.5" /> Resubmit as v{sub.version + 1}
-                        </button>
+                          )}
+                        </div>
+                        <div className="space-y-4 min-w-0">
+                          {sub.review ? (
+                            <>
+                              <div className="border-l-4 border-[var(--success-ink)] pl-4 space-y-1">
+                                <div className="text-sm font-semibold text-[var(--success-ink)]">What you did well</div>
+                                <p className={`text-sm leading-relaxed ${textPrimary}`}>{sub.review.whatYouDidWell}</p>
+                              </div>
+                              <div className="border-l-4 border-[var(--spark)] pl-4 space-y-1">
+                                <div className="text-sm font-semibold text-[var(--warning-ink)]">What to improve next</div>
+                                <p className={`text-sm leading-relaxed ${textPrimary}`}>{sub.review.whatNeedsImprovement}</p>
+                              </div>
+                              {sub.review.nextStep && (
+                                <p className={`text-xs ${textSecondary}`}><strong className={textPrimary}>Next Step:</strong> {sub.review.nextStep}</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className={`text-sm ${textSecondary}`}>No feedback yet.</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResubmitParentId(sub.id);
+                              setSubmissionLang(sub.language === 'Written Notes' ? 'JavaScript' : sub.language);
+                              setCodeDraft(sub.code);
+                              setRepoDraft(sub.repoUrl);
+                              setUploadedFiles(sub.files || []);
+                              setExplanationDraft('');
+                              setDailyStage(3);
+                              setSubTab('today');
+                              onNotify(`Loaded v${sub.version}. Make improvements and submit v${sub.version + 1}.`);
+                            }}
+                            className={btnSecondary}
+                          >
+                            <Repeat className="w-3.5 h-3.5" /> Resubmit as v{sub.version + 1}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </details>
-              ))}
+                  </details>
+                );
+              })}
             </>
           )}
         </div>
@@ -2245,12 +3098,13 @@ export const LearningSection = ({
       {/* 5. YOUR PROGRESS */}
       {subTab === 'progress' && (
         <div className="space-y-6">
-          <dl className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4">
+          <dl className="grid grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-4">
             {[
               { label: 'Topics demonstrated', value: demonstratedTopics.length },
               { label: 'Code submissions', value: codeSubmissions.length },
               { label: 'Quizzes completed', value: quizAttempts.length },
               { label: 'Daily check-ins', value: dailyLogs.length },
+              { label: 'Study min logged', value: totalStudyMinutes },
             ].map((stat, idx) => (
               <div key={idx} className="soft-card px-5 py-4">
                 <dt className={`text-xs ${textSecondary}`}>{stat.label}</dt>
@@ -2350,6 +3204,109 @@ export const LearningSection = ({
           </div>
         </div>
       )}
+
+      {/* Course Edit Modal */}
+      <CourseEditModal
+        course={editingCourse}
+        open={Boolean(editingCourse)}
+        onClose={() => setEditingCourse(null)}
+        onSave={(updated) => {
+          setCourses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+          onNotify(`Updated "${updated.title}".`);
+        }}
+        importedMaterials={importedMaterials}
+        onOpenMaterialsModal={(packId) => {
+          setMaterialsModalMode('browse');
+          setMaterialsModalPackId(packId || importedMaterials[0]?.id || null);
+          setShowMaterialsModal(true);
+        }}
+        styles={styles}
+      />
+
+      {/* Course Materials Importer & Safe Read-Only Browser */}
+      <CourseMaterialsModal
+        open={showMaterialsModal}
+        onClose={() => setShowMaterialsModal(false)}
+        mode={materialsModalMode}
+        initialPackId={materialsModalPackId}
+        initialCourseId={materialsModalCourseId}
+        userId={user.id}
+        profile={profile}
+        courses={courses}
+        selfDirectedTopics={selfDirectedTopics}
+        importedMaterials={importedMaterials}
+        setImportedMaterials={setImportedMaterials}
+        onConnectToCourse={(packId, courseId) => {
+          setCourses((prev) =>
+            prev.map((c) =>
+              c.id === courseId
+                ? {
+                    ...c,
+                    linkedMaterialPackIds: Array.from(new Set([...(c.linkedMaterialPackIds || []), packId])),
+                  }
+                : c
+            )
+          );
+        }}
+        onCreateCourseFromPack={(pack) => {
+          const cid = `course-${Date.now()}`;
+          const created: CourseItem = {
+            id: cid,
+            title: pack.title,
+            platform: 'Downloaded Course',
+            url: '',
+            instructor: 'Local Archive',
+            field: profile.field || 'Software Development',
+            skillLevel: profile.skillLevel || 'Beginner',
+            status: 'In Progress',
+            goals: `Master imported course pack (${pack.totalFiles} files)`,
+            description: `Imported from ${pack.archiveName}`,
+            targetDate: 'Self-paced',
+            progress: 0,
+            currentTopic: pack.outline[0] || pack.files[0]?.name || 'Getting Started',
+            weeklyTarget: 'Study imported files & practice',
+            lastStudied: 'Just added',
+            notes: '',
+            linkedMaterialPackIds: [pack.id],
+            videoRefs: [],
+            modules: (pack.outline.length ? pack.outline : pack.files.slice(0, 12).map((f) => f.name)).map(
+              (title, idx) => ({ id: `mod-${Date.now()}-${idx}`, title, completed: false })
+            ),
+          };
+          setCourses((prev) => [created, ...prev]);
+          setImportedMaterials((prev) =>
+            prev.map((p) => (p.id === pack.id ? { ...p, linkedCourseId: cid } : p))
+          );
+          setShowMaterialsModal(false);
+          onNotify(`Created course "${created.title}".`);
+        }}
+        onStartDailyTaskFromFile={(pack, file) => {
+          setDailyTarget({
+            id: `mat-${file.id}`,
+            dayLabel: 'Imported Material',
+            scheduledDate: new Date().toISOString().slice(0, 10),
+            courseId: pack.linkedCourseId || courses[0]?.id || '',
+            courseTitle: pack.title,
+            sourceType: 'course',
+            topic: file.name.replace(/\.[^.]+$/, ''),
+            objective: `Study and apply concepts from ${file.path}`,
+            recommendedLesson: `${pack.title} · ${file.folder}`,
+            whatYouWillUnderstand: `Key ideas and structure in ${file.name}.`,
+            estimatedMinutes: 30,
+            exerciseTitle: `Practice: ${file.name}`,
+            exerciseInstructions: `Review ${file.path} and write a small practice snippet or summary in your own words.`,
+            exerciseRequirements: ['Summarize the key concept', 'Write or test a short example'],
+            expectedConcepts: [file.name],
+            starterHint: 'Start by tracing what the file demonstrates before modifying anything.',
+            isTheoryOnly: file.kind === 'pdf' || file.kind === 'notes',
+            status: 'In Progress',
+          });
+          setDailyStage(1);
+          setSubTab('today');
+        }}
+        onNotify={onNotify}
+        styles={styles}
+      />
     </div>
   );
 };
