@@ -234,6 +234,7 @@ export interface RoadmapTopic {
   summary?: string;
   stageTitle?: string;
   customLinks?: string[];
+  resourceUrl?: string;
 }
 
 export interface RoadmapStage {
@@ -251,6 +252,8 @@ export interface RoadmapItem {
   field: string;
   officialUrl: string;
   summary: string;
+  liveSynced?: boolean;
+  syncedAt?: string;
   whatYouWillLearn?: string[];
   stages?: RoadmapStage[];
   topics: RoadmapTopic[];
@@ -317,10 +320,15 @@ export interface QuizQuestion {
   options: string[];
   answer: string;
   explanation: string;
+  incorrectExplanation?: string;
+  distractorReasons?: Record<string, string>;
 }
 
 export interface QuizItem {
   id: string;
+  ownerId?: string;
+  isPersonal?: boolean;
+  sourceMaterialLabel?: string;
   title: string;
   courseId: string;
   topic: string;
@@ -333,18 +341,70 @@ export interface QuizItem {
   questions: QuizQuestion[];
 }
 
+export interface QuizAttemptQuestionResult {
+  questionId: string;
+  prompt: string;
+  topic: string;
+  type: string;
+  code?: string;
+  options?: string[];
+  userAnswer: string;
+  expectedAnswer: string;
+  correct: boolean;
+  explanation: string;
+  wrongAnswerReason?: string;
+  aiNote?: string;
+}
+
 export interface QuizAttempt {
   id: string;
   quizId: string;
   quizTitle: string;
   date: string;
+  submittedIso?: string;
   score: number;
   total: number;
   percentage: number;
   weakTopics: string[];
   strongTopics: string[];
   missedQuestionIds: string[];
+  correctQuestionIds?: string[];
+  flaggedQuestionIds?: string[];
+  answers?: Record<string, string>;
+  questionResults?: QuizAttemptQuestionResult[];
   aiQuestionNotes?: Record<string, string>;
+  timed?: boolean;
+  durationSecondsUsed?: number;
+  isRetryMissed?: boolean;
+  parentAttemptId?: string;
+}
+
+export interface ActiveQuizSession {
+  quiz: QuizItem;
+  currentIdx: number;
+  answers: Record<string, string>;
+  flagged: Record<string, boolean>;
+  timed: boolean;
+  durationSecondsTotal: number;
+  secondsLeft: number;
+  elapsedSeconds: number;
+  startedAtIso: string;
+  lastUpdatedIso: string;
+  reviewing: boolean;
+  isRetryMissed?: boolean;
+  parentAttemptId?: string;
+}
+
+export interface PersonalMilestone {
+  id: string;
+  title: string;
+  topic?: string;
+  sourceType: 'course' | 'roadmap' | 'self_directed' | 'custom';
+  linkedId?: string;
+  status: 'Not Started' | 'In Progress' | 'Completed';
+  targetDate?: string;
+  notes?: string;
+  order: number;
 }
 
 export interface WeeklyProjectItem {
@@ -581,7 +641,10 @@ export interface MemberMilestone {
     | 'quiz-master'
     | 'solver'
     | 'team'
-    | 'level';
+    | 'level'
+    | 'duel'
+    | 'bounty'
+    | 'trophy';
   category?: BadgeCategory;
   tone: MilestoneTone;
   current: number;
@@ -637,7 +700,21 @@ export interface MentorChatStore {
 // ---------------------------------------------------------------------------
 // XP, levels, streaks and leaderboards
 // ---------------------------------------------------------------------------
-export type XpKind = 'start' | 'lesson' | 'quiz' | 'code' | 'project' | 'help' | 'checkin' | 'streak';
+export type XpKind =
+  | 'start'
+  | 'lesson'
+  | 'quiz'
+  | 'code'
+  | 'project'
+  | 'help'
+  | 'checkin'
+  | 'streak'
+  | 'arena_win'
+  | 'arena_play'
+  | 'challenge'
+  | 'bounty'
+  | 'buildoff'
+  | 'potw';
 
 /** One thing a member did that earned XP (or counted as activity). Stored privately per member. */
 export interface LedgerEntry {
@@ -757,5 +834,318 @@ export interface StudyChatMessage {
   hidden?: boolean;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Competition Centre, Isolated Code Sandbox & Real-Time Coding Arena
+// ---------------------------------------------------------------------------
+export type ArenaLanguage = 'javascript' | 'typescript' | 'python';
+export type ArenaMatchFormat = '1v1' | '2v2';
+export type ArenaScoringType = 'speed' | 'scored';
+export type ArenaMatchStatus =
+  | 'waiting'
+  | 'ready_check'
+  | 'countdown'
+  | 'active'
+  | 'completed'
+  | 'cancelled'
+  | 'forfeited';
+
+export interface ArenaTestCase {
+  id: string;
+  label?: string;
+  args: unknown[];
+  expected: unknown;
+  hidden?: boolean;
+}
+
+export interface ArenaProblem {
+  id: string;
+  title: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  category: string;
+  timeLimitSeconds: number;
+  scoringRule: string;
+  description: string;
+  constraints: string[];
+  examples: { input: string; output: string; explanation?: string }[];
+  entryPoint: string;
+  starterCode: Record<ArenaLanguage, string>;
+  testCases: ArenaTestCase[];
+}
+
+export interface SandboxTestResult {
+  testId: string;
+  label: string;
+  hidden: boolean;
+  passed: boolean;
+  actual?: string;
+  expected?: string;
+  error?: string;
+  runtimeMs: number;
+}
+
+export interface SandboxExecutionResult {
+  ok: boolean;
+  language: ArenaLanguage;
+  isolationMode: string;
+  passedCount: number;
+  totalCount: number;
+  hiddenPassed: number;
+  hiddenTotal: number;
+  allPassed: boolean;
+  stdout: string;
+  error?: string;
+  runtimeMs: number;
+  results: SandboxTestResult[];
+}
+
+export interface SandboxStatus {
+  mode: 'isolated_subprocess';
+  label: string;
+  languages: ArenaLanguage[];
+  limits: {
+    wallTimeoutMs: number;
+    cpuSeconds: number;
+    memoryMb: number;
+    maxOutputKb: number;
+  };
+}
+
+export interface ArenaParticipant {
+  userId: string;
+  name: string;
+  teamId: string;
+  ready: boolean;
+  connected: boolean;
+  disconnectedAtMs?: number | null;
+  lastSeenAt: string;
+  forfeited: boolean;
+}
+
+export interface ArenaTeamChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface ArenaTeamSubmission {
+  id: string;
+  teamId: string;
+  submittedByUserId: string;
+  submittedByName: string;
+  language: ArenaLanguage;
+  passedCount: number;
+  totalCount: number;
+  hiddenPassed: number;
+  hiddenTotal: number;
+  score: number;
+  runtimeMs: number;
+  allPassed: boolean;
+  error?: string;
+  submittedAtIso: string;
+  submittedAtMs: number;
+}
+
+export interface ArenaTeamPrivateState {
+  activeLanguage: ArenaLanguage;
+  codeByLanguage: Record<ArenaLanguage, string>;
+  lastEditedBy?: string;
+  lastEditedAt?: string;
+  teamChat: ArenaTeamChatMessage[];
+  lastRun?: SandboxExecutionResult | null;
+}
+
+export interface ArenaTeamView {
+  teamId: string;
+  label: string;
+  memberIds: string[];
+  bestScore: number;
+  passedCount: number;
+  totalCount: number;
+  allPassed: boolean;
+  submitted: boolean;
+  lastSubmissionAtMs: number | null;
+  forfeited: boolean;
+  /** Only populated by the server for members of this team (never sent to opponents). */
+  privateState?: ArenaTeamPrivateState;
+}
+
+export interface ArenaMatchView {
+  id: string;
+  title: string;
+  format: ArenaMatchFormat;
+  teamSize: number;
+  scoringType: ArenaScoringType;
+  problemId: string;
+  problem: Omit<ArenaProblem, 'testCases'> & {
+    visibleTests: ArenaTestCase[];
+    totalTestsCount: number;
+    hiddenTestsCount: number;
+  };
+  allowedLanguages: ArenaLanguage[];
+  durationSeconds: number;
+  status: ArenaMatchStatus;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  countdownEndsAtMs: number | null;
+  startedAtMs: number | null;
+  endsAtMs: number | null;
+  endedAtMs: number | null;
+  winnerTeamId: string | null;
+  winReason?: string;
+  participants: ArenaParticipant[];
+  teams: Record<string, ArenaTeamView>;
+  submissions: ArenaTeamSubmission[];
+  serverNowMs: number;
+}
+
+export interface ArenaChallengeSubmission {
+  id: string;
+  userId: string;
+  userName: string;
+  language?: ArenaLanguage;
+  passedCount?: number;
+  totalCount?: number;
+  allPassed?: boolean;
+  score?: number;
+  repoUrl?: string;
+  explanation: string;
+  submittedAt: string;
+  status: 'Verified' | 'Submitted' | 'Reviewed' | 'Needs Revision';
+  judgeNote?: string;
+}
+
+export interface ArenaChallengeItem {
+  id: string;
+  cadence: 'daily' | 'weekly';
+  kind: 'code' | 'build';
+  title: string;
+  category: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  deadline: string;
+  xpReward: number;
+  problemId?: string;
+  description: string;
+  objectives: string[];
+  submissions: ArenaChallengeSubmission[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface TeamBuildOffEntry {
+  id: string;
+  teamName: string;
+  memberIds: string[];
+  memberNames: string[];
+  repoUrl: string;
+  demoUrl: string;
+  summary: string;
+  submittedAt: string;
+  judgeScore?: number;
+  judgeFeedback?: string;
+  isWinner?: boolean;
+}
+
+export interface TeamBuildOff {
+  id: string;
+  title: string;
+  theme: string;
+  description: string;
+  teamSizeMin: number;
+  teamSizeMax: number;
+  deadline: string;
+  xpReward: number;
+  status: 'Open' | 'Judging' | 'Completed';
+  entries: TeamBuildOffEntry[];
+  winnerEntryId?: string | null;
+  createdAt: string;
+}
+
+export interface ProjectOfTheWeekNomination {
+  id: string;
+  weekLabel: string;
+  title: string;
+  authorId: string;
+  authorName: string;
+  summary: string;
+  repoUrl: string;
+  demoUrl: string;
+  technologies: string[];
+  voterIds: string[];
+  isWinner: boolean;
+  judgeNote?: string;
+  createdAt: string;
+}
+
+export interface BountySubmission {
+  id: string;
+  claimantId: string;
+  claimantName: string;
+  repoUrl: string;
+  notes: string;
+  submittedAt: string;
+  status: 'Pending Review' | 'Approved' | 'Needs Revision';
+  judgeNote?: string;
+}
+
+export interface BountyItem {
+  id: string;
+  title: string;
+  category: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  description: string;
+  acceptanceCriteria: string[];
+  xpReward: number;
+  status: 'Open' | 'Claimed' | 'In Review' | 'Completed';
+  claimedById?: string;
+  claimedByName?: string;
+  submissions: BountySubmission[];
+  createdAt: string;
+}
+
+export interface SeasonalCompetition {
+  id: string;
+  name: string;
+  theme: string;
+  startDate: string;
+  endDate: string;
+  status: 'Active' | 'Completed';
+  prizeSummary: string;
+}
+
+export interface SeasonStandingRow {
+  userId: string;
+  userName: string;
+  seasonPoints: number;
+  duelWins: number;
+  duelsPlayed: number;
+  challengesSolved: number;
+  bountiesCompleted: number;
+  buildOffPoints: number;
+}
+
+export interface CompetitionHistoryEntry {
+  id: string;
+  kind: 'duel' | 'challenge' | 'buildoff' | 'bounty' | 'potw' | 'season';
+  title: string;
+  outcome: string;
+  winnerNames: string[];
+  participantIds: string[];
+  xpAwarded: number;
+  completedAt: string;
+}
+
+export interface CompetitionXpAwards {
+  duelWins: { matchId: string; title: string; xp: number }[];
+  duelParticipations: { matchId: string; title: string; xp: number }[];
+  challengesSolved: { challengeId: string; title: string; xp: number }[];
+  bountiesApproved: { bountyId: string; title: string; xp: number }[];
+  buildOffResults: { buildOffId: string; title: string; xp: number; won: boolean }[];
+  potwWins: { nominationId: string; title: string; xp: number }[];
+}
+
 
 

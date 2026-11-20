@@ -42,6 +42,7 @@ export const RoadmapSection = ({
   setRoadmapProgress,
   userId,
   onAskMentor,
+  onQuizTopic,
   onNotify,
   styles,
 }: {
@@ -55,6 +56,7 @@ export const RoadmapSection = ({
   setRoadmapProgress: (p: Record<string, RoadmapTopicProgress>) => void;
   userId?: string;
   onAskMentor: (topic: string) => void;
+  onQuizTopic?: (topic: string) => void;
   onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
@@ -69,14 +71,20 @@ export const RoadmapSection = ({
 }) => {
   const { cardClass, borderClass, subtleBgClass, textPrimary, textSecondary, inputClass, btnPrimary, btnSecondary } = styles;
 
-  const allRoadmaps: RoadmapItem[] = [...ROADMAPS_CATALOG, ...customRoadmaps];
+  // Prefer customized/live-synced copies over static catalog entries when IDs match
+  const allRoadmaps: RoadmapItem[] = [
+    ...customRoadmaps,
+    ...ROADMAPS_CATALOG.filter((cat) => !customRoadmaps.some((cr) => cr.id === cat.id)),
+  ];
   const selectedRoadmap = allRoadmaps.find((r) => r.id === selectedRoadmapId) || allRoadmaps[0];
 
   const [searchField, setSearchField] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const [lookupResult, setLookupResult] = useState<any>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [topicFilter, setTopicFilter] = useState<'ALL' | 'Outstanding' | 'In Progress' | 'Needs Revision' | 'Completed'>('ALL');
 
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({ '0': true });
   const [openTopicTools, setOpenTopicTools] = useState<Record<string, boolean>>({});
@@ -97,6 +105,9 @@ export const RoadmapSection = ({
 
   const demonstratedCount = selectedRoadmap.topics.filter((t) => getStatus(t.id) === 'Demonstrated').length;
   const practisedCount = selectedRoadmap.topics.filter((t) => getStatus(t.id) === 'Practised').length;
+  const inProgressCount = selectedRoadmap.topics.filter((t) => getStatus(t.id) === 'In Progress').length;
+  const needsRevisionCount = selectedRoadmap.topics.filter((t) => getStatus(t.id) === 'Needs Revision' || roadmapProgress[t.id]?.struggling).length;
+  const outstandingCount = selectedRoadmap.topics.filter((t) => getStatus(t.id) === 'Not Started').length;
   const pct = selectedRoadmap.topics.length
     ? Math.round(((demonstratedCount + practisedCount * 0.5) / selectedRoadmap.topics.length) * 100)
     : 0;
@@ -329,27 +340,39 @@ export const RoadmapSection = ({
               {lookupResult.found ? (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge variant="success">Found on roadmap.sh</Badge>
+                    <Badge variant={lookupResult.liveSynced ? 'success' : 'info'}>
+                      {lookupResult.liveSynced ? 'Live synced from roadmap.sh' : 'Curated roadmap.sh structure'}
+                    </Badge>
                     <a href={lookupResult.officialUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[var(--accent-600)] hover:underline inline-flex items-center gap-1">
-                      Original roadmap <ExternalLink className="w-3 h-3" />
+                      Original roadmap.sh <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
                   <div>
                     <h3 className={`text-sm font-semibold ${textPrimary}`}>{lookupResult.title}</h3>
                     <p className={`text-xs mt-0.5 ${textSecondary}`}>{lookupResult.summary}</p>
+                    {!lookupResult.liveSynced && (
+                      <p className={`text-[11px] mt-1 ${textSecondary}`}>
+                        Loaded from verified local snapshot because live roadmap.sh endpoint did not respond with JSON.
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        const match = ROADMAPS_CATALOG.find((r) => r.id === lookupResult.id || r.slug === lookupResult.slug);
-                        if (match) {
-                          setSelectedRoadmapId(match.id);
+                        const catalogMatch = ROADMAPS_CATALOG.find(
+                          (r) => r.id === lookupResult.id || r.slug === lookupResult.slug
+                        );
+                        if (!lookupResult.liveSynced && catalogMatch) {
+                          setSelectedRoadmapId(catalogMatch.id);
                         } else {
+                          const targetId = catalogMatch?.id || lookupResult.id || `rm-${lookupResult.slug}`;
                           const created: RoadmapItem = {
-                            id: lookupResult.id || `rm-${lookupResult.slug}`,
+                            id: targetId,
                             slug: lookupResult.slug,
                             source: 'roadmap.sh',
+                            liveSynced: Boolean(lookupResult.liveSynced),
+                            syncedAt: lookupResult.syncedAt || new Date().toISOString(),
                             title: lookupResult.title,
                             field: lookupResult.field,
                             officialUrl: lookupResult.officialUrl,
@@ -358,7 +381,7 @@ export const RoadmapSection = ({
                             stages: lookupResult.stages,
                             topics: (lookupResult.stages || []).flatMap((s: any) => s.topics),
                           };
-                          setCustomRoadmaps([created, ...customRoadmaps]);
+                          setCustomRoadmaps([created, ...customRoadmaps.filter((r) => r.id !== targetId)]);
                           setSelectedRoadmapId(created.id);
                         }
                         setLookupResult(null);
@@ -434,8 +457,40 @@ export const RoadmapSection = ({
                 <>
                   <span>·</span>
                   <a href={selectedRoadmap.officialUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--accent-600)] hover:underline inline-flex items-center gap-1">
-                    Synced with roadmap.sh <ExternalLink className="w-3 h-3" />
+                    {selectedRoadmap.liveSynced ? 'Live synced with roadmap.sh' : 'Based on roadmap.sh (snapshot)'} <ExternalLink className="w-3 h-3" />
                   </a>
+                  <button
+                    type="button"
+                    disabled={refreshBusy}
+                    onClick={async () => {
+                      setRefreshBusy(true);
+                      try {
+                        const res = await lookupOfficialRoadmap(selectedRoadmap.slug || selectedRoadmap.field || selectedRoadmap.title);
+                        if (res?.found && res?.liveSynced) {
+                          const refreshed: RoadmapItem = {
+                            ...selectedRoadmap,
+                            liveSynced: true,
+                            syncedAt: res.syncedAt || new Date().toISOString(),
+                            title: res.title || selectedRoadmap.title,
+                            summary: res.summary || selectedRoadmap.summary,
+                            stages: res.stages,
+                            topics: (res.stages || []).flatMap((s: any) => s.topics),
+                          };
+                          setCustomRoadmaps([refreshed, ...customRoadmaps.filter((r) => r.id !== selectedRoadmap.id)]);
+                          onNotify(`Refreshed ${refreshed.title} live from roadmap.sh.`);
+                        } else {
+                          onNotify('Live roadmap.sh feed unavailable right now; keeping verified snapshot.', 'error');
+                        }
+                      } catch {
+                        onNotify('Could not reach roadmap.sh right now.', 'error');
+                      } finally {
+                        setRefreshBusy(false);
+                      }
+                    }}
+                    className="text-[var(--accent-600)] hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    {refreshBusy ? 'Refreshing…' : 'Sync now'}
+                  </button>
                 </>
               )}
             </div>
@@ -464,15 +519,43 @@ export const RoadmapSection = ({
             <h2 className={`font-display text-2xl ${textPrimary}`}>{selectedRoadmap.title}</h2>
             <p className={`text-xs leading-relaxed ${textSecondary}`}>{selectedRoadmap.summary}</p>
           </div>
-          <div className="shrink-0 min-w-[180px] space-y-2">
+          <div className="shrink-0 min-w-[200px] space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className={textSecondary}>Overall progress</span>
               <span className={`font-semibold tabular-nums ${textPrimary}`}>{pct}%</span>
             </div>
             <ProgressBar value={pct} />
             <div className={`text-xs tabular-nums ${textSecondary}`}>
-              {demonstratedCount} of {selectedRoadmap.topics.length} topics demonstrated
+              {demonstratedCount} demonstrated · {outstandingCount} outstanding
             </div>
+          </div>
+        </div>
+
+        {/* Topic Breakdown & Quick Filters */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                { id: 'ALL', label: `All (${selectedRoadmap.topics.length})` },
+                { id: 'Outstanding', label: `Outstanding (${outstandingCount})` },
+                { id: 'In Progress', label: `In Progress (${inProgressCount})` },
+                { id: 'Needs Revision', label: `Needs Revision (${needsRevisionCount})` },
+                { id: 'Completed', label: `Completed (${demonstratedCount + practisedCount})` },
+              ] as const
+            ).map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setTopicFilter(f.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition ${
+                  topicFilter === f.id
+                    ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)]'
+                    : `${borderClass} ${subtleBgClass} ${textSecondary} hover:${textPrimary}`
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -564,7 +647,16 @@ export const RoadmapSection = ({
 
                     {/* Clean single-level topic rows */}
                     <div className={`divide-y ${borderClass}`}>
-                      {stage.topics.map((topic, tIdx) => {
+                      {stage.topics
+                        .filter((topic) => {
+                          const st = getStatus(topic.id);
+                          if (topicFilter === 'ALL') return true;
+                          if (topicFilter === 'Outstanding') return st === 'Not Started';
+                          if (topicFilter === 'In Progress') return st === 'In Progress';
+                          if (topicFilter === 'Needs Revision') return st === 'Needs Revision' || Boolean(roadmapProgress[topic.id]?.struggling);
+                          return st === 'Demonstrated' || st === 'Practised';
+                        })
+                        .map((topic, tIdx) => {
                         const state = roadmapProgress[topic.id] || { status: 'Not Started', notes: '', struggling: false, customLinks: [] };
                         const status = getStatus(topic.id);
                         const links = state.customLinks || [];
@@ -601,6 +693,16 @@ export const RoadmapSection = ({
                                     ))}
                                   </select>
                                   <span className={`text-sm font-semibold ${textPrimary}`}>{topic.name}</span>
+                                  {topic.resourceUrl && (
+                                    <a
+                                      href={topic.resourceUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent-600)] hover:underline"
+                                    >
+                                      Guide <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
                                   {(state.notes || links.length > 0) && (
                                     <span className={`text-xs ${textSecondary}`}>
                                       · {links.length ? `${links.length} link${links.length > 1 ? 's' : ''}` : 'Notes saved'}
@@ -614,6 +716,11 @@ export const RoadmapSection = ({
                                 {status !== 'Demonstrated' && (
                                   <button type="button" onClick={() => markAlreadyKnow(topic.id)} className={btnSecondary} title="Mark if you already know this">
                                     <CheckCircle2 className="w-3.5 h-3.5" /> Already Know
+                                  </button>
+                                )}
+                                {onQuizTopic && (
+                                  <button type="button" onClick={() => onQuizTopic(topic.name)} className={btnSecondary}>
+                                    Quiz Topic
                                   </button>
                                 )}
                                 <button type="button" onClick={() => onAskMentor(topic.name)} className={btnSecondary}>
@@ -719,12 +826,19 @@ export const RoadmapSection = ({
                                     <span />
                                   )}
                                   <div className="flex items-center gap-1.5">
-                                    <button type="button" onClick={() => handleMoveTopic(sIdx, tIdx, -1)} disabled={tIdx === 0} aria-label="Move up" className={`${btnSecondary} !px-2 disabled:opacity-40`}>
-                                      <ArrowUp className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button type="button" onClick={() => handleMoveTopic(sIdx, tIdx, 1)} disabled={tIdx === stage.topics.length - 1} aria-label="Move down" className={`${btnSecondary} !px-2 disabled:opacity-40`}>
-                                      <ArrowDown className="w-3.5 h-3.5" />
-                                    </button>
+                                    {(() => {
+                                      const origIdx = stage.topics.findIndex((x) => x.id === topic.id);
+                                      return (
+                                        <>
+                                          <button type="button" onClick={() => handleMoveTopic(sIdx, origIdx, -1)} disabled={origIdx <= 0} aria-label="Move up" className={`${btnSecondary} !px-2 disabled:opacity-40`}>
+                                            <ArrowUp className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button type="button" onClick={() => handleMoveTopic(sIdx, origIdx, 1)} disabled={origIdx < 0 || origIdx >= stage.topics.length - 1} aria-label="Move down" className={`${btnSecondary} !px-2 disabled:opacity-40`}>
+                                            <ArrowDown className="w-3.5 h-3.5" />
+                                          </button>
+                                        </>
+                                      );
+                                    })()}
                                     <button type="button" onClick={() => handleRemoveTopic(topic.id)} aria-label="Remove topic" className={`${btnSecondary} !px-2 text-[var(--danger-ink)]`}>
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>

@@ -1,4 +1,4 @@
-import type { CourseItem, LearningPlan, OnboardingProfile, QuizAttempt, RoadmapItem, RoadmapTopicProgress } from '../types';
+import type { CodeSubmission, CourseItem, LearningPlan, OnboardingProfile, QuizAttempt, RoadmapItem, RoadmapTopicProgress } from '../types';
 
 /**
  * Adaptive rules. Everything here only READS member data and returns suggestions.
@@ -29,22 +29,49 @@ export function daysSince(iso?: string, now = Date.now()): number | null {
   return Math.max(0, Math.floor((now - t) / 86_400_000));
 }
 
-/** Topics that need another look, based on low quiz scores and what the member marked as hard. */
+/** Topics that need another look, based on recent unmastered quiz misses, revision submissions, and roadmap flags. */
 export function topicsNeedingRevision(
   quizAttempts: QuizAttempt[],
   roadmap: RoadmapItem,
-  progress: Record<string, RoadmapTopicProgress>
+  progress: Record<string, RoadmapTopicProgress>,
+  codeSubmissions: CodeSubmission[] = []
 ): string[] {
   const out = new Set<string>();
-  quizAttempts
-    .slice(0, 5)
-    .filter((q) => q.percentage < 60)
-    .forEach((q) => (q.weakTopics || []).forEach((t) => out.add(t)));
+  const resolvedQuizTopics = new Set<string>();
+
+  // Walk newest-first: if a newer >=80% attempt proved strongTopics, clear older quiz misses on those topics
+  for (const att of quizAttempts.slice(0, 12)) {
+    const strong = (att.strongTopics || []).map((t) => t.trim().toLowerCase());
+    if (att.percentage >= 80) {
+      strong.forEach((t) => resolvedQuizTopics.add(t));
+    }
+    if (att.percentage < 70) {
+      for (const wt of att.weakTopics || []) {
+        const key = wt.trim().toLowerCase();
+        if (wt && !resolvedQuizTopics.has(key)) out.add(wt);
+      }
+    }
+  }
+
+  // Check latest submission status per topic for Needs Revision
+  const seenSubmissionTopics = new Set<string>();
+  for (const sub of codeSubmissions) {
+    const key = (sub.topic || '').trim().toLowerCase();
+    if (!key || seenSubmissionTopics.has(key)) continue;
+    seenSubmissionTopics.add(key);
+    const effectiveStatus = sub.status || sub.review?.recommendedStatus;
+    if (effectiveStatus === 'Needs Revision') {
+      out.add(sub.topic);
+    }
+  }
+
+  // Honor explicit roadmap struggling/revision flags
   roadmap.topics.forEach((t) => {
     const p = progress[t.id];
     if (p && (p.struggling || p.status === 'Needs Revision')) out.add(t.name);
   });
-  return Array.from(out).slice(0, 4);
+
+  return Array.from(out).slice(0, 6);
 }
 
 export function quizAverage(attempts: QuizAttempt[]): number | null {

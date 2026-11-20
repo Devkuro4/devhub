@@ -32,10 +32,8 @@ import {
   collectAwards,
   levelFor,
   sameEntry,
-  seedLeaderboard,
   summarize,
   syncLedger,
-  weekKeyFor,
 } from './lib/gamification';
 import {
   ADMIN_ONLY_KEYS,
@@ -137,7 +135,13 @@ import {
   fetchLearningState,
   saveLearningState,
 } from './lib/learningClient';
+import {
+  ArenaSocketClient,
+  fetchArenaBootstrap,
+  type ArenaBootstrapResponse,
+} from './lib/arenaClient';
 import type {
+  ActiveQuizSession,
   AiHelpEvent,
   MentorChatStore,
   CodeSubmission,
@@ -156,6 +160,7 @@ import type {
   OnboardingProfile,
   OnboardingState,
   OnboardingDraft,
+  PersonalMilestone,
   QuizAttempt,
   QuizItem,
   ReactionType,
@@ -271,6 +276,10 @@ export default function App() {
   const [weeklyProjects, setWeeklyProjects] = useState<WeeklyProjectItem[]>(
     saved?.weeklyProjects ?? [INITIAL_WEEKLY_PROJECT]
   );
+  const [personalQuizzes, setPersonalQuizzes] = useState<QuizItem[]>(saved?.personalQuizzes ?? []);
+  const [personalMilestones, setPersonalMilestones] = useState<PersonalMilestone[]>(saved?.personalMilestones ?? []);
+  const [activeQuizSession, setActiveQuizSession] = useState<ActiveQuizSession | null>(saved?.activeQuizSession ?? null);
+  const [preselectedQuizTopic, setPreselectedQuizTopic] = useState<string | undefined>(undefined);
   const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(saved?.quizAttempts ?? INITIAL_QUIZ_ATTEMPTS);
   const [gitLevels, setGitLevels] = useState<any[]>(saved?.gitLevels ?? INITIAL_GIT_LEVELS);
   const [aiLiteracy, setAiLiteracy] = useState<any[]>(saved?.aiLiteracy ?? INITIAL_AI_LITERACY);
@@ -346,10 +355,14 @@ export default function App() {
   // In the database this only stores admin choices such as a member's role; the real member list
   // is built from sign-ups (see members below).
   const [teamRoster, setTeamRoster] = useState<any[]>(saved?.teamRoster ?? (CLOUD ? [] : TEAM_ROSTER));
-  // Public leaderboard rows (one per member who chose to be listed). Shared with the community.
-  const [leaderboard, setLeaderboard] = useState<LeaderboardMap>(
-    saved?.leaderboard ?? (CLOUD ? {} : seedLeaderboard(TEAM_ROSTER, weekKeyFor(new Date())))
-  );
+  // Public leaderboard rows (one per member who chose to be listed). Never fabricated.
+  const [leaderboard, setLeaderboard] = useState<LeaderboardMap>(saved?.leaderboard ?? {});
+  // Competition Centre & Coding Arena state (server-authoritative)
+  const [arenaBootstrap, setArenaBootstrap] = useState<ArenaBootstrapResponse | null>(null);
+  const [selectedArenaMatchId, setSelectedArenaMatchId] = useState<string | null>(null);
+  const [arenaWsConnected, setArenaWsConnected] = useState(false);
+  const [arenaServerOffsetMs, setArenaServerOffsetMs] = useState(0);
+  const arenaSocketRef = useRef<ArenaSocketClient | null>(null);
   // Community collaboration state (server-persisted & live-synced)
   const [studyGroups, setStudyGroups] = useState<StudyGroup[]>(saved?.studyGroups ?? []);
   const [memberProfiles, setMemberProfiles] = useState<Record<string, MemberDirectoryProfile>>(saved?.memberProfiles ?? {});
@@ -424,6 +437,9 @@ export default function App() {
           codeSubmissions,
           weeklyProjects,
           quizzes,
+          personalQuizzes,
+          personalMilestones,
+          activeQuizSession,
           quizAttempts,
           weeklyActivities,
           challenges,
@@ -476,6 +492,9 @@ export default function App() {
     codeSubmissions,
     weeklyProjects,
     quizzes,
+    personalQuizzes,
+    personalMilestones,
+    activeQuizSession,
     quizAttempts,
     weeklyActivities,
     challenges,
@@ -549,6 +568,9 @@ export default function App() {
     dailyTarget: [dailyTarget, setDailyTarget],
     codeSubmissions: [codeSubmissions, setCodeSubmissions],
     weeklyProjects: [weeklyProjects, setWeeklyProjects],
+    personalQuizzes: [personalQuizzes, setPersonalQuizzes],
+    personalMilestones: [personalMilestones, setPersonalMilestones],
+    activeQuizSession: [activeQuizSession, setActiveQuizSession],
     quizAttempts: [quizAttempts, setQuizAttempts],
     gitLevels: [gitLevels, setGitLevels],
     aiLiteracy: [aiLiteracy, setAiLiteracy],
@@ -847,7 +869,10 @@ export default function App() {
   // ============================================================================
   // NAVIGATION & HANDLERS
   // ============================================================================
-  const allRoadmaps: RoadmapItem[] = [...ROADMAPS_CATALOG, ...customRoadmaps];
+  const allRoadmaps: RoadmapItem[] = [
+    ...customRoadmaps,
+    ...ROADMAPS_CATALOG.filter((cat) => !customRoadmaps.some((cr) => cr.id === cat.id)),
+  ];
   const selectedRoadmap = allRoadmaps.find((r) => r.id === selectedRoadmapId) || allRoadmaps[0];
 
   // ============================================================================
@@ -869,6 +894,7 @@ export default function App() {
       posts,
       helpRequests,
       showcaseProjects,
+      competitionXp: arenaBootstrap?.myCompetitionXp,
     });
     const next = syncLedger(xpLedger, awards, new Date());
     if (!next) return;
@@ -893,6 +919,7 @@ export default function App() {
     posts,
     helpRequests,
     showcaseProjects,
+    arenaBootstrap?.myCompetitionXp,
     xpLedger,
   ]);
 
@@ -920,6 +947,7 @@ export default function App() {
         longestStreak: gamification.longestStreak,
         nightOwl: gamification.nightOwl,
         totalXp: gamification.totalXp,
+        competitionXp: arenaBootstrap?.myCompetitionXp,
       }),
     [
       gamification,
@@ -934,6 +962,7 @@ export default function App() {
       posts,
       helpRequests,
       showcaseProjects,
+      arenaBootstrap?.myCompetitionXp,
     ]
   );
 
@@ -1004,7 +1033,7 @@ export default function App() {
     { id: 'today', label: 'My Learning', icon: BookOpen, match: ['today', 'courses', 'plans', 'submissions', 'quizzes', 'progress'], group: 'Workspace' },
     { id: 'roadmaps', label: 'My Roadmap', icon: MapIcon, match: ['roadmaps'], group: 'Workspace' },
     { id: 'weekly-project', label: 'Projects', icon: FolderGit2, match: ['weekly-project', 'projects', 'showcase', 'devtools'], group: 'Workspace' },
-    { id: 'compete', label: 'Compete', icon: Trophy, match: ['compete', 'leaderboard', 'badges'], group: 'Community' },
+    { id: 'compete', label: 'Compete', icon: Trophy, match: ['compete', 'arena', 'arena-challenges', 'buildoffs', 'bounties', 'leaderboard', 'badges', 'compete-history'], group: 'Community' },
     { id: 'community-home', label: 'Community', icon: Users, match: ['community-home', 'study-chat', 'community', 'study-groups', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'], group: 'Community' },
     { id: 'ai-mentor', label: 'AI Mentor', icon: Bot, match: ['ai-mentor'], group: 'Tools' },
   ];
@@ -1178,11 +1207,95 @@ export default function App() {
     [user, communityActor]
   );
 
-  // Fetch server-persisted community bootstrap whenever a user signs in
+  const loadArenaBootstrap = React.useCallback(async () => {
+    if (!user) return;
+    try {
+      const data = await fetchArenaBootstrap(communityActor);
+      setArenaBootstrap(data);
+    } catch {
+      /* ignore transient fetch failures */
+    }
+  }, [user, communityActor]);
+
+  // Fetch server-persisted community & arena bootstrap whenever a user signs in
   useEffect(() => {
     if (!user) return;
     loadCommunityBootstrap(false);
-  }, [user?.id, user?.email, loadCommunityBootstrap]);
+    loadArenaBootstrap();
+  }, [user?.id, user?.email, loadCommunityBootstrap, loadArenaBootstrap]);
+
+  // Live WebSocket client for Coding Arena & Competitions
+  useEffect(() => {
+    if (!user) {
+      arenaSocketRef.current?.destroy();
+      arenaSocketRef.current = null;
+      setArenaWsConnected(false);
+      return;
+    }
+    const client = new ArenaSocketClient(communityActor, (ev) => {
+      if (ev.type === 'connected') {
+        setArenaWsConnected(true);
+        setArenaServerOffsetMs(ev.serverOffsetMs);
+      } else if (ev.type === 'disconnected') {
+        setArenaWsConnected(false);
+      } else if (ev.type === 'arena:sync') {
+        setArenaBootstrap((prev) => {
+          if (!prev) return prev;
+          let nextMatches = ev.matches || prev.matches;
+          if (ev.match) {
+            nextMatches = nextMatches.some((m) => m.id === ev.match!.id)
+              ? nextMatches.map((m) => (m.id === ev.match!.id ? ev.match! : m))
+              : [ev.match, ...nextMatches];
+          }
+          return { ...prev, matches: nextMatches };
+        });
+      } else if (ev.type === 'arena:lobby_sync') {
+        setArenaBootstrap((prev) => (prev ? { ...prev, matches: ev.matches } : prev));
+      } else if (ev.type === 'arena:match_updated') {
+        setArenaBootstrap((prev) => {
+          if (!prev) return prev;
+          const nextMatches = prev.matches.some((m) => m.id === ev.match.id)
+            ? prev.matches.map((m) => (m.id === ev.match.id ? ev.match : m))
+            : [ev.match, ...prev.matches];
+          return { ...prev, matches: nextMatches };
+        });
+        if (ev.match.status === 'completed' || ev.match.status === 'forfeited') {
+          loadArenaBootstrap();
+        }
+      } else if (ev.type === 'arena:team_workspace') {
+        setArenaBootstrap((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            matches: prev.matches.map((m) =>
+              m.id !== ev.matchId
+                ? m
+                : {
+                    ...m,
+                    teams: {
+                      ...m.teams,
+                      [ev.teamId]: m.teams[ev.teamId]
+                        ? { ...m.teams[ev.teamId], privateState: ev.privateState }
+                        : m.teams[ev.teamId],
+                    },
+                  }
+            ),
+          };
+        });
+      } else if (ev.type === 'arena:competitions_sync') {
+        loadArenaBootstrap();
+      } else if (ev.type === 'arena:error') {
+        notify(ev.message, 'error');
+      }
+    });
+    arenaSocketRef.current = client;
+    return () => {
+      client.destroy();
+      if (arenaSocketRef.current === client) {
+        arenaSocketRef.current = null;
+      }
+    };
+  }, [user?.id, user?.email, communityActor, loadArenaBootstrap]);
 
   // Keep member directory profile synced when user updates their profile/badges
   useEffect(() => {
@@ -1248,6 +1361,9 @@ export default function App() {
       setDailyTarget(existingPersonal.dailyTarget ?? blank.dailyTarget);
       setCodeSubmissions(existingPersonal.codeSubmissions ?? []);
       setWeeklyProjects(existingPersonal.weeklyProjects ?? []);
+      setPersonalQuizzes(existingPersonal.personalQuizzes ?? []);
+      setPersonalMilestones(existingPersonal.personalMilestones ?? []);
+      setActiveQuizSession(existingPersonal.activeQuizSession ?? null);
       setQuizAttempts(existingPersonal.quizAttempts ?? []);
       setDailyLogs(existingPersonal.dailyLogs ?? []);
       setSavedPostIds(existingPersonal.savedPostIds ?? []);
@@ -1264,6 +1380,9 @@ export default function App() {
       setDailyTarget(blank.dailyTarget);
       setCodeSubmissions([]);
       setWeeklyProjects([]);
+      setPersonalQuizzes([]);
+      setPersonalMilestones([]);
+      setActiveQuizSession(null);
       setQuizAttempts([]);
       setDailyLogs([]);
       setSavedPostIds([]);
@@ -1301,9 +1420,13 @@ export default function App() {
           studySessions,
           roadmapProgress,
           customRoadmaps,
+          selectedRoadmapId,
           dailyTarget,
           codeSubmissions,
           weeklyProjects,
+          personalQuizzes,
+          personalMilestones,
+          activeQuizSession,
           quizAttempts,
           dailyLogs,
           savedPostIds,
@@ -1323,9 +1446,13 @@ export default function App() {
     studySessions,
     roadmapProgress,
     customRoadmaps,
+    selectedRoadmapId,
     dailyTarget,
     codeSubmissions,
     weeklyProjects,
+    personalQuizzes,
+    personalMilestones,
+    activeQuizSession,
     quizAttempts,
     dailyLogs,
     savedPostIds,
@@ -1353,6 +1480,12 @@ export default function App() {
           (Array.isArray(serverState.codeSubmissions) && serverState.codeSubmissions.length > 0) ||
           (Array.isArray(serverState.dailyLogs) && serverState.dailyLogs.length > 0) ||
           (Array.isArray(serverState.studySessions) && serverState.studySessions.length > 0) ||
+          (Array.isArray(serverState.personalQuizzes) && serverState.personalQuizzes.length > 0) ||
+          (Array.isArray(serverState.quizAttempts) && serverState.quizAttempts.length > 0) ||
+          (Array.isArray(serverState.personalMilestones) && serverState.personalMilestones.length > 0) ||
+          (Array.isArray(serverState.customRoadmaps) && serverState.customRoadmaps.length > 0) ||
+          Boolean(serverState.roadmapProgress && Object.keys(serverState.roadmapProgress).length > 0) ||
+          Boolean(serverState.activeQuizSession) ||
           Boolean(serverState.dailyTarget);
         if (hasServerData) {
           if (Array.isArray(serverState.courses)) setCourses(serverState.courses);
@@ -1362,6 +1495,15 @@ export default function App() {
           if (Array.isArray(serverState.codeSubmissions)) setCodeSubmissions(serverState.codeSubmissions);
           if (Array.isArray(serverState.dailyLogs)) setDailyLogs(serverState.dailyLogs);
           if (Array.isArray(serverState.studySessions)) setStudySessions(serverState.studySessions);
+          if (Array.isArray(serverState.personalQuizzes)) setPersonalQuizzes(serverState.personalQuizzes);
+          if (Array.isArray(serverState.quizAttempts)) setQuizAttempts(serverState.quizAttempts);
+          if (Array.isArray(serverState.personalMilestones)) setPersonalMilestones(serverState.personalMilestones);
+          if (Array.isArray(serverState.customRoadmaps)) setCustomRoadmaps(serverState.customRoadmaps);
+          if (serverState.roadmapProgress && Object.keys(serverState.roadmapProgress).length > 0) {
+            setRoadmapProgress(serverState.roadmapProgress);
+          }
+          if (serverState.selectedRoadmapId) setSelectedRoadmapId(serverState.selectedRoadmapId);
+          if (serverState.activeQuizSession !== undefined) setActiveQuizSession(serverState.activeQuizSession);
           if (serverState.dailyTarget) setDailyTarget(serverState.dailyTarget);
         }
       })
@@ -1390,6 +1532,13 @@ export default function App() {
         codeSubmissions,
         dailyLogs,
         studySessions,
+        personalQuizzes,
+        quizAttempts,
+        activeQuizSession,
+        roadmapProgress,
+        customRoadmaps,
+        selectedRoadmapId,
+        personalMilestones,
       }).catch(() => {});
     }, 700);
     return () => clearTimeout(t);
@@ -1403,6 +1552,13 @@ export default function App() {
     codeSubmissions,
     dailyLogs,
     studySessions,
+    personalQuizzes,
+    quizAttempts,
+    activeQuizSession,
+    roadmapProgress,
+    customRoadmaps,
+    selectedRoadmapId,
+    personalMilestones,
   ]);
 
   const communityActions: CommunityActionsProp = {
@@ -1564,15 +1720,22 @@ export default function App() {
   const handleQuickCheckIn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickCheckInText.trim()) return;
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const alreadyCheckedInToday = dailyLogs.some((d) => d.date === 'Today' || d.date === todayDate);
     const newLog = {
       id: `dl-${Date.now()}`,
-      date: 'Today',
+      date: todayDate,
       module: courses[0]?.currentTopic || selectedRoadmap.title,
       summary: quickCheckInText.trim(),
       repoLink: '',
     };
     setDailyLogs([newLog, ...dailyLogs]);
-    setProfile((prev) => ({ ...prev, streakDays: (prev.streakDays || 0) + 1 }));
+    if (!alreadyCheckedInToday) {
+      setProfile((prev) => ({
+        ...prev,
+        streakDays: Math.max((prev.streakDays || 0) + 1, gamification.currentStreak || 1),
+      }));
+    }
 
     if (shareCheckInAsWin) {
       communityActions.createPost({
@@ -1621,7 +1784,7 @@ export default function App() {
   const isLearningSubTab = ['today', 'courses', 'plans', 'submissions', 'quizzes', 'progress'].includes(activeTab);
   const isCommunitySubTab = ['community-home', 'study-chat', 'community', 'study-groups', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
   const isProjectsSubTab = ['weekly-project', 'projects', 'showcase', 'devtools'].includes(activeTab);
-  const isCompeteSubTab = ['compete', 'leaderboard', 'badges'].includes(activeTab);
+  const isCompeteSubTab = ['compete', 'arena', 'arena-challenges', 'buildoffs', 'bounties', 'leaderboard', 'badges', 'compete-history'].includes(activeTab);
   const isAdminSubTab = ['admin-dashboard', 'admin-members', 'admin-support', 'admin-activities', 'admin-ai'].includes(activeTab);
 
   const breadcrumbParts: { primary: string; secondary?: string } = (() => {
@@ -1648,8 +1811,13 @@ export default function App() {
     if (activeTab === 'showcase') return { primary: 'Projects', secondary: 'Project Showcase' };
     if (activeTab === 'devtools') return { primary: 'Projects', secondary: 'Git & AI Skills' };
     if (activeTab === 'compete') return { primary: 'Compete', secondary: 'Overview' };
-    if (activeTab === 'leaderboard') return { primary: 'Compete', secondary: 'Leaderboard' };
+    if (activeTab === 'arena') return { primary: 'Compete', secondary: 'Coding Arena' };
+    if (activeTab === 'arena-challenges') return { primary: 'Compete', secondary: 'Daily & Weekly' };
+    if (activeTab === 'buildoffs') return { primary: 'Compete', secondary: 'Build-Offs & POTW' };
+    if (activeTab === 'bounties') return { primary: 'Compete', secondary: 'Bounty Board' };
+    if (activeTab === 'leaderboard') return { primary: 'Compete', secondary: 'Leaderboard & Season' };
     if (activeTab === 'badges') return { primary: 'Compete', secondary: 'Badges' };
+    if (activeTab === 'compete-history') return { primary: 'Compete', secondary: 'History' };
     if (activeTab === 'ai-mentor') return { primary: 'AI Mentor' };
     if (activeTab === 'profile') return { primary: 'Profile & Settings' };
     if (activeTab === 'admin-dashboard') return { primary: 'Admin Console', secondary: 'Overview' };
@@ -2115,6 +2283,7 @@ export default function App() {
                         firstName={firstName}
                         greeting={greeting}
                         profile={profile}
+                        onUpdateProfile={(patch) => setProfile((prev) => ({ ...prev, ...patch }))}
                         onboarded={onboarded}
                         startAction={startAction}
                         onStartLearning={() => handleStartLearning()}
@@ -2126,11 +2295,15 @@ export default function App() {
                         learningPlans={learningPlans}
                         dailyTarget={dailyTarget}
                         codeSubmissions={codeSubmissions}
-                        quizzes={quizzes}
+                        quizzes={[...personalQuizzes, ...quizzes]}
                         quizAttempts={quizAttempts}
                         weeklyProjects={weeklyProjects}
+                        allRoadmaps={allRoadmaps}
                         selectedRoadmap={selectedRoadmap}
+                        onSelectRoadmap={setSelectedRoadmapId}
                         roadmapProgress={roadmapProgress}
+                        personalMilestones={personalMilestones}
+                        setPersonalMilestones={setPersonalMilestones}
                         posts={posts}
                         presentations={presentations}
                         challenges={challenges}
@@ -2142,6 +2315,7 @@ export default function App() {
                         setShareCheckInAsWin={setShareCheckInAsWin}
                         onQuickCheckIn={handleQuickCheckIn}
                         onNavigate={(tab) => setActiveTab(tab)}
+                        onNotify={notify}
                         milestones={milestoneSummary}
                         gamification={gamification}
                         independence={independence}
@@ -2177,9 +2351,15 @@ export default function App() {
                         codeSubmissions={codeSubmissions}
                         setCodeSubmissions={setCodeSubmissions}
                         quizzes={quizzes}
-                        setQuizzes={setQuizzes}
+                        personalQuizzes={personalQuizzes}
+                        setPersonalQuizzes={setPersonalQuizzes}
                         quizAttempts={quizAttempts}
                         setQuizAttempts={setQuizAttempts}
+                        activeQuizSession={activeQuizSession}
+                        setActiveQuizSession={setActiveQuizSession}
+                        personalMilestones={personalMilestones}
+                        preselectedQuizTopic={preselectedQuizTopic}
+                        onClearPreselectedQuizTopic={() => setPreselectedQuizTopic(undefined)}
                         weeklyProjects={weeklyProjects}
                         dailyLogs={dailyLogs}
                         setDailyLogs={setDailyLogs}
@@ -2195,8 +2375,9 @@ export default function App() {
                       <CompeteSection
                         subTab={activeTab as any}
                         setSubTab={(t) => setActiveTab(t)}
-                        userId={user.id || user.email || 'me'}
+                        userId={user.id || user.email || 'local-member'}
                         userName={user.name || ''}
+                        isAdmin={role === 'admin' || Boolean(user.isAdmin)}
                         profile={profile}
                         setProfile={setProfile}
                         summary={gamification}
@@ -2205,6 +2386,14 @@ export default function App() {
                         onNavigate={(tab) => setActiveTab(tab)}
                         challenges={challenges}
                         quizAttempts={quizAttempts}
+                        arenaBootstrap={arenaBootstrap}
+                        selectedMatchId={selectedArenaMatchId}
+                        onSelectMatch={setSelectedArenaMatchId}
+                        wsConnected={arenaWsConnected}
+                        serverOffsetMs={arenaServerOffsetMs}
+                        socketRef={arenaSocketRef}
+                        onRefreshArena={loadArenaBootstrap}
+                        onNotify={notify}
                         styles={styles}
                       />
                     )}
@@ -2221,6 +2410,10 @@ export default function App() {
                         setRoadmapProgress={setRoadmapProgress}
                         userId={user.id}
                         onAskMentor={(topic) => handleAskMentor(`Help me understand this roadmap topic simply: ${topic}`)}
+                        onQuizTopic={(topic) => {
+                          setPreselectedQuizTopic(topic);
+                          setActiveTab('quizzes');
+                        }}
                         onNotify={notify}
                         styles={styles}
                       />
@@ -2373,6 +2566,8 @@ export default function App() {
                           }
                         }}
                         onViewMember={openMemberById}
+                        arenaBootstrap={arenaBootstrap}
+                        onRefreshArena={loadArenaBootstrap}
                         onNotify={notify}
                         styles={styles}
                       />

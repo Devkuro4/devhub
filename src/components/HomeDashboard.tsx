@@ -34,6 +34,7 @@ import type {
   MilestoneSummary,
   OnboardingProfile,
   LearningPlan,
+  PersonalMilestone,
   QuizAttempt,
   QuizItem,
   RoadmapItem,
@@ -56,6 +57,7 @@ export const HomeDashboard = ({
   firstName,
   greeting,
   profile,
+  onUpdateProfile,
   onboarded,
   onStartOnboarding,
   startAction,
@@ -70,8 +72,12 @@ export const HomeDashboard = ({
   quizzes,
   quizAttempts,
   weeklyProjects,
+  allRoadmaps,
   selectedRoadmap,
+  onSelectRoadmap,
   roadmapProgress,
+  personalMilestones,
+  setPersonalMilestones,
   posts,
   presentations,
   challenges,
@@ -83,6 +89,7 @@ export const HomeDashboard = ({
   setShareCheckInAsWin,
   onQuickCheckIn,
   onNavigate,
+  onNotify,
   milestones,
   gamification,
   independence,
@@ -96,6 +103,7 @@ export const HomeDashboard = ({
   firstName: string;
   greeting: string;
   profile: OnboardingProfile;
+  onUpdateProfile?: (patch: Partial<OnboardingProfile>) => void;
   onboarded: boolean;
   onStartOnboarding: () => void;
   startAction: StartAction;
@@ -110,8 +118,12 @@ export const HomeDashboard = ({
   quizzes: QuizItem[];
   quizAttempts: QuizAttempt[];
   weeklyProjects: WeeklyProjectItem[];
+  allRoadmaps?: RoadmapItem[];
   selectedRoadmap: RoadmapItem;
+  onSelectRoadmap?: (id: string) => void;
   roadmapProgress: Record<string, RoadmapTopicProgress>;
+  personalMilestones?: PersonalMilestone[];
+  setPersonalMilestones?: React.Dispatch<React.SetStateAction<PersonalMilestone[]>>;
   posts: CommunityPost[];
   presentations: CommunityEvent[];
   challenges: any[];
@@ -123,6 +135,7 @@ export const HomeDashboard = ({
   setShareCheckInAsWin: (v: boolean) => void;
   onQuickCheckIn: (e: React.FormEvent) => void;
   onNavigate: (tab: string) => void;
+  onNotify?: (msg: string, tone?: 'success' | 'error') => void;
   milestones: MilestoneSummary;
   gamification: GamificationSummary;
   independence: IndependenceSummary;
@@ -162,11 +175,23 @@ export const HomeDashboard = ({
       st.topics.some((tp) => (roadmapProgress[tp.id]?.status || 'Not Started') !== 'Demonstrated')
     ) || selectedRoadmap.stages?.[0];
 
-  // Today's 4 clear learning steps
+  // Today's 4 clear learning steps (accurate topic matching)
   const hasLearnedTopic = dailyTarget.status !== 'Not Started' || codeSubmissions.some((s) => s.topic === dailyTarget.topic);
   const hasPractisedOrSubmitted = codeSubmissions.some((s) => s.topic === dailyTarget.topic);
-  const hasQuizAttempt = quizAttempts.some((a) =>
-    a.quizTitle.toLowerCase().includes(dailyTarget.topic.toLowerCase().split(' ')[0] || '')
+  const topicNorm = (dailyTarget.topic || '').trim().toLowerCase();
+  const topicTokens = topicNorm.split(/\s+/).filter((w) => w.length >= 3);
+  const matchesDaily = (txt: string) => {
+    const low = String(txt || '').trim().toLowerCase();
+    if (!low || !topicNorm) return false;
+    if (low === topicNorm || low.includes(topicNorm) || topicNorm.includes(low)) return true;
+    return topicTokens.some((tok) => low.includes(tok));
+  };
+  const topicQuiz = quizzes.find((q) => matchesDaily(q.topic) || matchesDaily(q.title)) || quizzes[0];
+  const hasQuizAttempt = quizAttempts.some(
+    (a) =>
+      (topicQuiz && a.quizId === topicQuiz.id) ||
+      matchesDaily(a.quizTitle) ||
+      (a.strongTopics || []).some(matchesDaily)
   );
 
   const todayChecklist = [
@@ -194,7 +219,7 @@ export const HomeDashboard = ({
     {
       id: 'quiz',
       label: 'Take your quiz',
-      detail: quizzes[0] ? quizzes[0].title : 'Check what clicked',
+      detail: topicQuiz ? topicQuiz.title : 'Check what clicked',
       done: hasQuizAttempt,
       tab: 'quizzes',
     },
@@ -206,7 +231,13 @@ export const HomeDashboard = ({
   const openChallenge = challenges.find((c) => c.status !== 'Completed') || challenges[0];
   const openQuestionsCount = helpRequests.filter((h) => h.status !== 'Resolved').length;
 
-  const rollup = latestCourse ? latestCourse.progress : Math.round((demonstratedCount / Math.max(1, selectedRoadmap.topics.length)) * 100);
+  const totalCourseModules = courses.reduce((s, c) => s + (c.modules?.length || 0), 0);
+  const doneCourseModules = courses.reduce((s, c) => s + (c.modules?.filter((m) => m.completed).length || 0), 0);
+  const rollup = totalCourseModules
+    ? Math.round((doneCourseModules / totalCourseModules) * 100)
+    : courses.length
+      ? Math.round(courses.reduce((s, c) => s + (c.progress || 0), 0) / courses.length)
+      : Math.round((demonstratedCount / Math.max(1, selectedRoadmap.topics.length)) * 100);
   const doneCount = todayChecklist.filter((s) => s.done).length;
   const isBrandNewMember =
     startAction.kind === 'resume-onboarding' ||
@@ -392,19 +423,26 @@ export const HomeDashboard = ({
           <div data-tour="home-learning-path">
             <PersonalPath
               profile={profile}
+              onUpdateProfile={onUpdateProfile}
               courses={courses}
               learningPlans={learningPlans}
               dailyTarget={dailyTarget}
+              allRoadmaps={allRoadmaps}
               selectedRoadmap={selectedRoadmap}
+              onSelectRoadmap={onSelectRoadmap}
               roadmapProgress={roadmapProgress}
               quizAttempts={quizAttempts}
+              codeSubmissions={codeSubmissions}
               weeklyProjects={weeklyProjects}
               challenges={challenges}
+              personalMilestones={personalMilestones}
+              setPersonalMilestones={setPersonalMilestones}
               startAction={startAction}
               onStartLearning={onStartLearning}
               onContinueCourse={onContinueCourse}
               onPersonalize={onPersonalize}
               onNavigate={onNavigate}
+              onNotify={onNotify}
             />
           </div>
         )}

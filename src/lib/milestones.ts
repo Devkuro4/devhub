@@ -1,6 +1,7 @@
 import type {
   CodeSubmission,
   CommunityPost,
+  CompetitionXpAwards,
   MemberMilestone,
   MilestoneSummary,
   OnboardingProfile,
@@ -28,6 +29,7 @@ export interface MilestoneDetectionInput {
   /** True once the member has been active late in the evening. Comes from the XP ledger. */
   nightOwl?: boolean;
   totalXp?: number;
+  competitionXp?: CompetitionXpAwards | null;
 }
 
 export function buildMemberIdentifiers(user: Pick<UserSession, 'name' | 'email'> | null, profile: OnboardingProfile): Set<string> {
@@ -85,6 +87,11 @@ export function detectMemberMilestones(input: MilestoneDetectionInput): Mileston
   const longestStreak = input.longestStreak ?? 0;
   const perfectQuizCount = input.quizAttempts.filter((q) => q.percentage >= 100).length;
   const totalXp = input.totalXp ?? 0;
+  const cx = input.competitionXp;
+  const duelsPlayedCount = (cx?.duelWins.length || 0) + (cx?.duelParticipations.length || 0);
+  const duelWinsCount = cx?.duelWins.length || 0;
+  const bountiesApprovedCount = cx?.bountiesApproved.length || 0;
+  const challengesAndBuildOffsCount = (cx?.challengesSolved.length || 0) + (cx?.buildOffResults.length || 0);
 
   const milestones: MemberMilestone[] = [
     {
@@ -266,6 +273,54 @@ export function detectMemberMilestones(input: MilestoneDetectionInput): Mileston
       current: Math.min(totalXp, 300),
       target: 300,
       earned: totalXp >= 300,
+    },
+    {
+      id: 'first-arena-duel',
+      category: 'Building',
+      title: 'Arena Contender',
+      requirementLabel: 'Finish 1 live Coding Arena duel',
+      encouragement: 'Stepping into a timed coding duel sharpens problem-solving under pressure.',
+      icon: 'duel',
+      tone: 'sky',
+      current: Math.min(duelsPlayedCount, 1),
+      target: 1,
+      earned: duelsPlayedCount >= 1,
+    },
+    {
+      id: 'duel-victor',
+      category: 'Building',
+      title: 'Duel Victor',
+      requirementLabel: 'Win a 1v1 or 2v2 Coding Arena match',
+      encouragement: 'Clean tests, sharp timing, verified victory.',
+      icon: 'trophy',
+      tone: 'amber',
+      current: Math.min(duelWinsCount, 1),
+      target: 1,
+      earned: duelWinsCount >= 1,
+    },
+    {
+      id: 'bounty-hunter',
+      category: 'Building',
+      title: 'Bounty Hunter',
+      requirementLabel: 'Complete 1 approved engineering bounty',
+      encouragement: 'Shipping fixes and tools that meet acceptance criteria helps the whole hub.',
+      icon: 'bounty',
+      tone: 'emerald',
+      current: Math.min(bountiesApprovedCount, 1),
+      target: 1,
+      earned: bountiesApprovedCount >= 1,
+    },
+    {
+      id: 'team-strategist',
+      category: 'Community',
+      title: 'Competition Regular',
+      requirementLabel: 'Solve 2 Arena challenges or Build-Offs',
+      encouragement: 'Steady competitive practice alongside peers turns fundamentals into reflex.',
+      icon: 'team',
+      tone: 'violet',
+      current: Math.min(challengesAndBuildOffsCount, 2),
+      target: 2,
+      earned: challengesAndBuildOffsCount >= 2,
     },
   ];
 

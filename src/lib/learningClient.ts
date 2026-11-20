@@ -1,11 +1,17 @@
 import JSZip from 'jszip';
 import { supabase } from './supabase';
 import type {
+  ActiveQuizSession,
   CodeSubmission,
   CourseItem,
   DailyTarget,
   ImportedMaterialPack,
   LearningPlan,
+  PersonalMilestone,
+  QuizAttempt,
+  QuizItem,
+  RoadmapItem,
+  RoadmapTopicProgress,
   SelfDirectedTopic,
   StudySessionLog,
 } from '../types';
@@ -185,6 +191,13 @@ export async function fetchLearningState(userId?: string): Promise<{
   codeSubmissions: CodeSubmission[];
   dailyLogs: any[];
   studySessions: StudySessionLog[];
+  personalQuizzes?: QuizItem[];
+  quizAttempts?: QuizAttempt[];
+  activeQuizSession?: ActiveQuizSession | null;
+  roadmapProgress?: Record<string, RoadmapTopicProgress>;
+  customRoadmaps?: RoadmapItem[];
+  selectedRoadmapId?: string;
+  personalMilestones?: PersonalMilestone[];
 }> {
   const res = await fetch(`${API_BASE}/api/learning/state`, {
     headers: await authHeaders(userId),
@@ -205,6 +218,13 @@ export async function saveLearningState(
     codeSubmissions?: CodeSubmission[];
     dailyLogs?: any[];
     studySessions?: StudySessionLog[];
+    personalQuizzes?: QuizItem[];
+    quizAttempts?: QuizAttempt[];
+    activeQuizSession?: ActiveQuizSession | null;
+    roadmapProgress?: Record<string, RoadmapTopicProgress>;
+    customRoadmaps?: RoadmapItem[];
+    selectedRoadmapId?: string;
+    personalMilestones?: PersonalMilestone[];
   }
 ) {
   const res = await fetch(`${API_BASE}/api/learning/state`, {

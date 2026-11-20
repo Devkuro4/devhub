@@ -15,6 +15,7 @@ export interface RoadmapLookupResult {
   found: boolean;
   source: 'roadmap.sh' | 'none';
   liveSynced?: boolean;
+  syncedAt?: string;
   id: string;
   slug: string;
   title: string;
@@ -568,6 +569,7 @@ function parseRoadmapShJson(slug: string, json: any, fallbackField: string): Roa
     found: true,
     source: 'roadmap.sh',
     liveSynced: true,
+    syncedAt: new Date().toISOString(),
     id: base?.id || `rm-${slug}`,
     slug,
     title: String(rawTitle),

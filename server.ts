@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +72,36 @@ import {
   updatePost,
   updateStudyGroupWorkspace,
 } from './server/communityStore.ts';
+import {
+  cancelArenaMatch,
+  checkArenaTimers,
+  claimDisconnectForfeit,
+  claimOrReleaseBounty,
+  createArenaChallenge,
+  createArenaMatch,
+  createBounty,
+  createTeamBuildOff,
+  forfeitArenaMatch,
+  getArenaBootstrap,
+  getArenaMatchForUser,
+  joinArenaMatch,
+  judgeArenaChallengeSubmission,
+  judgeBuildOff,
+  listArenaMatches,
+  nominateProjectOfTheWeek,
+  registerOrUpdateBuildOffTeam,
+  reviewBountySubmission,
+  runMatchSampleTests,
+  selectPotwWinner,
+  setArenaParticipantReady,
+  submitArenaChallenge,
+  submitBountyProof,
+  submitMatchSolution,
+  togglePotwVote,
+  upsertSeason,
+} from './server/arenaStore.ts';
+import { setupArenaServer } from './server/arenaServer.ts';
+import { getSandboxStatus } from './server/sandboxRunner.ts';
 
 setLocalAdminChecker(isUserAdmin);
 
@@ -116,6 +147,16 @@ app.use('/api', (req, res, next) => {
 // Lets hosts (Render, Railway...) check that the server is up.
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GROQ_API_KEY)' });
+});
+
+app.get('/devhub-source.zip', (_req, res) => {
+  const zipPath = path.resolve(__dirname, 'public', 'devhub-source.zip');
+  if (!fs.existsSync(zipPath)) {
+    return res.status(404).send('Archive not found.');
+  }
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename="devhub-source.zip"');
+  res.sendFile(zipPath);
 });
 
 // The verified user id is set by requireUser (see server/auth.ts), never by the browser.
@@ -562,6 +603,256 @@ app.post('/api/community/members/:id/role', requireAdmin, (req, res) => {
 });
 
 // ============================================================================
+// COMPETITION CENTRE, CODING ARENA & ISOLATED SANDBOX API
+// ============================================================================
+app.use('/api/arena', requireUser);
+
+app.get('/api/arena/sandbox-status', (_req, res) => {
+  res.json(getSandboxStatus());
+});
+
+app.get('/api/arena/bootstrap', (req, res) => {
+  res.json(getArenaBootstrap(getUserId(req, res)));
+});
+
+app.get('/api/arena/matches', (req, res) => {
+  res.json({ matches: listArenaMatches(getUserId(req, res)), serverNowMs: Date.now() });
+});
+
+app.post('/api/arena/matches', (req, res) => {
+  const actor = actorOf(res);
+  const match = createArenaMatch({ userId: actor.userId, userName: actor.userName }, req.body || {});
+  res.status(201).json({ match });
+});
+
+app.get('/api/arena/matches/:id', (req, res) => {
+  const match = getArenaMatchForUser(req.params.id, getUserId(req, res));
+  if (!match) return res.status(404).json({ error: 'Match not found.' });
+  res.json({ match, serverNowMs: Date.now() });
+});
+
+app.post('/api/arena/matches/:id/join', (req, res) => {
+  const actor = actorOf(res);
+  const preferredTeamId =
+    req.body?.teamId === 'team-a' || req.body?.teamId === 'team-b' ? req.body.teamId : undefined;
+  const out = joinArenaMatch(req.params.id, { userId: actor.userId, userName: actor.userName }, preferredTeamId);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/matches/:id/ready', (req, res) => {
+  const ready = typeof req.body?.ready === 'boolean' ? req.body.ready : undefined;
+  const out = setArenaParticipantReady(req.params.id, getUserId(req, res), ready);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/matches/:id/run', async (req, res) => {
+  try {
+    const actor = actorOf(res);
+    const out = await runMatchSampleTests(req.params.id, { userId: actor.userId, userName: actor.userName }, {
+      language: req.body?.language || 'javascript',
+      code: String(req.body?.code || ''),
+    });
+    if ('error' in out) return res.status(out.status).json({ error: out.error });
+    res.json(out);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Sandbox execution failed.' });
+  }
+});
+
+app.post('/api/arena/matches/:id/submit', async (req, res) => {
+  try {
+    const actor = actorOf(res);
+    const out = await submitMatchSolution(req.params.id, { userId: actor.userId, userName: actor.userName }, {
+      language: req.body?.language || 'javascript',
+      code: String(req.body?.code || ''),
+    });
+    if ('error' in out) return res.status(out.status).json({ error: out.error });
+    res.json(out);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Match submission evaluation failed.' });
+  }
+});
+
+app.post('/api/arena/matches/:id/forfeit', (req, res) => {
+  const actor = actorOf(res);
+  const out = forfeitArenaMatch(req.params.id, { userId: actor.userId, userName: actor.userName });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/matches/:id/claim-disconnect-win', (req, res) => {
+  const out = claimDisconnectForfeit(req.params.id, { userId: getUserId(req, res) });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/matches/:id/cancel', (req, res) => {
+  const actor = actorOf(res);
+  const out = cancelArenaMatch(req.params.id, { userId: actor.userId, isAdmin: actor.isAdmin });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+// Challenges (Daily & Weekly)
+app.post('/api/arena/challenges', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  if (!String(body.title || '').trim()) {
+    return res.status(400).json({ error: 'Challenge title is required.' });
+  }
+  const challenge = createArenaChallenge(actorOf(res), {
+    cadence: body.cadence === 'daily' ? 'daily' : 'weekly',
+    kind: body.kind === 'code' ? 'code' : 'build',
+    title: String(body.title),
+    category: String(body.category || 'Algorithms'),
+    difficulty: body.difficulty || 'Beginner',
+    deadline: String(body.deadline || ''),
+    xpReward: Number(body.xpReward) || 50,
+    problemId: body.problemId,
+    description: String(body.description || ''),
+    objectives: Array.isArray(body.objectives) ? body.objectives : [],
+  });
+  res.status(201).json({ challenge });
+});
+
+app.post('/api/arena/challenges/:id/submit', async (req, res) => {
+  try {
+    const actor = actorOf(res);
+    const out = await submitArenaChallenge(req.params.id, { userId: actor.userId, userName: actor.userName }, req.body || {});
+    if ('error' in out) return res.status(out.status).json({ error: out.error });
+    res.json(out);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Could not evaluate challenge submission.' });
+  }
+});
+
+app.post('/api/arena/challenges/:id/submissions/:subId/judge', requireAdmin, (req, res) => {
+  const out = judgeArenaChallengeSubmission(req.params.id, req.params.subId, {
+    status: req.body?.status || 'Verified',
+    judgeNote: req.body?.judgeNote,
+  });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+// Team Build-Offs
+app.post('/api/arena/build-offs', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  if (!String(body.title || '').trim()) return res.status(400).json({ error: 'Build-Off title is required.' });
+  const buildOff = createTeamBuildOff({
+    title: String(body.title),
+    theme: String(body.theme || 'Full-Stack'),
+    description: String(body.description || ''),
+    teamSizeMin: Number(body.teamSizeMin) || 2,
+    teamSizeMax: Number(body.teamSizeMax) || 3,
+    deadline: String(body.deadline || 'Sunday'),
+    xpReward: Number(body.xpReward) || 150,
+  });
+  res.status(201).json({ buildOff });
+});
+
+app.post('/api/arena/build-offs/:id/teams', (req, res) => {
+  const actor = actorOf(res);
+  const out = registerOrUpdateBuildOffTeam(req.params.id, { userId: actor.userId, userName: actor.userName }, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/build-offs/:id/judge', requireAdmin, (req, res) => {
+  const out = judgeBuildOff(req.params.id, {
+    entryId: String(req.body?.entryId || ''),
+    judgeScore: Number(req.body?.judgeScore) || 0,
+    judgeFeedback: String(req.body?.judgeFeedback || ''),
+    declareWinner: Boolean(req.body?.declareWinner),
+  });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+// Project of the Week
+app.post('/api/arena/potw/nominate', (req, res) => {
+  const body = req.body || {};
+  if (!String(body.title || '').trim() || !String(body.summary || '').trim()) {
+    return res.status(400).json({ error: 'Project title and summary are required.' });
+  }
+  const actor = actorOf(res);
+  const nomination = nominateProjectOfTheWeek({ userId: actor.userId, userName: actor.userName }, body);
+  res.status(201).json({ nomination });
+});
+
+app.post('/api/arena/potw/:id/vote', (req, res) => {
+  const out = togglePotwVote(req.params.id, getUserId(req, res));
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/potw/:id/select-winner', requireAdmin, (req, res) => {
+  const out = selectPotwWinner(req.params.id, String(req.body?.judgeNote || ''));
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+// Bounty Board
+app.post('/api/arena/bounties', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  if (!String(body.title || '').trim()) return res.status(400).json({ error: 'Bounty title is required.' });
+  const bounty = createBounty({
+    title: String(body.title),
+    category: String(body.category || 'Engineering'),
+    difficulty: body.difficulty || 'Beginner',
+    description: String(body.description || ''),
+    acceptanceCriteria: Array.isArray(body.acceptanceCriteria) ? body.acceptanceCriteria : [],
+    xpReward: Number(body.xpReward) || 90,
+  });
+  res.status(201).json({ bounty });
+});
+
+app.post('/api/arena/bounties/:id/claim', (req, res) => {
+  const actor = actorOf(res);
+  const action = req.body?.action === 'release' ? 'release' : 'claim';
+  const out = claimOrReleaseBounty(req.params.id, { userId: actor.userId, userName: actor.userName }, action);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/bounties/:id/submit', (req, res) => {
+  const actor = actorOf(res);
+  if (!String(req.body?.notes || '').trim()) return res.status(400).json({ error: 'Summary notes are required.' });
+  const out = submitBountyProof(req.params.id, { userId: actor.userId, userName: actor.userName }, {
+    repoUrl: String(req.body?.repoUrl || ''),
+    notes: String(req.body?.notes || ''),
+  });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+app.post('/api/arena/bounties/:id/review', requireAdmin, (req, res) => {
+  const out = reviewBountySubmission(req.params.id, String(req.body?.submissionId || ''), {
+    status: req.body?.status === 'Approved' ? 'Approved' : 'Needs Revision',
+    judgeNote: req.body?.judgeNote,
+  });
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
+// Seasons
+app.post('/api/arena/seasons', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  if (!String(body.name || '').trim()) return res.status(400).json({ error: 'Season name is required.' });
+  const season = upsertSeason({
+    id: body.id,
+    name: String(body.name),
+    theme: String(body.theme || ''),
+    startDate: String(body.startDate || new Date().toISOString().slice(0, 10)),
+    endDate: String(body.endDate || ''),
+    status: body.status === 'Completed' ? 'Completed' : 'Active',
+    prizeSummary: String(body.prizeSummary || ''),
+  });
+  res.status(201).json({ season });
+});
+
+// ============================================================================
 // MODULAR AI OPERATIONS
 // ============================================================================
 app.post('/api/ai/roadmap', async (req, res) => {
@@ -838,6 +1129,15 @@ async function startServer() {
 
   const server = http.createServer(app);
   setupChatServer(server, allowedOrigins);
+  setupArenaServer(server, allowedOrigins);
+  const arenaTimer = setInterval(() => {
+    try {
+      checkArenaTimers();
+    } catch {
+      /* ignore tick errors */
+    }
+  }, 1000);
+  server.on('close', () => clearInterval(arenaTimer));
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Dev Hub server listening on http://0.0.0.0:${PORT}`);
   });

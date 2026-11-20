@@ -831,7 +831,131 @@ Rules:
   );
 }
 
-// 5. Quiz Generation
+// 5. Quiz Generation (material-aware, validated, deduplicated, single corrective retry)
+const ALLOWED_QUIZ_TYPES = new Set(['mcq', 'true_false', 'code_output', 'find_error', 'short_answer']);
+
+function normalizeQuizText(s: string): string {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[`'".,!?;:()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenJaccard(a: string, b: string): number {
+  const ta = new Set(normalizeQuizText(a).split(' ').filter((w) => w.length > 2));
+  const tb = new Set(normalizeQuizText(b).split(' ').filter((w) => w.length > 2));
+  if (!ta.size || !tb.size) return 0;
+  let overlap = 0;
+  ta.forEach((w) => {
+    if (tb.has(w)) overlap += 1;
+  });
+  return overlap / (ta.size + tb.size - overlap);
+}
+
+function isDuplicatePrompt(prompt: string, seenPrompts: string[]): boolean {
+  const norm = normalizeQuizText(prompt);
+  if (!norm) return true;
+  return seenPrompts.some((prev) => {
+    const pn = normalizeQuizText(prev);
+    return pn === norm || tokenJaccard(prompt, prev) >= 0.72;
+  });
+}
+
+function validateAndNormalizeQuizQuestions(
+  rawQuestions: any[],
+  defaultTopic: string,
+  existingPrompts: string[]
+) {
+  const seenPrompts = [...existingPrompts];
+  const valid: {
+    type: string;
+    topic: string;
+    prompt: string;
+    code: string;
+    options: string[];
+    answer: string;
+    explanation: string;
+    incorrectExplanation: string;
+    distractorReasons: Record<string, string>;
+  }[] = [];
+
+  for (const raw of rawQuestions || []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const prompt = String(raw.prompt || '').trim();
+    if (prompt.length < 10 || /^(sample|placeholder|tbd|n\/a|lorem ipsum)/i.test(prompt)) continue;
+    if (isDuplicatePrompt(prompt, seenPrompts)) continue;
+
+    let type = String(raw.type || 'mcq').trim().toLowerCase();
+    if (!ALLOWED_QUIZ_TYPES.has(type)) type = 'mcq';
+
+    const topic = String(raw.topic || defaultTopic || 'Core Concept').trim();
+    const code = String(raw.code || '').trim();
+    let explanation = String(raw.explanation || '').trim();
+    let incorrectExplanation = String(raw.incorrectExplanation || '').trim();
+
+    let options: string[] = Array.isArray(raw.options)
+      ? Array.from(new Set(raw.options.map((o: any) => String(o || '').trim()).filter(Boolean)))
+      : [];
+    let answer = String(raw.answer || '').trim();
+
+    if (type === 'true_false') {
+      options = ['True', 'False'];
+      const low = answer.toLowerCase();
+      if (low === 'true' || low === 't') answer = 'True';
+      else if (low === 'false' || low === 'f') answer = 'False';
+      else continue;
+    } else if (type === 'short_answer') {
+      options = [];
+      if (answer.length < 2) continue;
+    } else {
+      // mcq, code_output, find_error
+      if (options.length < 3 || !answer) continue;
+      // Map letter/index answers or case-insensitive matches back to exact option text
+      let matched = options.find((o) => o === answer) || options.find((o) => o.toLowerCase() === answer.toLowerCase());
+      if (!matched && /^[A-D]$/i.test(answer)) {
+        const idx = answer.toUpperCase().charCodeAt(0) - 65;
+        if (options[idx]) matched = options[idx];
+      }
+      if (!matched) continue;
+      answer = matched;
+    }
+
+    const distractorReasons: Record<string, string> = {};
+    if (Array.isArray(raw.distractorReasons)) {
+      for (const item of raw.distractorReasons) {
+        const opt = String(item?.option || '').trim();
+        const reason = String(item?.reason || '').trim();
+        if (opt && reason && opt.toLowerCase() !== answer.toLowerCase()) {
+          distractorReasons[opt] = reason;
+        }
+      }
+    }
+
+    if (!explanation) {
+      explanation = `The correct answer is "${answer}". Review how ${topic} works in this scenario.`;
+    }
+    if (!incorrectExplanation) {
+      incorrectExplanation = `Re-check why "${answer}" fits best here rather than the alternative assumption.`;
+    }
+
+    seenPrompts.push(prompt);
+    valid.push({
+      type,
+      topic,
+      prompt,
+      code,
+      options,
+      answer,
+      explanation,
+      incorrectExplanation,
+      distractorReasons,
+    });
+  }
+
+  return valid;
+}
+
 export async function generateAiQuiz(
   userId: string,
   input: {
@@ -841,8 +965,20 @@ export async function generateAiQuiz(
     difficulty: string;
     quizScope: string;
     existingQuestionPrompts: string[];
+    materialContext?: string;
+    questionCount?: number;
+    focusWeakTopics?: string[];
   }
 ) {
+  const targetCount = Math.min(6, Math.max(4, Number(input.questionCount) || 5));
+  const compactContext = String(input.materialContext || '')
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .slice(0, 2200);
+  const weakList = Array.isArray(input.focusWeakTopics)
+    ? input.focusWeakTopics.map((t) => String(t || '').trim()).filter(Boolean).slice(0, 5)
+    : [];
+
   const schema = {
     type: Type.OBJECT,
     properties: {
@@ -859,43 +995,86 @@ export async function generateAiQuiz(
             options: { type: Type.ARRAY, items: { type: Type.STRING } },
             answer: { type: Type.STRING },
             explanation: { type: Type.STRING },
+            incorrectExplanation: { type: Type.STRING },
+            distractorReasons: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  option: { type: Type.STRING },
+                  reason: { type: Type.STRING },
+                },
+              },
+            },
           },
         },
       },
     },
   };
 
-  const prompt = `Generate a ${input.quizScope || 'Topic'} quiz with 4 varied questions that test real understanding (not rote memorization).
-Topic: ${input.topic}
-Course: ${input.courseTitle}
+  const buildPrompt = (extraNote = '') => `Generate a ${input.quizScope || 'Topic'} quiz with ${targetCount} varied questions that test real comprehension, debugging, and application (not trivial trivia).
+Primary Topic: ${input.topic}
+Course / Path: ${input.courseTitle || 'General'}
 Field: ${input.field}
 Difficulty: ${input.difficulty}
-Avoid repeating any of these recent questions: ${input.existingQuestionPrompts.slice(0, 10).join(' | ') || 'None'}
+${weakList.length ? `Focus Weak Topics: ${weakList.join(', ')}\n` : ''}${
+    compactContext
+      ? `Targeted Study Material Excerpt (ground questions in these real concepts):\n"""\n${compactContext}\n"""\n`
+      : ''
+  }Avoid repeating or closely paraphrasing these existing questions: ${input.existingQuestionPrompts.slice(0, 12).join(' | ') || 'None'}
+${extraNote}
+Rules:
+1. Include a genuine mix using ONLY these exact "type" values: "mcq", "true_false", "code_output", "find_error", "short_answer". Include at least one "true_false" and one "short_answer" when possible.
+2. For "mcq", "code_output", "find_error": provide 4 distinct options, set "answer" to the exact winning option text, and populate "distractorReasons" for the wrong options explaining why each distractor is misleading.
+3. For "true_false": set "options" to ["True", "False"] and "answer" to strictly "True" or "False".
+4. For "short_answer": set "options" to [] and "answer" to a clear, concise 1-2 sentence expected concept.
+5. Set "code" to a short focused snippet for "code_output" or "find_error" questions ("" otherwise).
+6. For EVERY question, provide a helpful "explanation" and a specific "incorrectExplanation" describing the common misconception if someone misses it.`;
 
-Mix question types using ONLY these exact "type" values: "mcq", "true_false", "code_output", "find_error", "short_answer".
-For "mcq", "code_output", "find_error": provide 4 clear options and set "answer" to the exact winning option string.
-For "true_false": set options to ["True", "False"] and "answer" to "True" or "False".
-For "short_answer": set options to [] and "answer" to a clear concise expected answer.
-Include simple, helpful explanations for every question.`;
-
-  return runJsonOperation<{
-    title: string;
-    questions: {
-      type: string;
-      topic: string;
-      prompt: string;
-      code: string;
-      options: string[];
-      answer: string;
-      explanation: string;
-    }[];
-  }>(
+  const first = await runJsonOperation<{ title: string; questions: any[] }>(
     userId,
     'quizGeneration',
-    prompt,
-    'You create practical, level-appropriate developer quizzes that test comprehension, debugging, and code reading.',
+    buildPrompt(),
+    'You create practical, level-appropriate developer assessments strictly matching JSON schemas.',
     schema
   );
+
+  let valid = validateAndNormalizeQuizQuestions(first?.data?.questions || [], input.topic, input.existingQuestionPrompts || []);
+  let resolvedTitle = String(first?.data?.title || '').trim() || `${input.topic} (${input.quizScope || 'Quiz'})`;
+  let totalLatency = first?.latencyMs || 0;
+  let lastModel = first?.model || '';
+
+  // At most ONE corrective retry if validation rejected most questions
+  if (valid.length < 2) {
+    const avoidAll = [...(input.existingQuestionPrompts || []), ...valid.map((q) => q.prompt)];
+    const retry = await runJsonOperation<{ title: string; questions: any[] }>(
+      userId,
+      'quizGeneration',
+      buildPrompt(
+        `\nIMPORTANT CORRECTION: Your previous output did not have enough valid distinct questions (${avoidAll.length} prompts already used). Ensure every MCQ has 4 distinct options with "answer" matching an option verbatim, true_false has ["True","False"], and short_answer has a concise answer.`
+      ),
+      'You create practical, level-appropriate developer assessments strictly matching JSON schemas.',
+      schema
+    );
+    const more = validateAndNormalizeQuizQuestions(retry?.data?.questions || [], input.topic, avoidAll);
+    valid = [...valid, ...more];
+    if (!resolvedTitle && retry?.data?.title) resolvedTitle = String(retry.data.title).trim();
+    totalLatency += retry?.latencyMs || 0;
+    if (retry?.model) lastModel = retry.model;
+  }
+
+  if (valid.length === 0) {
+    throw new Error('Could not generate valid non-duplicate questions for that topic. Try broadening the topic or adjusting difficulty.');
+  }
+
+  return {
+    data: {
+      title: resolvedTitle,
+      questions: valid.slice(0, targetCount),
+    },
+    model: lastModel,
+    latencyMs: totalLatency,
+  };
 }
 
 // 6. Quiz Short-Answer Evaluation
@@ -908,21 +1087,26 @@ export async function evaluateShortAnswer(
     properties: {
       isCorrect: { type: Type.BOOLEAN },
       feedback: { type: Type.STRING },
+      misconception: { type: Type.STRING },
     },
   };
 
+  const cleanUserAnswer = String(input.userAnswer || '').trim().slice(0, 1200);
   const prompt = `Evaluate this learner's short answer fairly for a ${input.skillLevel} student studying "${input.topic}".
 Question: ${input.questionPrompt}
 Expected concept/answer: ${input.expectedAnswer}
-Learner's answer: ${input.userAnswer}
+Learner's answer: ${cleanUserAnswer}
 
-Mark isCorrect true if they understood the core idea even with slightly different wording, and give 1-2 sentences of clear feedback.`;
+Rules:
+- Mark isCorrect true if they demonstrated the core conceptual understanding even with different wording.
+- In "feedback", give 1-2 clear, constructive sentences explaining why their answer works or what piece is missing.
+- In "misconception", summarize any specific gap if isCorrect is false (or "" if true).`;
 
-  return runJsonOperation<{ isCorrect: boolean; feedback: string }>(
+  return runJsonOperation<{ isCorrect: boolean; feedback: string; misconception?: string }>(
     userId,
     'quizEvaluation',
     prompt,
-    'You grade learner short answers generously for conceptual understanding while clarifying misconceptions clearly.',
+    'You grade learner short answers fairly for conceptual understanding while clarifying misconceptions clearly.',
     schema
   );
 }

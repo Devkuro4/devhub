@@ -32,19 +32,20 @@ import {
 import { Badge, EmptyState, Modal, PageHeader, SectionTabs } from './ui';
 import { getUrlError } from '../lib/url';
 import {
-  evaluateShortQuizAnswer,
   inspectCourseUrl,
-  requestAiQuiz,
   requestCodeReview,
   requestDailyExercise,
   requestLearningPlan,
   requestWeeklySummary,
 } from '../lib/aiClient';
+import { quizAverage, topicsNeedingRevision } from '../lib/adaptive';
 import { preScreenAndImportMaterial, saveLearningSubmission } from '../lib/learningClient';
 import { readSubmittedFiles, runSafeJavaScriptSandbox } from '../lib/sandbox';
 import { CourseMaterialsModal } from './CourseMaterialsModal';
 import { CourseEditModal, SelfDirectedAndPlansPanel } from './CoursesAndPlansPanel';
+import { QuizWorkspace } from './QuizWorkspace';
 import type {
+  ActiveQuizSession,
   CodeSubmission,
   CourseItem,
   CourseLearningStatus,
@@ -52,6 +53,7 @@ import type {
   ImportedMaterialPack,
   LearningPlan,
   OnboardingProfile,
+  PersonalMilestone,
   QuizAttempt,
   QuizItem,
   RoadmapItem,
@@ -87,9 +89,15 @@ export const LearningSection = ({
   codeSubmissions,
   setCodeSubmissions,
   quizzes,
-  setQuizzes,
+  personalQuizzes = [],
+  setPersonalQuizzes,
   quizAttempts,
   setQuizAttempts,
+  activeQuizSession,
+  setActiveQuizSession,
+  personalMilestones = [],
+  preselectedQuizTopic,
+  onClearPreselectedQuizTopic,
   weeklyProjects,
   dailyLogs,
   setDailyLogs,
@@ -120,9 +128,15 @@ export const LearningSection = ({
   codeSubmissions: CodeSubmission[];
   setCodeSubmissions: React.Dispatch<React.SetStateAction<CodeSubmission[]>>;
   quizzes: QuizItem[];
-  setQuizzes: (q: QuizItem[]) => void;
+  personalQuizzes?: QuizItem[];
+  setPersonalQuizzes: React.Dispatch<React.SetStateAction<QuizItem[]>>;
   quizAttempts: QuizAttempt[];
-  setQuizAttempts: (a: QuizAttempt[]) => void;
+  setQuizAttempts: React.Dispatch<React.SetStateAction<QuizAttempt[]>>;
+  activeQuizSession: ActiveQuizSession | null;
+  setActiveQuizSession: React.Dispatch<React.SetStateAction<ActiveQuizSession | null>>;
+  personalMilestones?: PersonalMilestone[];
+  preselectedQuizTopic?: string;
+  onClearPreselectedQuizTopic?: () => void;
   weeklyProjects: WeeklyProjectItem[];
   dailyLogs: any[];
   setDailyLogs: React.Dispatch<React.SetStateAction<any[]>>;
@@ -773,158 +787,37 @@ export const LearningSection = ({
   };
 
   // ============================================================================
-  // QUIZZES STATE + AI GENERATOR + SHORT ANSWER EVALUATION
+  // QUIZZES HANDOFF STATE
   // ============================================================================
-  const [quizGen, setQuizGen] = useState({
-    courseId: courses[0]?.id || 'general',
-    topic: courses[0]?.currentTopic || 'JavaScript Basics',
-    difficulty: profile.skillLevel || 'Beginner',
-    scope: 'Topic Quiz',
-  });
-  const [quizBusy, setQuizBusy] = useState(false);
-  const [activeQuizSession, setActiveQuizSession] = useState<any>(null);
-  const [gradingQuiz, setGradingQuiz] = useState(false);
-
+  const [requestedQuizTopic, setRequestedQuizTopic] = useState<string | undefined>(preselectedQuizTopic);
   useEffect(() => {
-    if (!activeQuizSession || !activeQuizSession.timed || activeQuizSession.result || activeQuizSession.secondsLeft <= 0) return;
-    const timer = setInterval(() => {
-      setActiveQuizSession((prev: any) => {
-        if (!prev || prev.result) return prev;
-        if (prev.secondsLeft <= 1) {
-          clearInterval(timer);
-          return { ...prev, secondsLeft: 0 };
-        }
-        return { ...prev, secondsLeft: prev.secondsLeft - 1 };
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [activeQuizSession?.timed, activeQuizSession?.result]);
-
-  const handleGenerateAiQuiz = async () => {
-    const course = courses.find((c) => c.id === quizGen.courseId);
-    const topic = quizGen.topic.trim() || course?.currentTopic || selectedRoadmap.topics[0]?.name || 'Programming Basics';
-    setQuizBusy(true);
-    try {
-      const existingPrompts = quizzes.flatMap((q) => q.questions.map((qq) => qq.prompt));
-      const { data } = await requestAiQuiz(
-        {
-          topic,
-          courseTitle: course?.title || selectedRoadmap.title,
-          field: profile.field || 'Web Development',
-          difficulty: quizGen.difficulty,
-          quizScope: quizGen.scope,
-          existingQuestionPrompts: existingPrompts,
-        },
-        user.id
-      );
-
-      const newQuiz: QuizItem = {
-        id: `quiz-${Date.now()}`,
-        title: data.title || `${topic} (${quizGen.scope})`,
-        courseId: course?.id || 'general',
-        topic,
-        field: profile.field || 'Web Development',
-        difficulty: quizGen.difficulty,
-        scope: quizGen.scope,
-        mandatory: false,
-        deadline: 'Self-Paced',
-        durationMinutes: 8,
-        questions: (data.questions || []).map((q, idx) => ({
-          id: `aq-${Date.now()}-${idx}`,
-          type: q.type || 'mcq',
-          topic: q.topic || topic,
-          prompt: q.prompt,
-          code: q.code || '',
-          options: q.options || [],
-          answer: q.answer,
-          explanation: q.explanation,
-        })),
-      };
-      setQuizzes([newQuiz, ...quizzes]);
-      onNotify(`Created ${quizGen.scope} on "${topic}".`);
-    } catch (err: any) {
-      onNotify(err?.message || 'AI quiz generator is unavailable right now — try one of the starter quizzes below.', 'error');
-    } finally {
-      setQuizBusy(false);
+    if (preselectedQuizTopic) {
+      setRequestedQuizTopic(preselectedQuizTopic);
+      onClearPreselectedQuizTopic?.();
     }
-  };
+  }, [preselectedQuizTopic, onClearPreselectedQuizTopic]);
 
-  const startQuiz = (quiz: QuizItem, timed = false, onlyIds: string[] | null = null) => {
-    const filtered = onlyIds ? quiz.questions.filter((q) => onlyIds.includes(q.id)) : quiz.questions;
+  const allAvailableQuizzes = useMemo(
+    () => [...personalQuizzes, ...quizzes],
+    [personalQuizzes, quizzes]
+  );
+
+  const launchQuizUntimed = (quiz: QuizItem) => {
+    const nowIso = new Date().toISOString();
     setActiveQuizSession({
-      quiz: { ...quiz, questions: filtered.length ? filtered : quiz.questions },
+      quiz,
       currentIdx: 0,
       answers: {},
       flagged: {},
-      timed,
+      timed: false,
+      durationSecondsTotal: (quiz.durationMinutes || 8) * 60,
       secondsLeft: (quiz.durationMinutes || 8) * 60,
+      elapsedSeconds: 0,
+      startedAtIso: nowIso,
+      lastUpdatedIso: nowIso,
       reviewing: false,
-      result: null,
     });
-  };
-
-  const submitQuizAttempt = async () => {
-    if (!activeQuizSession) return;
-    setGradingQuiz(true);
-    const { quiz, answers } = activeQuizSession;
-    let score = 0;
-    const weakTopics: string[] = [];
-    const strongTopics: string[] = [];
-    const missedQuestionIds: string[] = [];
-    const aiQuestionNotes: Record<string, string> = {};
-
-    for (const q of quiz.questions) {
-      const userAns = (answers[q.id] || '').trim();
-      let isCorrect = false;
-      if (!q.options?.length && (q.type === 'short_answer' || q.type === 'practical') && userAns) {
-        try {
-          const { data } = await evaluateShortQuizAnswer(
-            {
-              questionPrompt: q.prompt,
-              expectedAnswer: q.answer,
-              userAnswer: userAns,
-              topic: q.topic,
-              skillLevel: profile.skillLevel || 'Beginner',
-            },
-            user.id
-          );
-          isCorrect = Boolean(data.isCorrect);
-          aiQuestionNotes[q.id] = data.feedback;
-        } catch {
-          isCorrect = userAns.toLowerCase() === (q.answer || '').trim().toLowerCase();
-        }
-      } else {
-        isCorrect = userAns.toLowerCase() === (q.answer || '').trim().toLowerCase();
-      }
-
-      if (isCorrect) {
-        score += 1;
-        if (!strongTopics.includes(q.topic)) strongTopics.push(q.topic);
-      } else {
-        missedQuestionIds.push(q.id);
-        if (!weakTopics.includes(q.topic)) weakTopics.push(q.topic);
-      }
-    }
-
-    const percentage = Math.round((score / quiz.questions.length) * 100);
-    const attempt: QuizAttempt = {
-      id: `att-${Date.now()}`,
-      quizId: quiz.id,
-      quizTitle: quiz.title,
-      date: 'Today',
-      score,
-      total: quiz.questions.length,
-      percentage,
-      weakTopics,
-      strongTopics,
-      missedQuestionIds,
-      aiQuestionNotes,
-    };
-
-    setQuizAttempts([attempt, ...quizAttempts]);
-    setActiveQuizSession({ ...activeQuizSession, reviewing: false, result: attempt });
-    setGradingQuiz(false);
-    onNotify(`Quiz checked: ${score}/${quiz.questions.length} (${percentage}%)`);
+    setSubTab('quizzes');
   };
 
   // ============================================================================
@@ -1071,196 +964,28 @@ export const LearningSection = ({
     { id: 'courses', label: 'My Courses', badge: courses.length },
     { id: 'plans', label: 'Plans & Self-Directed', badge: selfDirectedTopics.length + pendingScheduledCount || undefined },
     { id: 'submissions', label: 'Submissions & Feedback', badge: codeSubmissions.length },
-    { id: 'quizzes', label: 'Quizzes', badge: quizzes.length },
+    { id: 'quizzes', label: 'Quizzes', badge: allAvailableQuizzes.length },
     { id: 'progress', label: 'Your Progress' },
   ];
 
-  // ============================================================================
-  // RENDERERS
-  // ============================================================================
-  if (subTab === 'quizzes' && activeQuizSession) {
-    const { quiz, currentIdx, answers, flagged, timed, secondsLeft, reviewing, result } = activeQuizSession;
-    const currentQ = quiz.questions[currentIdx];
-
-    if (result) {
-      return (
-        <div className="space-y-6 max-w-3xl mx-auto">
-          <div className={`${cardClass} p-6 space-y-5`}>
-            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b ${borderClass}`}>
-              <div>
-                <Badge variant={result.percentage >= 75 ? 'success' : 'warning'}>Completed</Badge>
-                <h1 className={`font-display text-2xl font-semibold mt-1 ${textPrimary}`}>{quiz.title}</h1>
-                <p className={`text-sm tabular-nums mt-1 ${textSecondary}`}>
-                  Score: <strong className={textPrimary}>{result.score} / {result.total} ({result.percentage}%)</strong>
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {result.missedQuestionIds.length > 0 && (
-                  <button type="button" onClick={() => startQuiz(quiz, false, result.missedQuestionIds)} className={btnPrimary}>
-                    <Repeat className="w-4 h-4" /> Retry Missed ({result.missedQuestionIds.length})
-                  </button>
-                )}
-                <button type="button" onClick={() => setActiveQuizSession(null)} className={btnSecondary}>Back to Quizzes</button>
-              </div>
-            </div>
-
-            <p className={`text-xs ${textSecondary}`}>
-              Quiz checks help spot what to revisit—real skill grows when you combine understanding with writing small programs.
-            </p>
-
-            <div className={`divide-y ${borderClass}`}>
-              {quiz.questions.map((q: any, idx: number) => {
-                const userAns = answers[q.id] || '(No answer submitted)';
-                const aiNote = result.aiQuestionNotes?.[q.id];
-                const correct = !result.missedQuestionIds.includes(q.id);
-                return (
-                  <div key={q.id} className="py-4 first:pt-0 last:pb-0 space-y-3 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`font-semibold ${textPrimary}`}>Question {idx + 1} · {q.topic}</span>
-                      <Badge variant={correct ? 'success' : 'warning'}>{correct ? 'Understood' : 'Needs Review'}</Badge>
-                    </div>
-                    <p className={`text-sm font-medium ${textPrimary}`}>{q.prompt}</p>
-                    {q.code && <pre className={`p-3 rounded-lg font-mono overflow-x-auto border ${borderClass} ${subtleBgClass} ${textPrimary}`}>{q.code}</pre>}
-                    <div><span className={textSecondary}>Your Answer:</span> <strong className={textPrimary}>{userAns}</strong></div>
-                    {!correct && <div><span className={textSecondary}>Expected Answer:</span> <strong className="text-[var(--success-ink)]">{q.answer}</strong></div>}
-                    {aiNote && <p className={textPrimary}><strong>AI Feedback:</strong> {aiNote}</p>}
-                    <p className={textSecondary}><strong>Why:</strong> {q.explanation}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-6 max-w-3xl mx-auto">
-        <div className={`${cardClass} p-6 space-y-5`}>
-          <div className={`flex flex-wrap items-center justify-between gap-3 pb-4 border-b ${borderClass}`}>
-            <div>
-              <p className={`text-xs font-medium ${textSecondary}`}>{quiz.difficulty} · {quiz.topic}</p>
-              <h1 className={`font-display text-xl mt-0.5 ${textPrimary}`}>{quiz.title}</h1>
-            </div>
-            <div className="flex items-center gap-3">
-              {timed && (
-                <Badge variant={secondsLeft < 60 ? 'danger' : 'warning'}>
-                  <Clock className="w-3.5 h-3.5" /> {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
-                </Badge>
-              )}
-              <button type="button" onClick={() => setActiveQuizSession(null)} className={btnSecondary}>Exit Quiz</button>
-            </div>
-          </div>
-
-          {reviewing ? (
-            <div className="space-y-4">
-              <h2 className={`font-display text-lg ${textPrimary}`}>Ready to check your answers?</h2>
-              <div className={`divide-y ${borderClass}`}>
-                {quiz.questions.map((q: any, idx: number) => (
-                  <div key={q.id} className="py-2.5 flex items-center justify-between text-xs gap-3">
-                    <span className="truncate"><strong>Q{idx + 1}:</strong> {answers[q.id] || 'Unanswered'}</span>
-                    <button type="button" onClick={() => setActiveQuizSession({ ...activeQuizSession, reviewing: false, currentIdx: idx })} className="text-[var(--accent-600)] hover:underline cursor-pointer shrink-0">
-                      Edit
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setActiveQuizSession({ ...activeQuizSession, reviewing: false })} className={btnSecondary}>Back</button>
-                <button type="button" disabled={gradingQuiz} onClick={submitQuizAttempt} className={btnPrimary}>
-                  {gradingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Check My Answers'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs">
-                <span className={`tabular-nums ${textSecondary}`}>Question {currentIdx + 1} of {quiz.questions.length}</span>
-                <button
-                  type="button"
-                  onClick={() => setActiveQuizSession({ ...activeQuizSession, flagged: { ...flagged, [currentQ.id]: !flagged[currentQ.id] } })}
-                  className={`inline-flex items-center gap-1 cursor-pointer ${flagged[currentQ.id] ? 'text-[var(--warning-ink)] font-semibold' : textSecondary}`}
-                >
-                  <Flag className="w-3.5 h-3.5" /> {flagged[currentQ.id] ? 'Flagged' : 'Flag to revisit'}
-                </button>
-              </div>
-              <div
-                role="progressbar"
-                aria-label="Quiz progress"
-                aria-valuemin={1}
-                aria-valuemax={quiz.questions.length}
-                aria-valuenow={currentIdx + 1}
-                aria-valuetext={`Question ${currentIdx + 1} of ${quiz.questions.length}`}
-                className="flex gap-1"
-              >
-                {quiz.questions.map((q: any, i: number) => (
-                  <span
-                    key={q.id || i}
-                    className={`h-1.5 flex-1 rounded-full ${
-                      i === currentIdx ? 'bg-[var(--spark)]' : answers[q.id] ? 'bg-[var(--accent-600)]' : 'bg-[var(--border-hairline)]'
-                    }`}
-                  />
-                ))}
-              </div>
-              <h2 className={`text-base font-semibold ${textPrimary}`}>{currentQ.prompt}</h2>
-              {currentQ.code && <pre className={`p-4 rounded-xl text-xs font-mono overflow-x-auto border ${borderClass} ${subtleBgClass} ${textPrimary}`}>{currentQ.code}</pre>}
-
-              {currentQ.options && currentQ.options.length > 0 ? (
-                <div className="space-y-3">
-                  {currentQ.options.map((opt: string, i: number) => {
-                    const selected = answers[currentQ.id] === opt;
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setActiveQuizSession({ ...activeQuizSession, answers: { ...answers, [currentQ.id]: opt } })}
-                        className={`w-full text-left p-3.5 rounded-xl border text-sm transition cursor-pointer ${
-                          selected ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)] font-medium' : `${borderClass} ${subtleBgClass} ${textPrimary}`
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <textarea
-                  rows={3}
-                  value={answers[currentQ.id] || ''}
-                  onChange={(e) => setActiveQuizSession({ ...activeQuizSession, answers: { ...answers, [currentQ.id]: e.target.value } })}
-                  placeholder="Write your answer in plain words..."
-                  className={inputClass}
-                />
-              )}
-
-              <div className={`flex items-center justify-between pt-3 border-t ${borderClass}`}>
-                <button type="button" disabled={currentIdx === 0} onClick={() => setActiveQuizSession({ ...activeQuizSession, currentIdx: currentIdx - 1 })} className={btnSecondary}>
-                  Previous
-                </button>
-                {currentIdx < quiz.questions.length - 1 ? (
-                  <button type="button" onClick={() => setActiveQuizSession({ ...activeQuizSession, currentIdx: currentIdx + 1 })} className={btnPrimary}>
-                    Next Question
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => setActiveQuizSession({ ...activeQuizSession, reviewing: true })} className={btnPrimary}>
-                    Review & Submit
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Daily Learning Variables
+  // Daily Learning Variables (accurate topic matching — avoids false positives)
   const topicHasSubmission = codeSubmissions.some((s) => s.topic === dailyTarget.topic);
   const topicHasReview = codeSubmissions.some((s) => s.topic === dailyTarget.topic && Boolean(s.review));
+  const dailyNorm = dailyTarget.topic.trim().toLowerCase();
+  const dailyTokens = dailyNorm.split(/\s+/).filter((w) => w.length >= 3);
+  const matchesTopicText = (txt: string) => {
+    const low = String(txt || '').trim().toLowerCase();
+    if (!low || !dailyNorm) return false;
+    if (low === dailyNorm || low.includes(dailyNorm) || dailyNorm.includes(low)) return true;
+    return dailyTokens.some((tok) => low.includes(tok));
+  };
   const topicQuizMatch =
-    quizzes.find((q) => q.topic.toLowerCase().includes(dailyTarget.topic.toLowerCase().split(' ')[0] || '')) || quizzes[0];
-  const topicHasQuiz = quizAttempts.some((a) =>
-    a.quizTitle.toLowerCase().includes(dailyTarget.topic.toLowerCase().split(' ')[0] || '')
+    allAvailableQuizzes.find((q) => matchesTopicText(q.topic) || matchesTopicText(q.title)) || null;
+  const topicHasQuiz = quizAttempts.some(
+    (a) =>
+      (topicQuizMatch && a.quizId === topicQuizMatch.id) ||
+      matchesTopicText(a.quizTitle) ||
+      (a.strongTopics || []).some(matchesTopicText)
   );
 
   const pipelineSteps: { n: DailyStage; label: string; hint: string; done: boolean }[] = [
@@ -1279,14 +1004,22 @@ export const LearningSection = ({
   const stageInput =
     'w-full px-3.5 py-2.5 text-base rounded-lg border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--ink-primary)] placeholder:text-[var(--ink-muted)] focus:outline-none focus:border-[var(--accent-600)] transition-colors';
 
-  // Progress Metrics
+  // Connected Progress Metrics (real state only)
   const statuses = selectedRoadmap.topics.map((t) => ({
     topic: t,
     status: roadmapProgress[t.id]?.status || 'Not Started',
     struggling: Boolean(roadmapProgress[t.id]?.struggling),
   }));
-  const needsRevisionTopics = statuses.filter((s) => s.status === 'Needs Revision' || s.struggling);
   const demonstratedTopics = statuses.filter((s) => s.status === 'Demonstrated' || s.status === 'Completed');
+  const needsRevisionNames = topicsNeedingRevision(quizAttempts, selectedRoadmap, roadmapProgress, codeSubmissions);
+  const avgQuizScore = quizAverage(quizAttempts);
+  const totalCourseModules = courses.reduce((sum, c) => sum + (c.modules?.length || 0), 0);
+  const completedCourseModules = courses.reduce(
+    (sum, c) => sum + (c.modules?.filter((m) => m.completed).length || 0),
+    0
+  );
+  const completedProjectsCount = weeklyProjects.filter((p) => p.status === 'Submitted' || p.status === 'Reviewed').length;
+  const completedPersonalMilestones = personalMilestones.filter((m) => m.status === 'Completed').length;
 
   return (
     <div className="space-y-6">
@@ -1882,17 +1615,26 @@ export const LearningSection = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setSubTab('quizzes');
-                      startQuiz(topicQuizMatch, false);
-                    }}
+                    onClick={() => launchQuizUntimed(topicQuizMatch)}
                     className={stagePrimary}
                   >
                     Start quiz <ArrowRight className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               ) : (
-                <p className={`text-base ${textSecondary}`}>There’s no quiz for this topic yet. You can browse all quizzes or move on to your feedback.</p>
+                <div className="space-y-3">
+                  <p className={`text-base ${textSecondary}`}>There’s no pre-built quiz for “{dailyTarget.topic}” yet. Generate a short AI quiz grounded in this topic or browse all quizzes.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestedQuizTopic(dailyTarget.topic);
+                      setSubTab('quizzes');
+                    }}
+                    className={stagePrimary}
+                  >
+                    Generate Quiz for “{dailyTarget.topic}” <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
               )}
 
               <div className={`pt-5 border-t ${borderClass} flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3`}>
@@ -3002,149 +2744,166 @@ export const LearningSection = ({
 
       {/* 4. QUIZZES */}
       {subTab === 'quizzes' && (
-        <div data-tour="learning-quizzes" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <section className="lg:col-span-8 space-y-4 min-w-0">
-              <h2 className={`text-xl ${textPrimary}`}>Pick a quiz</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {quizzes.map((q) => (
-                  <article key={q.id} className={`${cardClass} p-6 flex flex-col gap-4`}>
-                    <div className="space-y-2 flex-1">
-                      <p className={`text-xs ${textSecondary}`}>{q.scope || 'Practice'} · {q.difficulty}</p>
-                      <h3 className={`text-lg leading-snug ${textPrimary}`}>{q.title}</h3>
-                      <p className={`text-sm ${textSecondary}`}>{q.topic} · <span className="tabular-nums">{q.questions.length} questions</span></p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => startQuiz(q, false)} className={btnPrimary}>Take quiz</button>
-                      <button type="button" onClick={() => startQuiz(q, true)} className={btnSecondary}>Timed, {q.durationMinutes} min</button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-
-              <details open={quizzes.length === 0} className={`${cardClass} group`}>
-                <summary className="list-none cursor-pointer px-5 py-4 flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-                  <span>
-                    <span className={`block text-base font-semibold ${textPrimary}`}>Make a new quiz with AI</span>
-                    <span className={`block text-xs ${textSecondary}`}>Choose a topic and level. Questions avoid repeats.</span>
-                  </span>
-                  <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90 text-[var(--accent-600)]" />
-                </summary>
-                <div className={`border-t ${borderClass} p-5`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <select
-                value={quizGen.courseId}
-                onChange={(e) => {
-                  const c = courses.find((x) => x.id === e.target.value);
-                  setQuizGen({ ...quizGen, courseId: e.target.value, topic: c?.currentTopic || quizGen.topic });
-                }}
-                className={inputClass}
-              >
-                <option value="general">General / Roadmap Topic</option>
-                {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
-              <input
-                type="text"
-                value={quizGen.topic}
-                onChange={(e) => setQuizGen({ ...quizGen, topic: e.target.value })}
-                placeholder="Topic (e.g., Flexbox, Loops, Fetch)..."
-                className={inputClass}
-              />
-              <select value={quizGen.scope} onChange={(e) => setQuizGen({ ...quizGen, scope: e.target.value })} className={inputClass}>
-                <option value="Topic Quiz">Topic Quiz</option>
-                <option value="Module Quiz">Module Quiz</option>
-                <option value="Weekly Revision Quiz">Weekly Revision</option>
-                <option value="Stage Assessment">Stage Assessment</option>
-              </select>
-              <select value={quizGen.difficulty} onChange={(e) => setQuizGen({ ...quizGen, difficulty: e.target.value })} className={inputClass}>
-                <option value="Complete beginner">Complete beginner</option>
-                <option value="Beginner">Beginner</option>
-                <option value="Intermediate">Intermediate</option>
-                <option value="Advanced">Advanced</option>
-              </select>
-              <button type="button" disabled={quizBusy} onClick={handleGenerateAiQuiz} className={btnPrimary}>
-                {quizBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Create Quiz
-              </button>
-            </div>
-                </div>
-              </details>
-            </section>
-
-            <aside className="lg:col-span-4 space-y-4 lg:sticky lg:top-6 min-w-0">
-              <h2 className={`text-xl ${textPrimary}`}>Recent attempts</h2>
-              {quizAttempts.length === 0 ? (
-                <EmptyState title="No quizzes taken yet" description="Try an untimed quiz on a topic you studied to see what clicked." />
-              ) : (
-                quizAttempts.map((att) => (
-                  <div key={att.id} className={`${cardClass} p-5 space-y-3`}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <h4 className={`text-sm font-semibold ${textPrimary}`}>{att.quizTitle}</h4>
-                      <span className={`font-display text-xl tabular-nums ${textPrimary}`}>{att.percentage}%</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-[var(--border-hairline)] overflow-hidden">
-                      <div className={`h-full ${att.percentage >= 75 ? 'bg-[var(--success-ink)]' : 'bg-[var(--spark)]'}`} style={{ width: `${att.percentage}%` }} />
-                    </div>
-                    <p className={`text-xs ${textSecondary}`}>{att.date} · {att.score}/{att.total}</p>
-                    {att.weakTopics.length > 0 && <p className="text-xs text-[var(--warning-ink)]">Revisit: <strong>{att.weakTopics.join(', ')}</strong></p>}
-                  </div>
-                ))
-              )}
-            </aside>
-          </div>
-        </div>
+        <QuizWorkspace
+          profile={profile}
+          user={user}
+          courses={courses}
+          selectedRoadmap={selectedRoadmap}
+          roadmapProgress={roadmapProgress}
+          importedMaterials={importedMaterials}
+          selfDirectedTopics={selfDirectedTopics}
+          codeSubmissions={codeSubmissions}
+          sharedQuizzes={quizzes}
+          personalQuizzes={personalQuizzes}
+          setPersonalQuizzes={setPersonalQuizzes}
+          quizAttempts={quizAttempts}
+          setQuizAttempts={setQuizAttempts}
+          activeQuizSession={activeQuizSession}
+          setActiveQuizSession={setActiveQuizSession}
+          preselectedTopic={requestedQuizTopic}
+          onClearPreselectedTopic={() => setRequestedQuizTopic(undefined)}
+          onAskMentor={onAskMentor}
+          onNotify={onNotify}
+          styles={styles}
+        />
       )}
 
       {/* 5. YOUR PROGRESS */}
       {subTab === 'progress' && (
         <div className="space-y-6">
-          <dl className="grid grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-4">
+          <dl className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             {[
-              { label: 'Topics demonstrated', value: demonstratedTopics.length },
-              { label: 'Code submissions', value: codeSubmissions.length },
-              { label: 'Quizzes completed', value: quizAttempts.length },
-              { label: 'Daily check-ins', value: dailyLogs.length },
-              { label: 'Study min logged', value: totalStudyMinutes },
+              {
+                label: 'Course modules',
+                value: totalCourseModules ? `${completedCourseModules}/${totalCourseModules}` : `${courses.length}`,
+                sub: totalCourseModules ? `${Math.round((completedCourseModules / totalCourseModules) * 100)}% completed` : 'Courses tracked',
+              },
+              {
+                label: 'Quiz average',
+                value: avgQuizScore === null ? '—' : `${avgQuizScore}%`,
+                sub: `${quizAttempts.length} attempt${quizAttempts.length === 1 ? '' : 's'}`,
+              },
+              {
+                label: 'Submissions',
+                value: `${codeSubmissions.length}`,
+                sub: `${codeSubmissions.filter((s) => s.status === 'Demonstrated' || s.review?.recommendedStatus === 'Demonstrated').length} demonstrated`,
+              },
+              {
+                label: 'Weekly projects',
+                value: `${completedProjectsCount}/${weeklyProjects.length}`,
+                sub: 'Submitted or reviewed',
+              },
+              {
+                label: 'Roadmap topics',
+                value: `${demonstratedTopics.length}/${selectedRoadmap.topics.length}`,
+                sub: selectedRoadmap.title,
+              },
+              {
+                label: 'Study min logged',
+                value: `${totalStudyMinutes}`,
+                sub: `${dailyLogs.length} daily check-in${dailyLogs.length === 1 ? '' : 's'}`,
+              },
             ].map((stat, idx) => (
-              <div key={idx} className="soft-card px-5 py-4">
+              <div key={idx} className="soft-card px-4 py-4">
                 <dt className={`text-xs ${textSecondary}`}>{stat.label}</dt>
-                <dd className={`font-display text-5xl tabular-nums leading-tight ${textPrimary}`}>{stat.value}</dd>
+                <dd className={`font-display text-3xl sm:text-4xl tabular-nums leading-tight mt-0.5 ${textPrimary}`}>{stat.value}</dd>
+                <div className={`text-[11px] truncate mt-1 ${textSecondary}`}>{stat.sub}</div>
               </div>
             ))}
           </dl>
 
+          {/* Connected Progress Breakdown */}
+          <div className={`${cardClass} p-5 space-y-4`}>
+            <h2 className={`text-lg font-semibold ${textPrimary}`}>Connected activity breakdown</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className={`p-3.5 rounded-xl border ${borderClass} ${subtleBgClass} space-y-1.5`}>
+                <div className={`font-semibold ${textPrimary}`}>Courses & Self-Directed</div>
+                <p className={textSecondary}>
+                  {courses.length === 0
+                    ? 'No courses linked yet.'
+                    : `${completedCourseModules} of ${totalCourseModules} course modules checked off across ${courses.length} course(s).`}
+                </p>
+                {selfDirectedTopics.length > 0 && (
+                  <p className={textSecondary}>
+                    {selfDirectedTopics.filter((s) => s.status === 'Completed').length}/{selfDirectedTopics.length} self-directed topic(s) completed.
+                  </p>
+                )}
+              </div>
+              <div className={`p-3.5 rounded-xl border ${borderClass} ${subtleBgClass} space-y-1.5`}>
+                <div className={`font-semibold ${textPrimary}`}>Assessments & Practice</div>
+                <p className={textSecondary}>
+                  {quizAttempts.length === 0
+                    ? 'No quizzes completed yet.'
+                    : `${quizAttempts.filter((a) => a.percentage >= 75).length} of ${quizAttempts.length} quiz attempts scored 75%+.`}
+                </p>
+                <p className={textSecondary}>
+                  {revisionSubmissions.length > 0
+                    ? `${revisionSubmissions.length} code submission(s) currently marked Needs Revision.`
+                    : codeSubmissions.length > 0
+                      ? 'All reviewed submissions are on track.'
+                      : 'No code submissions yet.'}
+                </p>
+              </div>
+              <div className={`p-3.5 rounded-xl border ${borderClass} ${subtleBgClass} space-y-1.5`}>
+                <div className={`font-semibold ${textPrimary}`}>Roadmaps & Personal Milestones</div>
+                <p className={textSecondary}>
+                  {demonstratedTopics.length} demonstrated out of {selectedRoadmap.topics.length} on {selectedRoadmap.title}.
+                </p>
+                <p className={textSecondary}>
+                  {personalMilestones.length === 0
+                    ? 'No custom personal milestones added yet.'
+                    : `${completedPersonalMilestones} of ${personalMilestones.length} personal milestones completed.`}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <div className={`${cardClass} p-6 space-y-4 lg:col-span-7`}>
               <h2 className={`text-xl ${textPrimary}`}>Topics to revisit</h2>
-              {needsRevisionTopics.length === 0 ? (
+              {needsRevisionNames.length === 0 ? (
                 <p className={`text-xs leading-relaxed ${textSecondary}`}>
-                  Nothing flagged right now. Whenever a topic feels confusing in a quiz or your roadmap, mark it “Needs Revision” to get focused practice links here.
+                  Nothing flagged right now. Whenever you miss quiz questions, get a Needs Revision code review, or flag a roadmap topic, it appears here with direct practice actions.
                 </p>
               ) : (
                 <div className={`divide-y ${borderClass}`}>
-                  {needsRevisionTopics.map((item) => (
-                    <div key={item.topic.id} className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className={`text-xs font-semibold ${textPrimary}`}>{item.topic.name}</div>
-                        <div className={`text-xs ${textSecondary}`}>Try a simpler explanation or a short revision quiz.</div>
+                  {needsRevisionNames.map((topicName) => {
+                    const matchingSub = revisionSubmissions.find(
+                      (s) => (s.topic || '').trim().toLowerCase() === topicName.trim().toLowerCase()
+                    );
+                    return (
+                      <div key={topicName} className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className={`text-xs font-semibold ${textPrimary}`}>{topicName}</div>
+                          <div className={`text-xs ${textSecondary}`}>
+                            {matchingSub
+                              ? `Flagged in submission v${matchingSub.version} — revise & resubmit or test understanding.`
+                              : 'Flagged by recent quiz misses or your roadmap progress.'}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => onAskMentor(`Explain "${topicName}" with a simple beginner example and a tiny practice prompt.`)} className={btnSecondary}>
+                            Simpler Explanation
+                          </button>
+                          {matchingSub && (
+                            <button type="button" onClick={() => setSubTab('submissions')} className={btnSecondary}>
+                              View Feedback
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRequestedQuizTopic(topicName);
+                              setSubTab('quizzes');
+                            }}
+                            className={btnPrimary}
+                          >
+                            Revision Quiz
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => onAskMentor(`Explain "${item.topic.name}" with a simple beginner example and a tiny practice prompt.`)} className={btnSecondary}>
-                          Simpler Explanation
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setQuizGen((prev) => ({ ...prev, topic: item.topic.name, difficulty: 'Beginner' }));
-                            setSubTab('quizzes');
-                          }}
-                          className={btnPrimary}
-                        >
-                          Revision Quiz
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

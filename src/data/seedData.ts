@@ -767,6 +767,9 @@ export const PERSONAL_KEYS = [
   'importedMaterials',
   'selfDirectedTopics',
   'studySessions',
+  'personalQuizzes',
+  'personalMilestones',
+  'activeQuizSession',
 ];
 
 export const SHARED_KEYS = [
@@ -846,5 +849,8 @@ export function blankPersonal(name = '', hk: any = { checklist: [] }) {
     importedMaterials: [],
     selfDirectedTopics: [],
     studySessions: [],
+    personalQuizzes: [],
+    personalMilestones: [],
+    activeQuizSession: null,
   };
 }

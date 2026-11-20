@@ -1,0 +1,291 @@
+import type {
+  ArenaChallengeItem,
+  ArenaProblem,
+  BountyItem,
+  SeasonalCompetition,
+  TeamBuildOff,
+} from '../types';
+
+export const ARENA_PROBLEMS: ArenaProblem[] = [
+  {
+    id: 'prob-two-sum',
+    title: 'Two Sum Index Pair',
+    difficulty: 'Beginner',
+    category: 'Arrays & Hashing',
+    timeLimitSeconds: 420,
+    scoringRule: 'First team passing all 5 test cases wins in Speed mode; up to 1,000 pts in Scored mode (800 test accuracy + 200 speed bonus).',
+    description:
+      'Given an array of integers `nums` and an integer `target`, return `[i, j]` (`i < j`) such that `nums[i] + nums[j] === target`. Each test case has exactly one valid pair.',
+    constraints: [
+      '2 <= nums.length <= 10,000',
+      'Return the two zero-based indices with the smaller index first',
+      'Do not reuse the same index twice',
+    ],
+    examples: [
+      { input: 'nums = [2, 7, 11, 15], target = 9', output: '[0, 1]', explanation: 'nums[0] + nums[1] = 2 + 7 = 9.' },
+      { input: 'nums = [3, 2, 4], target = 6', output: '[1, 2]' },
+    ],
+    entryPoint: 'solve',
+    starterCode: {
+      javascript: `function solve(nums, target) {\n  const seen = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const need = target - nums[i];\n    if (seen.has(need)) return [seen.get(need), i];\n    seen.set(nums[i], i);\n  }\n  return [];\n}\n`,
+      typescript: `export function solve(nums: number[], target: number): number[] {\n  const seen = new Map<number, number>();\n  for (let i = 0; i < nums.length; i++) {\n    const need = target - nums[i];\n    if (seen.has(need)) return [seen.get(need)!, i];\n    seen.set(nums[i], i);\n  }\n  return [];\n}\n`,
+      python: `def solve(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i\n    return []\n`,
+    },
+    testCases: [
+      { id: 't1', label: 'Basic sorted pair', args: [[2, 7, 11, 15], 9], expected: [0, 1], hidden: false },
+      { id: 't2', label: 'Unsorted middle pair', args: [[3, 2, 4], 6], expected: [1, 2], hidden: false },
+      { id: 't3', label: 'Duplicate values', args: [[3, 3], 6], expected: [0, 1], hidden: false },
+      { id: 't4', label: 'Negative integers', args: [[-4, 1, 9, -2, 5], 3], expected: [3, 4], hidden: true },
+      { id: 't5', label: 'Zeroes and negatives', args: [[0, 4, -3, 0], 0], expected: [0, 3], hidden: true },
+    ],
+  },
+  {
+    id: 'prob-valid-brackets',
+    title: 'Balanced Delimiter Validator',
+    difficulty: 'Beginner',
+    category: 'Stacks & Strings',
+    timeLimitSeconds: 420,
+    scoringRule: 'Pass all visible and hidden bracket edge cases using an O(n) stack scan.',
+    description:
+      'Given a string `s` containing only `()`, `[]`, `{}`, and optional code identifier characters, return `true` if every opening bracket has a matching closing bracket in valid LIFO order, and `false` otherwise.',
+    constraints: [
+      '0 <= s.length <= 10,000',
+      'Ignore non-bracket characters if present, only validate (), [], {} nesting',
+    ],
+    examples: [
+      { input: 's = "({[]})"', output: 'true' },
+      { input: 's = "([)]"', output: 'false', explanation: 'Closed out of order.' },
+    ],
+    entryPoint: 'solve',
+    starterCode: {
+      javascript: `function solve(s) {\n  // Write your bracket validator\n  return false;\n}\n`,
+      typescript: `export function solve(s: string): boolean {\n  // Write your bracket validator\n  return false;\n}\n`,
+      python: `def solve(s):\n    # Write your bracket validator\n    return False\n`,
+    },
+    testCases: [
+      { id: 't1', label: 'Nested mixed brackets', args: ['({[]})'], expected: true, hidden: false },
+      { id: 't2', label: 'Crossed nesting', args: ['([)]'], expected: false, hidden: false },
+      { id: 't3', label: 'Sequential valid pairs', args: ['()[]{}'], expected: true, hidden: false },
+      { id: 't4', label: 'Unmatched closing first', args: [']()'], expected: false, hidden: true },
+      { id: 't5', label: 'Code expression wrapper', args: ['fn(arr[0], {ok: true})'], expected: true, hidden: true },
+    ],
+  },
+  {
+    id: 'prob-first-unique',
+    title: 'First Unique Character Index',
+    difficulty: 'Beginner',
+    category: 'Frequency Maps',
+    timeLimitSeconds: 360,
+    scoringRule: 'Accuracy across frequency edge cases with earliest completion tie-breaker.',
+    description:
+      'Given a string `s`, return the zero-based index of the first character that appears only once in `s`. If no unique character exists, return `-1`.',
+    constraints: ['Case-sensitive comparison', '0 <= s.length <= 20,000'],
+    examples: [
+      { input: 's = "devhub"', output: '0', explanation: '"d" only appears once.' },
+      { input: 's = "aabbcc"', output: '-1' },
+    ],
+    entryPoint: 'solve',
+    starterCode: {
+      javascript: `function solve(s) {\n  // Return index of first non-repeating character, or -1\n  return -1;\n}\n`,
+      typescript: `export function solve(s: string): number {\n  // Return index of first non-repeating character, or -1\n  return -1;\n}\n`,
+      python: `def solve(s):\n    # Return index of first non-repeating character, or -1\n    return -1\n`,
+    },
+    testCases: [
+      { id: 't1', label: 'First char unique', args: ['devhub'], expected: 0, hidden: false },
+      { id: 't2', label: 'Middle char unique', args: ['loveleetcode'], expected: 2, hidden: false },
+      { id: 't3', label: 'None unique', args: ['aabbcc'], expected: -1, hidden: false },
+      { id: 't4', label: 'Empty string', args: [''], expected: -1, hidden: true },
+      { id: 't5', label: 'Case sensitivity check', args: ['aAbBcC'], expected: 0, hidden: true },
+    ],
+  },
+  {
+    id: 'prob-merge-intervals',
+    title: 'Merge Overlapping Windows',
+    difficulty: 'Intermediate',
+    category: 'Sorting & Intervals',
+    timeLimitSeconds: 540,
+    scoringRule: 'Passes all unsorted and touching-boundary interval tests cleanly.',
+    description:
+      'Given an array of `[start, end]` integer intervals, merge all overlapping or touching intervals (`nextStart <= currentEnd`) and return the merged list sorted by start ascending.',
+    constraints: ['Input intervals may not be sorted', '0 <= intervals.length <= 5,000'],
+    examples: [
+      { input: 'intervals = [[1,3],[2,6],[8,10],[15,18]]', output: '[[1,6],[8,10],[15,18]]' },
+      { input: 'intervals = [[1,4],[4,5]]', output: '[[1,5]]' },
+    ],
+    entryPoint: 'solve',
+    starterCode: {
+      javascript: `function solve(intervals) {\n  // Sort and merge overlapping intervals\n  return [];\n}\n`,
+      typescript: `export function solve(intervals: number[][]): number[][] {\n  // Sort and merge overlapping intervals\n  return [];\n}\n`,
+      python: `def solve(intervals):\n    # Sort and merge overlapping intervals\n    return []\n`,
+    },
+    testCases: [
+      { id: 't1', label: 'Standard overlap', args: [[[1, 3], [2, 6], [8, 10], [15, 18]]], expected: [[1, 6], [8, 10], [15, 18]], hidden: false },
+      { id: 't2', label: 'Touching boundaries', args: [[[1, 4], [4, 5]]], expected: [[1, 5]], hidden: false },
+      { id: 't3', label: 'Unsorted contained interval', args: [[[6, 8], [1, 9], [2, 4]]], expected: [[1, 9]], hidden: true },
+      { id: 't4', label: 'Empty input', args: [[]], expected: [], hidden: true },
+    ],
+  },
+  {
+    id: 'prob-top-k-frequent',
+    title: 'Top K Frequent Elements',
+    difficulty: 'Intermediate',
+    category: 'Counting & Sorting',
+    timeLimitSeconds: 480,
+    scoringRule: 'Return the k most frequent elements ordered from highest frequency to lowest (break ties by smaller integer).',
+    description:
+      'Given an integer array `nums` and integer `k`, return the `k` most frequent elements sorted by descending frequency. If two numbers share the same frequency, place the smaller number first.',
+    constraints: ['1 <= k <= unique values in nums'],
+    examples: [
+      { input: 'nums = [1,1,1,2,2,3], k = 2', output: '[1, 2]' },
+      { input: 'nums = [5,5,2,2,8], k = 2', output: '[2, 5]', explanation: 'Tie broken by smaller integer first.' },
+    ],
+    entryPoint: 'solve',
+    starterCode: {
+      javascript: `function solve(nums, k) {\n  // Return top k integers (freq desc, value asc on tie)\n  return [];\n}\n`,
+      typescript: `export function solve(nums: number[], k: number): number[] {\n  // Return top k integers (freq desc, value asc on tie)\n  return [];\n}\n`,
+      python: `def solve(nums, k):\n    # Return top k integers (freq desc, value asc on tie)\n    return []\n`,
+    },
+    testCases: [
+      { id: 't1', label: 'Clear frequency order', args: [[1, 1, 1, 2, 2, 3], 2], expected: [1, 2], hidden: false },
+      { id: 't2', label: 'Tie-break smaller value first', args: [[5, 5, 2, 2, 8], 2], expected: [2, 5], hidden: false },
+      { id: 't3', label: 'Single element', args: [[42], 1], expected: [42], hidden: true },
+      { id: 't4', label: 'Negative integers', args: [[-1, -1, -2, -2, -2, 3], 2], expected: [-2, -1], hidden: true },
+    ],
+  },
+  {
+    id: 'prob-sliding-window-rate',
+    title: 'Sliding Window Rate Limiter Count',
+    difficulty: 'Advanced',
+    category: 'Queues & Systems',
+    timeLimitSeconds: 600,
+    scoringRule: 'Efficiently handle timestamp queries without exceeding timeout on larger arrays.',
+    description:
+      'Given sorted request timestamps in milliseconds `timestamps` and a window size `windowMs`, return an array where index `i` holds how many requests occurred within `[timestamps[i] - windowMs, timestamps[i]]` inclusive.',
+    constraints: ['timestamps is sorted ascending', '0 <= timestamps.length <= 20,000'],
+    examples: [
+      { input: 'timestamps = [100, 200, 1200, 1250], windowMs = 300', output: '[1, 2, 1, 2]' },
+    ],
+    entryPoint: 'solve',
+    starterCode: {
+      javascript: `function solve(timestamps, windowMs) {\n  // Maintain a sliding pointer window\n  return [];\n}\n`,
+      typescript: `export function solve(timestamps: number[], windowMs: number): number[] {\n  // Maintain a sliding pointer window\n  return [];\n}\n`,
+      python: `def solve(timestamps, windowMs):\n    # Maintain a sliding pointer window\n    return []\n`,
+    },
+    testCases: [
+      { id: 't1', label: 'Standard burst & gap', args: [[100, 200, 1200, 1250], 300], expected: [1, 2, 1, 2], hidden: false },
+      { id: 't2', label: 'Exact boundary inclusive', args: [[0, 1000, 1001, 2000], 1000], expected: [1, 2, 2, 3], hidden: false },
+      { id: 't3', label: 'Duplicate timestamps', args: [[500, 500, 500], 100], expected: [1, 2, 3], hidden: true },
+      { id: 't4', label: 'Zero window', args: [[10, 10, 20], 0], expected: [1, 2, 1], hidden: true },
+    ],
+  },
+];
+
+export const INITIAL_ARENA_CHALLENGES: ArenaChallengeItem[] = [
+  {
+    id: 'ac-daily-brackets',
+    cadence: 'daily',
+    kind: 'code',
+    title: 'Daily Sprint: Balanced Delimiter Validator',
+    category: 'Algorithms',
+    difficulty: 'Beginner',
+    deadline: 'Resets Daily',
+    xpReward: 50,
+    problemId: 'prob-valid-brackets',
+    description: 'Validate nested (), [], and {} brackets cleanly inside the isolated runner. Passes both visible and hidden cases.',
+    objectives: ['Handle mismatched closing delimiters cleanly', 'Pass all 5 isolated test cases'],
+    submissions: [],
+    createdBy: 'Dev Hub',
+    createdAt: '2026-11-20T00:00:00.000Z',
+  },
+  {
+    id: 'ac-weekly-intervals',
+    cadence: 'weekly',
+    kind: 'code',
+    title: 'Weekly Algorithm: Merge Overlapping Windows',
+    category: 'Data Structures',
+    difficulty: 'Intermediate',
+    deadline: 'Sunday 23:59',
+    xpReward: 80,
+    problemId: 'prob-merge-intervals',
+    description: 'Sort and merge unsorted or boundary-touching intervals accurately in JavaScript, TypeScript, or Python.',
+    objectives: ['Sort safely without mutating unexpected references', 'Handle empty arrays and contained intervals'],
+    submissions: [],
+    createdBy: 'Dev Hub',
+    createdAt: '2026-11-20T00:00:00.000Z',
+  },
+  {
+    id: 'ac-weekly-accessible-table',
+    cadence: 'weekly',
+    kind: 'build',
+    title: 'Weekly Build: Accessible Keyboard Filter List',
+    category: 'Frontend',
+    difficulty: 'Beginner',
+    deadline: 'Sunday 23:59',
+    xpReward: 75,
+    description: 'Build a responsive searchable & filterable list component supporting full keyboard navigation and clear empty states.',
+    objectives: ['Case-insensitive search without lag', 'Keyboard arrow navigation or clean focus management', 'Empty state message'],
+    submissions: [],
+    createdBy: 'Dev Hub',
+    createdAt: '2026-11-20T00:00:00.000Z',
+  },
+];
+
+export const INITIAL_TEAM_BUILD_OFFS: TeamBuildOff[] = [
+  {
+    id: 'bo-study-planner',
+    title: '48-Hour Weekend Build-Off: Developer Focus Timer & Study Log',
+    theme: 'Developer Productivity',
+    description: 'Pair up in teams of 2–3 to ship a distraction-free Pomodoro or deep-work log with clean keyboard shortcuts and zero dependencies.',
+    teamSizeMin: 2,
+    teamSizeMax: 3,
+    deadline: '2026-11-29',
+    xpReward: 150,
+    status: 'Open',
+    entries: [],
+    winnerEntryId: null,
+    createdAt: '2026-11-20T00:00:00.000Z',
+  },
+];
+
+export const INITIAL_BOUNTIES: BountyItem[] = [
+  {
+    id: 'bounty-a11y-audit',
+    title: 'Keyboard Focus & ARIA Audit Patch',
+    category: 'Accessibility',
+    difficulty: 'Beginner',
+    description: 'Audit an open Dev Hub component for missing aria-labels or focus trapping issues and submit a clean fix diff or PR.',
+    acceptanceCriteria: [
+      'Zero keyboard traps when navigating modals and tabs',
+      'Explain root cause and how you verified with keyboard-only navigation',
+    ],
+    xpReward: 90,
+    status: 'Open',
+    submissions: [],
+    createdAt: '2026-11-20T00:00:00.000Z',
+  },
+  {
+    id: 'bounty-edge-tests',
+    title: 'Add Boundary Test Coverage for Interval Utilities',
+    category: 'Testing',
+    difficulty: 'Intermediate',
+    description: 'Write thorough unit test cases covering empty, negative, single-element, and touching intervals with a reproducible repo or gist.',
+    acceptanceCriteria: [
+      'Cover at least 6 distinct edge cases',
+      'Attach link or explanation verifying all assertions pass',
+    ],
+    xpReward: 110,
+    status: 'Open',
+    submissions: [],
+    createdAt: '2026-11-20T00:00:00.000Z',
+  },
+];
+
+export const INITIAL_SEASON: SeasonalCompetition = {
+  id: 'season-1',
+  name: 'Season 1: Builders & Algorithms Cup',
+  theme: 'Real consistency across Coding Duels, Daily Challenges, Bounties & Team Build-Offs',
+  startDate: '2026-11-01',
+  endDate: '2026-12-31',
+  status: 'Active',
+  prizeSummary: 'Top 3 Season Champions earn Season Trophy badges + Featured Profile highlight.',
+};

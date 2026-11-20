@@ -1,9 +1,40 @@
 import React, { useMemo, useState } from 'react';
 import { recommendChallenges } from '../lib/adaptive';
-import { ArrowRight, Award, Check, Flame, Lock, TrendingUp, Zap } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  Check,
+  Code2,
+  Flame,
+  Hammer,
+  History,
+  Lock,
+  Swords,
+  Target,
+  TrendingUp,
+  Trophy,
+  Zap,
+} from 'lucide-react';
 import { EmptyState, PageHeader, ProgressBar, SectionTabs, Sparkle } from './ui';
 import { MilestoneIcon } from './MilestoneBadges';
-import { XP_RULES, STREAK_BONUSES, LEVELS, boardSkills, rankBoard, type BoardMode, type GamificationSummary } from '../lib/gamification';
+import { ArenaMatchRoom } from './ArenaMatchRoom';
+import {
+  ArenaChallengesPanel,
+  BountyBoardPanel,
+  BuildOffAndPotwPanel,
+  CompetitionHistoryPanel,
+  SeasonStandingsPanel,
+} from './CompetitionsPanels';
+import {
+  XP_RULES,
+  STREAK_BONUSES,
+  LEVELS,
+  boardSkills,
+  rankBoard,
+  type BoardMode,
+  type GamificationSummary,
+} from '../lib/gamification';
+import type { ArenaActorRef, ArenaBootstrapResponse, ArenaSocketClient } from '../lib/arenaClient';
 import type { BadgeCategory, LeaderboardMap, MemberMilestone, MilestoneSummary, OnboardingProfile, QuizAttempt } from '../types';
 
 const initialsOf = (n: string) =>
@@ -23,6 +54,7 @@ type Styles = {
   subtleBgClass: string;
   textPrimary: string;
   textSecondary: string;
+  inputClass: string;
   btnPrimary: string;
   btnSecondary: string;
 };
@@ -112,15 +144,24 @@ const BadgeTile = ({ m, textPrimary, textSecondary }: { m: MemberMilestone; text
 };
 
 /* ------------------------------------------------------------------ *
- * The Compete section
+ * The Compete section (Overview, Coding Arena, Challenges, Build-Offs, Bounties, Leaderboard & Season, Badges, History)
  * ------------------------------------------------------------------ */
-export type CompeteTab = 'compete' | 'leaderboard' | 'badges';
+export type CompeteTab =
+  | 'compete'
+  | 'arena'
+  | 'arena-challenges'
+  | 'buildoffs'
+  | 'bounties'
+  | 'leaderboard'
+  | 'badges'
+  | 'compete-history';
 
 export const CompeteSection = ({
   subTab,
   setSubTab,
   userId,
   userName,
+  isAdmin = false,
   profile,
   setProfile,
   summary,
@@ -129,12 +170,21 @@ export const CompeteSection = ({
   onNavigate,
   challenges = [],
   quizAttempts = [],
+  arenaBootstrap,
+  selectedMatchId,
+  onSelectMatch,
+  wsConnected,
+  serverOffsetMs,
+  socketRef,
+  onRefreshArena,
+  onNotify,
   styles,
 }: {
   subTab: CompeteTab;
   setSubTab: (t: CompeteTab) => void;
   userId: string;
   userName: string;
+  isAdmin?: boolean;
   profile: OnboardingProfile;
   setProfile: React.Dispatch<React.SetStateAction<OnboardingProfile>>;
   summary: GamificationSummary;
@@ -143,11 +193,21 @@ export const CompeteSection = ({
   onNavigate: (tab: string) => void;
   challenges?: any[];
   quizAttempts?: QuizAttempt[];
+  arenaBootstrap: ArenaBootstrapResponse | null;
+  selectedMatchId: string | null;
+  onSelectMatch: (id: string | null) => void;
+  wsConnected: boolean;
+  serverOffsetMs: number;
+  socketRef: React.MutableRefObject<ArenaSocketClient | null>;
+  onRefreshArena: () => void;
+  onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: Styles;
 }) => {
-  const { cardClass, textPrimary, textSecondary } = styles;
+  const { cardClass, textPrimary, textSecondary, btnPrimary, btnSecondary } = styles;
   const [mode, setMode] = useState<BoardMode>('week');
   const [skill, setSkill] = useState('');
+
+  const actor: ArenaActorRef = useMemo(() => ({ userId, userName: userName || profile.fullName || 'Member' }), [userId, userName, profile.fullName]);
 
   const fit = useMemo(() => recommendChallenges(challenges, profile, quizAttempts, 3), [challenges, profile, quizAttempts]);
   const joined = profile.joinLeaderboard !== false;
@@ -157,10 +217,24 @@ export const CompeteSection = ({
   const me = rows.find((r) => r.entry.id === userId);
   const ahead = me && me.rank > 1 ? rows[me.rank - 2] : null;
 
+  const liveMatchesCount = useMemo(
+    () => (arenaBootstrap?.matches || []).filter((m) => ['waiting', 'ready_check', 'countdown', 'active'].includes(m.status)).length,
+    [arenaBootstrap?.matches]
+  );
+  const openBountiesCount = useMemo(
+    () => (arenaBootstrap?.bounties || []).filter((b) => b.status === 'Open').length,
+    [arenaBootstrap?.bounties]
+  );
+
   const tabs: { id: CompeteTab; label: string; badge?: string | number }[] = [
     { id: 'compete', label: 'Overview' },
-    { id: 'leaderboard', label: 'Leaderboard' },
+    { id: 'arena', label: 'Coding Arena', badge: liveMatchesCount > 0 ? liveMatchesCount : undefined },
+    { id: 'arena-challenges', label: 'Daily & Weekly' },
+    { id: 'buildoffs', label: 'Build-Offs & POTW' },
+    { id: 'bounties', label: 'Bounty Board', badge: openBountiesCount > 0 ? openBountiesCount : undefined },
+    { id: 'leaderboard', label: 'Leaderboard & Season' },
     { id: 'badges', label: 'Badges', badge: `${milestones.earnedCount}/${milestones.totalCount}` },
+    { id: 'compete-history', label: 'History' },
   ];
 
   const pill = (active: boolean) =>
@@ -173,8 +247,8 @@ export const CompeteSection = ({
   return (
     <div data-tour="compete-section" className="space-y-6">
       <PageHeader
-        title="Compete"
-        description="Earn XP for real learning, build a streak at your own pace, and see how you grow. Competing is always optional."
+        title="Competition Centre & Coding Arena"
+        description="Challenge peers in synchronized 1v1 and 2v2 coding duels, ship weekly builds, claim engineering bounties, and climb seasonal standings."
       />
       <SectionTabs tabs={tabs} active={subTab} onChange={setSubTab} />
 
@@ -185,7 +259,7 @@ export const CompeteSection = ({
             <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
             <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
             <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
-            <div className="relative max-w-xl space-y-4">
+            <div className="relative max-w-2xl space-y-4">
               <p className="text-sm text-white/70">Level {summary.level.index + 1} of {LEVELS.length}</p>
               <h2 className="text-white font-semibold !text-[1.75rem] sm:!text-[2rem] leading-tight">
                 {summary.level.name} <span className="text-white/60 font-medium">· {summary.totalXp} XP</span>
@@ -202,22 +276,53 @@ export const CompeteSection = ({
               </div>
               <p className="text-sm text-white/75">
                 {summary.level.nextName
-                  ? `${summary.level.toNext} XP until ${summary.level.nextName}. Every lesson, quiz and project counts.`
+                  ? `${summary.level.toNext} XP until ${summary.level.nextName}. Live coding duels, verified challenges, bounties, and build-offs all count.`
                   : 'You reached the top level. Help someone else climb.'}
               </p>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSubTab('arena')}
+                  className={btnPrimary}
+                >
+                  <Swords className="w-4 h-4" /> Enter Coding Arena
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubTab('arena-challenges')}
+                  className="inline-flex items-center gap-2 px-4 min-h-[44px] rounded-full border border-white/25 text-white text-sm font-medium hover:bg-white/10 cursor-pointer"
+                >
+                  <Code2 className="w-4 h-4" /> Daily & Weekly Sprints
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubTab('bounties')}
+                  className="inline-flex items-center gap-2 px-4 min-h-[44px] rounded-full border border-white/25 text-white text-sm font-medium hover:bg-white/10 cursor-pointer"
+                >
+                  <Target className="w-4 h-4" /> Bounty Board
+                </button>
+              </div>
             </div>
           </section>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          {/* Competition Quick Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               {
                 icon: Flame,
                 label: 'Current streak',
                 value: `${summary.currentStreak}`,
                 unit: summary.currentStreak === 1 ? 'day' : 'days',
-                sub: summary.activeToday ? 'You are active today' : summary.currentStreak > 0 ? 'Do one thing today to keep it going' : `Longest so far: ${summary.longestStreak}`,
+                sub: summary.activeToday ? 'You are active today' : summary.currentStreak > 0 ? 'Complete one task today' : `Longest: ${summary.longestStreak}`,
               },
-              { icon: Zap, label: 'XP this week', value: `${summary.weekXp}`, unit: 'XP', sub: 'Weekly boards reset every Monday' },
+              { icon: Zap, label: 'XP this week', value: `${summary.weekXp}`, unit: 'XP', sub: 'Weekly boards reset Monday' },
+              {
+                icon: Swords,
+                label: 'Arena Wins',
+                value: `${arenaBootstrap?.myCompetitionXp?.duelWins.length || 0}`,
+                unit: `of ${(arenaBootstrap?.myCompetitionXp?.duelWins.length || 0) + (arenaBootstrap?.myCompetitionXp?.duelParticipations.length || 0)} duels`,
+                sub: `${liveMatchesCount} live or open rooms`,
+              },
               { icon: Award, label: 'Badges', value: `${milestones.earnedCount}`, unit: `of ${milestones.totalCount}`, sub: 'Unlocked so far' },
             ].map((s) => {
               const Icon = s.icon;
@@ -239,9 +344,52 @@ export const CompeteSection = ({
             })}
           </div>
 
+          {/* Competition Modes Directory */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {[
+              {
+                icon: Swords,
+                title: '1v1 & 2v2 Coding Arena',
+                desc: 'Synchronized countdowns, isolated test grading, speed & scored duels, plus private 2v2 team collaboration.',
+                actionLabel: 'Open Arena',
+                tab: 'arena' as CompeteTab,
+              },
+              {
+                icon: Hammer,
+                title: 'Team Build-Offs & POTW',
+                desc: 'Team up on scoped weekend builds, nominate shipped work for Project of the Week, and receive judge reviews.',
+                actionLabel: 'View Build-Offs',
+                tab: 'buildoffs' as CompeteTab,
+              },
+              {
+                icon: History,
+                title: 'Bounties & Competition Ledger',
+                desc: 'Claim verified engineering bounties (+90 XP) and inspect official seasonal results and match outcomes.',
+                actionLabel: 'Explore Bounties',
+                tab: 'bounties' as CompeteTab,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <article key={item.title} className={`${cardClass} p-5 flex flex-col justify-between gap-4`}>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-[var(--accent-600)]" />
+                      <h3 className={`text-base font-semibold ${textPrimary}`}>{item.title}</h3>
+                    </div>
+                    <p className={`text-sm ${textSecondary}`}>{item.desc}</p>
+                  </div>
+                  <button type="button" onClick={() => setSubTab(item.tab)} className={btnSecondary}>
+                    {item.actionLabel}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+
           {fit.items.length > 0 && (
             <section aria-label="Challenges for your level" className={`${cardClass} p-5 space-y-3`}>
-              <h3 className={`font-semibold ${textPrimary}`}>Challenges for your level</h3>
+              <h3 className={`font-semibold ${textPrimary}`}>Recommended Sprints</h3>
               <ul className="divide-y divide-[var(--border-hairline)]">
                 {fit.items.map((c: any) => (
                   <li key={c.id} className="py-2.5 flex items-center justify-between gap-3">
@@ -249,11 +397,10 @@ export const CompeteSection = ({
                       <p className={`text-sm font-medium truncate ${textPrimary}`}>{c.title}</p>
                       <p className={`text-xs ${textSecondary}`}>{c.difficulty}</p>
                     </div>
-                    <button type="button" onClick={() => onNavigate('challenges')} className="min-h-11 px-3 text-sm text-[var(--accent-700)] hover:underline cursor-pointer shrink-0">Try it</button>
+                    <button type="button" onClick={() => setSubTab('arena-challenges')} className="min-h-11 px-3 text-sm text-[var(--accent-700)] hover:underline cursor-pointer shrink-0">Open Sprints</button>
                   </li>
                 ))}
               </ul>
-              <p className={`text-xs ${textSecondary}`}>Competition should help you grow. These match your level, and harder ones unlock as your results improve.</p>
             </section>
           )}
 
@@ -261,7 +408,7 @@ export const CompeteSection = ({
             <section className={`${cardClass} p-6 space-y-4`}>
               <div className="space-y-1">
                 <h3 className={`text-lg ${textPrimary}`}>How you earn XP</h3>
-                <p className={`text-sm ${textSecondary}`}>Points reward real learning. Repeating the same task will not earn more.</p>
+                <p className={`text-sm ${textSecondary}`}>Points reward real learning and verified competition outcomes. Repeating the same task earns nothing extra.</p>
               </div>
               <ul className="divide-y divide-[var(--border-hairline)]">
                 {XP_RULES.map((r) => (
@@ -318,7 +465,7 @@ export const CompeteSection = ({
                     ))}
                   </ul>
                 ) : (
-                  <p className={`text-sm ${textSecondary}`}>Take a quiz or submit an exercise and your first personal best shows up here.</p>
+                  <p className={`text-sm ${textSecondary}`}>Take a quiz, enter a duel, or submit an exercise to set your first personal best.</p>
                 )}
               </section>
 
@@ -334,7 +481,7 @@ export const CompeteSection = ({
                     ))}
                   </ul>
                 ) : (
-                  <p className={`text-sm ${textSecondary}`}>New XP appears here as you learn. Your progress so far already counts toward your total.</p>
+                  <p className={`text-sm ${textSecondary}`}>New XP appears here as you learn and compete.</p>
                 )}
               </section>
             </div>
@@ -342,120 +489,184 @@ export const CompeteSection = ({
         </div>
       )}
 
-      {/* ------------------------------------------------ LEADERBOARD */}
+      {/* ------------------------------------------------ CODING ARENA */}
+      {subTab === 'arena' && (
+        <ArenaMatchRoom
+          actor={actor}
+          isAdmin={isAdmin}
+          matches={arenaBootstrap?.matches || []}
+          selectedMatchId={selectedMatchId}
+          onSelectMatch={onSelectMatch}
+          problems={arenaBootstrap?.problems || []}
+          sandbox={arenaBootstrap?.sandbox || null}
+          wsConnected={wsConnected}
+          serverOffsetMs={serverOffsetMs}
+          socketRef={socketRef}
+          onMatchesChanged={onRefreshArena}
+          onNotify={onNotify}
+          styles={styles}
+        />
+      )}
+
+      {/* ------------------------------------------------ DAILY & WEEKLY CHALLENGES */}
+      {subTab === 'arena-challenges' && (
+        <ArenaChallengesPanel
+          actor={actor}
+          challenges={arenaBootstrap?.challenges || []}
+          problems={arenaBootstrap?.problems || []}
+          onChanged={onRefreshArena}
+          onNotify={onNotify}
+          styles={styles}
+        />
+      )}
+
+      {/* ------------------------------------------------ TEAM BUILD-OFFS & POTW */}
+      {subTab === 'buildoffs' && (
+        <BuildOffAndPotwPanel
+          actor={actor}
+          buildOffs={arenaBootstrap?.buildOffs || []}
+          potwNominations={arenaBootstrap?.potwNominations || []}
+          onChanged={onRefreshArena}
+          onNotify={onNotify}
+          styles={styles}
+        />
+      )}
+
+      {/* ------------------------------------------------ BOUNTY BOARD */}
+      {subTab === 'bounties' && (
+        <BountyBoardPanel
+          actor={actor}
+          bounties={arenaBootstrap?.bounties || []}
+          onChanged={onRefreshArena}
+          onNotify={onNotify}
+          styles={styles}
+        />
+      )}
+
+      {/* ------------------------------------------------ LEADERBOARD & SEASON */}
       {subTab === 'leaderboard' && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Leaderboard type">
-            <button type="button" aria-pressed={mode === 'week'} onClick={() => setMode('week')} className={pill(mode === 'week')}>This week</button>
-            <button type="button" aria-pressed={mode === 'all'} onClick={() => setMode('all')} className={pill(mode === 'all')}>All time</button>
-            <button type="button" aria-pressed={mode === 'skill'} onClick={() => setMode('skill')} className={pill(mode === 'skill')}>By skill</button>
-            {mode === 'skill' && skills.length > 0 && (
-              <select
-                aria-label="Skill"
-                value={activeSkill}
-                onChange={(e) => setSkill(e.target.value)}
-                className="px-4 text-sm"
-              >
-                {skills.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            )}
-          </div>
+        <div className="space-y-8">
+          <SeasonStandingsPanel
+            seasons={arenaBootstrap?.seasons || []}
+            standings={arenaBootstrap?.seasonStandings || []}
+            myUserId={userId}
+            onNavigateTab={() => setSubTab('arena')}
+            styles={styles}
+          />
 
-          {mode === 'skill' && skills.length === 0 ? (
-            <EmptyState
-              title="No skill rankings yet"
-              description="Skills appear once members submit exercises in a language, such as Python or JavaScript."
-              actionLabel="Go to My Learning"
-              onAction={() => onNavigate('submissions')}
-            />
-          ) : (
-            <section className={`${cardClass} p-2 sm:p-4`}>
-              <div className="px-4 pt-3 pb-2 flex items-end justify-between gap-3">
-                <div className="space-y-0.5">
-                  <h2 className={`text-lg ${textPrimary}`}>
-                    {mode === 'week' ? 'Top this week' : mode === 'all' ? 'Top of all time' : `${activeSkill} champions`}
-                  </h2>
-                  <p className={`text-sm ${textSecondary}`}>
-                    {mode === 'week' ? 'Resets every Monday, so everyone starts fresh.' : mode === 'all' ? 'Total XP since the start.' : 'XP earned from exercises and projects in this skill.'}
-                  </p>
-                </div>
-              </div>
-              {rows.length > 0 ? (
-                <ol className="divide-y divide-[var(--border-hairline)]">
-                  {rows.slice(0, 20).map((r) => {
-                    const isMe = r.entry.id === userId;
-                    return (
-                      <li
-                        key={r.entry.id}
-                        aria-current={isMe ? 'true' : undefined}
-                        className={`flex items-center gap-4 px-4 py-3.5 rounded-xl ${isMe ? 'bg-[var(--accent-50)]' : ''}`}
-                      >
-                        <span className={`w-7 text-center font-display text-lg tabular-nums shrink-0 ${r.rank <= 3 ? 'text-[var(--accent-700)]' : textSecondary}`}>
-                          {r.rank}
-                        </span>
-                        <span aria-hidden="true" className="w-9 h-9 rounded-full bg-[var(--panel-deep)] text-white text-xs font-semibold flex items-center justify-center shrink-0">
-                          {initialsOf(r.entry.name)}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className={`block text-sm font-semibold truncate ${textPrimary}`}>
-                            {r.entry.name}
-                            {isMe && <span className="ml-2 text-xs font-medium text-[var(--accent-700)]">You</span>}
-                          </span>
-                          <span className={`block text-xs ${textSecondary}`}>
-                            {r.entry.level}
-                            {r.entry.streak > 0 ? ` · ${r.entry.streak}-day streak` : ''}
-                            {r.entry.badges > 0 ? ` · ${r.entry.badges} badges` : ''}
-                          </span>
-                        </span>
-                        <span className={`text-sm font-semibold tabular-nums shrink-0 ${textPrimary}`}>{r.value} XP</span>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <div className="px-4 pb-6">
-                  <EmptyState
-                    title={mode === 'week' ? 'A fresh week, a fresh start' : 'No one is on the board yet'}
-                    description="Complete a lesson, quiz or exercise to put the first points on the board."
-                    actionLabel="Start learning"
-                    onAction={() => onNavigate('today')}
-                  />
-                </div>
+          <div className="space-y-4 pt-4 border-t border-[var(--border-hairline)]">
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Leaderboard type">
+              <button type="button" aria-pressed={mode === 'week'} onClick={() => setMode('week')} className={pill(mode === 'week')}>This week</button>
+              <button type="button" aria-pressed={mode === 'all'} onClick={() => setMode('all')} className={pill(mode === 'all')}>All time</button>
+              <button type="button" aria-pressed={mode === 'skill'} onClick={() => setMode('skill')} className={pill(mode === 'skill')}>By skill</button>
+              {mode === 'skill' && skills.length > 0 && (
+                <select
+                  aria-label="Skill"
+                  value={activeSkill}
+                  onChange={(e) => setSkill(e.target.value)}
+                  className="px-4 text-sm"
+                >
+                  {skills.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               )}
-            </section>
-          )}
+            </div>
 
-          {joined && me && (
-            <p className={`flex items-start gap-2 text-sm ${textSecondary}`}>
-              <TrendingUp className="w-4 h-4 mt-1 shrink-0 text-[var(--accent-600)]" aria-hidden="true" />
-              {me.rank === 1
-                ? 'You are in first place. Cheer on whoever is catching up.'
-                : ahead
-                ? `You are ${ahead.value - me.value} XP behind ${ahead.entry.name}. One quiz or exercise could close that gap.`
-                : ''}
-            </p>
-          )}
+            {mode === 'skill' && skills.length === 0 ? (
+              <EmptyState
+                title="No skill rankings yet"
+                description="Skills appear once members submit exercises in a language, such as Python or JavaScript."
+                actionLabel="Go to My Learning"
+                onAction={() => onNavigate('submissions')}
+              />
+            ) : (
+              <section className={`${cardClass} p-2 sm:p-4`}>
+                <div className="px-4 pt-3 pb-2 flex items-end justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <h2 className={`text-lg ${textPrimary}`}>
+                      {mode === 'week' ? 'Top this week' : mode === 'all' ? 'Top of all time' : `${activeSkill} champions`}
+                    </h2>
+                    <p className={`text-sm ${textSecondary}`}>
+                      {mode === 'week' ? 'Resets every Monday, so everyone starts fresh.' : mode === 'all' ? 'Total XP earned from real activity.' : 'XP earned from exercises and projects in this skill.'}
+                    </p>
+                  </div>
+                </div>
+                {rows.length > 0 ? (
+                  <ol className="divide-y divide-[var(--border-hairline)]">
+                    {rows.slice(0, 20).map((r) => {
+                      const isMe = r.entry.id === userId;
+                      return (
+                        <li
+                          key={r.entry.id}
+                          aria-current={isMe ? 'true' : undefined}
+                          className={`flex items-center gap-4 px-4 py-3.5 rounded-xl ${isMe ? 'bg-[var(--accent-50)]' : ''}`}
+                        >
+                          <span className={`w-7 text-center font-display text-lg tabular-nums shrink-0 ${r.rank <= 3 ? 'text-[var(--accent-700)]' : textSecondary}`}>
+                            {r.rank}
+                          </span>
+                          <span aria-hidden="true" className="w-9 h-9 rounded-full bg-[var(--panel-deep)] text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                            {initialsOf(r.entry.name)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-sm font-semibold truncate ${textPrimary}`}>
+                              {r.entry.name}
+                              {isMe && <span className="ml-2 text-xs font-medium text-[var(--accent-700)]">You</span>}
+                            </span>
+                            <span className={`block text-xs ${textSecondary}`}>
+                              {r.entry.level}
+                              {r.entry.streak > 0 ? ` · ${r.entry.streak}-day streak` : ''}
+                              {r.entry.badges > 0 ? ` · ${r.entry.badges} badges` : ''}
+                            </span>
+                          </span>
+                          <span className={`text-sm font-semibold tabular-nums shrink-0 ${textPrimary}`}>{r.value} XP</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : (
+                  <div className="px-4 pb-6">
+                    <EmptyState
+                      title={mode === 'week' ? 'A fresh week, a fresh start' : 'No one is on the board yet'}
+                      description="Complete a duel, lesson, quiz or exercise to put the first genuine points on the board."
+                      actionLabel="Enter Coding Arena"
+                      onAction={() => setSubTab('arena')}
+                    />
+                  </div>
+                )}
+              </section>
+            )}
 
-          <section className={`${cardClass} p-5 flex flex-wrap items-center justify-between gap-4`}>
-            <span className="min-w-0 space-y-0.5">
-              <span className={`block text-sm font-semibold ${textPrimary}`}>Show me on leaderboards</span>
-              <span className={`block text-sm max-w-[56ch] ${textSecondary}`}>
-                Prefer to learn without rankings? Turn this off and your row disappears. You keep your XP, streak and badges.
+            {joined && me && (
+              <p className={`flex items-start gap-2 text-sm ${textSecondary}`}>
+                <TrendingUp className="w-4 h-4 mt-1 shrink-0 text-[var(--accent-600)]" aria-hidden="true" />
+                {me.rank === 1
+                  ? 'You are in first place.'
+                  : ahead
+                  ? `You are ${ahead.value - me.value} XP behind ${ahead.entry.name}.`
+                  : ''}
+              </p>
+            )}
+
+            <section className={`${cardClass} p-5 flex flex-wrap items-center justify-between gap-4`}>
+              <span className="min-w-0 space-y-0.5">
+                <span className={`block text-sm font-semibold ${textPrimary}`}>Show me on leaderboards</span>
+                <span className={`block text-sm max-w-[56ch] ${textSecondary}`}>
+                  Prefer to learn without rankings? Turn this off and your row disappears. You keep your XP, streak and badges.
+                </span>
               </span>
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={joined}
-              aria-label="Show me on leaderboards"
-              onClick={() => setProfile((p) => ({ ...p, joinLeaderboard: !(p.joinLeaderboard !== false) }))}
-              className={`relative w-12 h-7 rounded-full shrink-0 cursor-pointer transition-colors ${joined ? 'bg-[var(--accent-600)]' : 'bg-[var(--border-strong)]'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white transition-transform ${joined ? 'translate-x-5' : ''}`} />
-            </button>
-          </section>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={joined}
+                aria-label="Show me on leaderboards"
+                onClick={() => setProfile((p) => ({ ...p, joinLeaderboard: !(p.joinLeaderboard !== false) }))}
+                className={`relative w-12 h-7 rounded-full shrink-0 cursor-pointer transition-colors ${joined ? 'bg-[var(--accent-600)]' : 'bg-[var(--border-strong)]'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white transition-transform ${joined ? 'translate-x-5' : ''}`} />
+              </button>
+            </section>
+          </div>
         </div>
       )}
 
@@ -466,7 +677,7 @@ export const CompeteSection = ({
             <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
               <div className="space-y-1">
                 <h2 className={`text-lg ${textPrimary}`}>Your achievements</h2>
-                <p className={`text-sm max-w-[52ch] ${textSecondary}`}>Badges also appear on your profile. There is no rush; they are here when you are ready.</p>
+                <p className={`text-sm max-w-[52ch] ${textSecondary}`}>Badges celebrate steady learning and verified competitive wins.</p>
               </div>
               <p className={`font-display text-4xl tabular-nums leading-none ${textPrimary}`}>
                 {milestones.earnedCount}
@@ -499,7 +710,15 @@ export const CompeteSection = ({
           })}
         </div>
       )}
+
+      {/* ------------------------------------------------ HISTORY */}
+      {subTab === 'compete-history' && (
+        <CompetitionHistoryPanel
+          history={arenaBootstrap?.history || []}
+          onOpenArena={() => setSubTab('arena')}
+          styles={styles}
+        />
+      )}
     </div>
   );
 };
-

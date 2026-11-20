@@ -225,6 +225,9 @@ export async function requestAiQuiz(
     difficulty: string;
     quizScope: string;
     existingQuestionPrompts: string[];
+    materialContext?: string;
+    questionCount?: number;
+    focusWeakTopics?: string[];
   },
   userId?: string
 ) {
@@ -239,6 +242,8 @@ export async function requestAiQuiz(
         options: string[];
         answer: string;
         explanation: string;
+        incorrectExplanation?: string;
+        distractorReasons?: Record<string, string>;
       }[];
     };
   }>('/api/ai/quiz', input, userId);
@@ -248,7 +253,7 @@ export async function evaluateShortQuizAnswer(
   input: { questionPrompt: string; expectedAnswer: string; userAnswer: string; topic: string; skillLevel: string },
   userId?: string
 ) {
-  return postJson<{ data: { isCorrect: boolean; feedback: string } }>('/api/ai/evaluate-quiz', input, userId);
+  return postJson<{ data: { isCorrect: boolean; feedback: string; misconception?: string } }>('/api/ai/evaluate-quiz', input, userId);
 }
 
 export async function requestWeeklyProject(

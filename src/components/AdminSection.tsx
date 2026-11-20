@@ -12,10 +12,25 @@ import {
   Plus,
   RefreshCw,
   ShieldAlert,
+  Swords,
+  Target,
   Trash2,
+  Trophy,
 } from 'lucide-react';
 import { Badge, PageHeader, SectionTabs } from './ui';
 import { fetchAiStatus, saveAiSettings, testAiConnection } from '../lib/aiClient';
+import {
+  cancelArenaMatchApi,
+  createArenaChallengeApi,
+  createBountyApi,
+  createBuildOffApi,
+  judgeBuildOffApi,
+  reviewBountyApi,
+  selectPotwWinnerApi,
+  upsertSeasonApi,
+  type ArenaActorRef,
+  type ArenaBootstrapResponse,
+} from '../lib/arenaClient';
 import type { CommunityEvent, CommunityPost, ContentReport, ModerationState, QuizItem } from '../types';
 
 export type AdminSubTab =
@@ -52,6 +67,8 @@ export const AdminSection = ({
   onSetMemberMuted,
   onSetMemberRole,
   onViewMember,
+  arenaBootstrap,
+  onRefreshArena,
   onNotify,
   styles,
 }: {
@@ -84,6 +101,8 @@ export const AdminSection = ({
   onSetMemberMuted?: (userId: string, muted: boolean, reason?: string) => Promise<void> | void;
   onSetMemberRole?: (userId: string, role: string) => Promise<void> | void;
   onViewMember?: (memberId: string, memberName: string) => void;
+  arenaBootstrap?: ArenaBootstrapResponse | null;
+  onRefreshArena?: () => void;
   onNotify: (msg: string, tone?: 'success' | 'error') => void;
   styles: {
     cardClass: string;
@@ -116,6 +135,30 @@ export const AdminSection = ({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [aiTesting, setAiTesting] = useState(false);
+
+  // Competition Centre admin drafts
+  const adminActor: ArenaActorRef = { userId: user.id || 'admin', userName: user.name || 'Community Admin' };
+  const [chTitle, setChTitle] = useState('');
+  const [chCadence, setChCadence] = useState<'daily' | 'weekly'>('daily');
+  const [chKind, setChKind] = useState<'code' | 'build'>('code');
+  const [chProblemId, setChProblemId] = useState('prob-two-sum');
+  const [chXp, setChXp] = useState(60);
+  const [chDesc, setChDesc] = useState('');
+
+  const [bountyTitle, setBountyTitle] = useState('');
+  const [bountyCategory, setBountyCategory] = useState('Frontend');
+  const [bountyXp, setBountyXp] = useState(90);
+  const [bountyDesc, setBountyDesc] = useState('');
+
+  const [boTitle, setBoTitle] = useState('');
+  const [boTheme, setBoTheme] = useState('Developer Tooling');
+  const [boDesc, setBoDesc] = useState('');
+
+  const [judgeScores, setJudgeScores] = useState<Record<string, number>>({});
+  const [judgeNotes, setJudgeNotes] = useState<Record<string, string>>({});
+  const [seasonName, setSeasonName] = useState('');
+  const [seasonTheme, setSeasonTheme] = useState('');
+  const [seasonPrize, setSeasonPrize] = useState('');
 
   const loadAiStatus = async () => {
     setAiLoading(true);
@@ -237,7 +280,7 @@ export const AdminSection = ({
     { id: 'admin-dashboard', label: 'Overview' },
     { id: 'admin-members', label: 'Members', badge: teamRoster.length },
     { id: 'admin-support', label: 'Moderation & Help', badge: openHelp.length + openReports.length },
-    { id: 'admin-activities', label: 'Activities & Quizzes', badge: quizzes.length },
+    { id: 'admin-activities', label: 'Activities & Competitions', badge: quizzes.length },
     { id: 'admin-ai', label: 'AI Settings' },
   ];
 
@@ -684,6 +727,373 @@ export const AdminSection = ({
               </p>
             </div>
           </div>
+
+          {/* Competition Centre Judging & Management */}
+          {arenaBootstrap && (
+            <div className="lg:col-span-12 space-y-6 pt-4 border-t border-[var(--border-hairline)]">
+              <div className="space-y-1">
+                <h2 className={`font-display text-xl ${textPrimary}`}>Competition Centre Judging & Management</h2>
+                <p className={`text-sm ${textSecondary}`}>
+                  Launch challenges, bounties, and build-offs, moderate live arena matches, and judge official submissions.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* Create Arena Challenge */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!chTitle.trim()) return;
+                    try {
+                      await createArenaChallengeApi(adminActor, {
+                        cadence: chCadence,
+                        kind: chKind,
+                        title: chTitle.trim(),
+                        category: 'Algorithms & Systems',
+                        difficulty: 'Intermediate',
+                        deadline: chCadence === 'daily' ? 'Resets Daily' : 'Sunday 23:59',
+                        xpReward: chXp,
+                        problemId: chKind === 'code' ? chProblemId : undefined,
+                        description: chDesc.trim() || chTitle.trim(),
+                        objectives: ['Submit a tested implementation'],
+                      });
+                      setChTitle('');
+                      setChDesc('');
+                      onRefreshArena?.();
+                      onNotify('Published Arena challenge.');
+                    } catch (err: any) {
+                      onNotify(err?.message || 'Failed to create challenge.', 'error');
+                    }
+                  }}
+                  className={`${cardClass} p-5 space-y-3`}
+                >
+                  <h3 className={`font-semibold text-sm flex items-center gap-2 ${textPrimary}`}>
+                    <Trophy className="w-4 h-4 text-[var(--accent-600)]" /> New Daily / Weekly Challenge
+                  </h3>
+                  <input value={chTitle} onChange={(e) => setChTitle(e.target.value)} placeholder="Challenge title" className={inputClass} required />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={chCadence} onChange={(e) => setChCadence(e.target.value as any)} className={inputClass}>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                    <select value={chKind} onChange={(e) => setChKind(e.target.value as any)} className={inputClass}>
+                      <option value="code">Code Sandbox</option>
+                      <option value="build">Project Build</option>
+                    </select>
+                  </div>
+                  {chKind === 'code' && (
+                    <select value={chProblemId} onChange={(e) => setChProblemId(e.target.value)} className={inputClass}>
+                      {arenaBootstrap.problems.map((p) => (
+                        <option key={p.id} value={p.id}>{p.title}</option>
+                      ))}
+                    </select>
+                  )}
+                  <input type="number" min={15} max={300} value={chXp} onChange={(e) => setChXp(Number(e.target.value))} placeholder="XP reward" className={inputClass} />
+                  <textarea rows={2} value={chDesc} onChange={(e) => setChDesc(e.target.value)} placeholder="Prompt & evaluation notes" className={inputClass} />
+                  <button type="submit" className={btnPrimary}>Publish Challenge</button>
+                </form>
+
+                {/* Create Bounty */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!bountyTitle.trim()) return;
+                    try {
+                      await createBountyApi(adminActor, {
+                        title: bountyTitle.trim(),
+                        category: bountyCategory,
+                        difficulty: 'Intermediate',
+                        description: bountyDesc.trim() || bountyTitle.trim(),
+                        acceptanceCriteria: ['Verified working solution linked cleanly'],
+                        xpReward: bountyXp,
+                      });
+                      setBountyTitle('');
+                      setBountyDesc('');
+                      onRefreshArena?.();
+                      onNotify('Published Bounty.');
+                    } catch (err: any) {
+                      onNotify(err?.message || 'Failed to create bounty.', 'error');
+                    }
+                  }}
+                  className={`${cardClass} p-5 space-y-3`}
+                >
+                  <h3 className={`font-semibold text-sm flex items-center gap-2 ${textPrimary}`}>
+                    <Target className="w-4 h-4 text-[var(--accent-600)]" /> Post Engineering Bounty
+                  </h3>
+                  <input value={bountyTitle} onChange={(e) => setBountyTitle(e.target.value)} placeholder="Bounty title" className={inputClass} required />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={bountyCategory} onChange={(e) => setBountyCategory(e.target.value)} placeholder="Category" className={inputClass} />
+                    <input type="number" min={25} max={400} value={bountyXp} onChange={(e) => setBountyXp(Number(e.target.value))} placeholder="XP" className={inputClass} />
+                  </div>
+                  <textarea rows={3} value={bountyDesc} onChange={(e) => setBountyDesc(e.target.value)} placeholder="Problem scope and acceptance criteria" className={inputClass} />
+                  <button type="submit" className={btnPrimary}>Publish Bounty</button>
+                </form>
+
+                {/* Launch Build-Off & Season Update */}
+                <div className="space-y-5">
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!boTitle.trim()) return;
+                      try {
+                        await createBuildOffApi(adminActor, {
+                          title: boTitle.trim(),
+                          theme: boTheme.trim() || 'Full-Stack',
+                          description: boDesc.trim() || boTitle.trim(),
+                          deadline: 'Upcoming Sunday',
+                          xpReward: 150,
+                        });
+                        setBoTitle('');
+                        setBoDesc('');
+                        onRefreshArena?.();
+                        onNotify('Launched Team Build-Off.');
+                      } catch (err: any) {
+                        onNotify(err?.message || 'Failed to launch build-off.', 'error');
+                      }
+                    }}
+                    className={`${cardClass} p-5 space-y-3`}
+                  >
+                    <h3 className={`font-semibold text-sm ${textPrimary}`}>Launch Team Build-Off</h3>
+                    <input value={boTitle} onChange={(e) => setBoTitle(e.target.value)} placeholder="Build-Off title" className={inputClass} required />
+                    <input value={boTheme} onChange={(e) => setBoTheme(e.target.value)} placeholder="Theme" className={inputClass} />
+                    <textarea rows={2} value={boDesc} onChange={(e) => setBoDesc(e.target.value)} placeholder="Brief & rules" className={inputClass} />
+                    <button type="submit" className={btnPrimary}>Open Build-Off</button>
+                  </form>
+
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!seasonName.trim()) return;
+                      try {
+                        await upsertSeasonApi(adminActor, {
+                          name: seasonName.trim(),
+                          theme: seasonTheme.trim() || 'Competitive Engineering',
+                          startDate: new Date().toISOString().slice(0, 10),
+                          endDate: '2026-12-31',
+                          status: 'Active',
+                          prizeSummary: seasonPrize.trim() || 'Seasonal Champion Badge & XP',
+                        });
+                        setSeasonName('');
+                        setSeasonTheme('');
+                        setSeasonPrize('');
+                        onRefreshArena?.();
+                        onNotify('Season saved.');
+                      } catch (err: any) {
+                        onNotify(err?.message || 'Could not update season.', 'error');
+                      }
+                    }}
+                    className={`${cardClass} p-5 space-y-2.5`}
+                  >
+                    <h3 className={`font-semibold text-sm ${textPrimary}`}>Create / Update Season</h3>
+                    <input value={seasonName} onChange={(e) => setSeasonName(e.target.value)} placeholder="Season name" className={inputClass} required />
+                    <input value={seasonTheme} onChange={(e) => setSeasonTheme(e.target.value)} placeholder="Season theme" className={inputClass} />
+                    <input value={seasonPrize} onChange={(e) => setSeasonPrize(e.target.value)} placeholder="Prize / recognition summary" className={inputClass} />
+                    <button type="submit" className={btnSecondary}>Save Season</button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Active Judging Queues */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Bounty Reviews & Live Match Controls */}
+                <div className={`${cardClass} p-6 space-y-4`}>
+                  <h3 className={`font-semibold text-base ${textPrimary}`}>Bounties Awaiting Review & Live Arena Control</h3>
+                  <div className="space-y-3">
+                    {arenaBootstrap.bounties
+                      .filter((b) => b.status === 'In Review' || b.submissions.some((s) => s.status === 'Pending Review'))
+                      .map((b) => {
+                        const sub = b.submissions.find((s) => s.status === 'Pending Review') || b.submissions[0];
+                        if (!sub) return null;
+                        return (
+                          <div key={b.id} className={`p-3.5 rounded-xl border ${borderClass} space-y-2 text-xs`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <strong className={textPrimary}>{b.title}</strong>
+                              <Badge variant="info">{sub.claimantName}</Badge>
+                            </div>
+                            <p className={textSecondary}>{sub.notes}</p>
+                            {sub.repoUrl && <div className="font-mono text-[var(--accent-600)] truncate">{sub.repoUrl}</div>}
+                            <input
+                              value={judgeNotes[sub.id] || ''}
+                              onChange={(e) => setJudgeNotes((prev) => ({ ...prev, [sub.id]: e.target.value }))}
+                              placeholder="Reviewer feedback (optional)"
+                              className={`${inputClass} py-1.5 text-xs`}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await reviewBountyApi(adminActor, b.id, {
+                                    submissionId: sub.id,
+                                    status: 'Approved',
+                                    judgeNote: judgeNotes[sub.id],
+                                  });
+                                  onRefreshArena?.();
+                                  onNotify('Bounty approved & XP awarded.');
+                                }}
+                                className={btnPrimary}
+                              >
+                                Approve (+{b.xpReward} XP)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await reviewBountyApi(adminActor, b.id, {
+                                    submissionId: sub.id,
+                                    status: 'Needs Revision',
+                                    judgeNote: judgeNotes[sub.id],
+                                  });
+                                  onRefreshArena?.();
+                                  onNotify('Requested revision on bounty.');
+                                }}
+                                className={btnSecondary}
+                              >
+                                Needs Revision
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {arenaBootstrap.bounties.every((b) => b.status !== 'In Review') && (
+                      <p className={`text-xs ${textSecondary}`}>No bounty submissions awaiting review right now.</p>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-[var(--border-hairline)] space-y-2">
+                    <div className={`text-xs font-semibold flex items-center gap-1.5 ${textPrimary}`}>
+                      <Swords className="w-3.5 h-3.5 text-[var(--accent-600)]" /> Active Arena Matches
+                    </div>
+                    {arenaBootstrap.matches
+                      .filter((m) => ['waiting', 'ready_check', 'countdown', 'active'].includes(m.status))
+                      .map((m) => (
+                        <div key={m.id} className="flex items-center justify-between gap-2 text-xs">
+                          <span className={`truncate ${textPrimary}`}>
+                            {m.title} ({m.status})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await cancelArenaMatchApi(adminActor, m.id);
+                              onRefreshArena?.();
+                              onNotify('Arena match cancelled.');
+                            }}
+                            className="text-[var(--danger-ink)] hover:underline cursor-pointer shrink-0"
+                          >
+                            Force Cancel
+                          </button>
+                        </div>
+                      ))}
+                    {arenaBootstrap.matches.every((m) => !['waiting', 'ready_check', 'countdown', 'active'].includes(m.status)) && (
+                      <p className={`text-xs ${textSecondary}`}>No open or active arena matches.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Build-Off Judging & POTW Winner Selection */}
+                <div className={`${cardClass} p-6 space-y-4`}>
+                  <h3 className={`font-semibold text-base ${textPrimary}`}>Judge Build-Offs & Select POTW Winner</h3>
+                  <div className="space-y-3">
+                    {arenaBootstrap.buildOffs.flatMap((bo) =>
+                      bo.entries.map((entry) => (
+                        <div key={entry.id} className={`p-3.5 rounded-xl border ${borderClass} space-y-2 text-xs`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <strong className={textPrimary}>
+                              {bo.title}: {entry.teamName}
+                            </strong>
+                            <Badge variant={entry.isWinner ? 'success' : 'neutral'}>
+                              {entry.isWinner ? 'Winner' : `${entry.memberNames.length} members`}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={judgeScores[entry.id] ?? entry.judgeScore ?? 85}
+                              onChange={(e) => setJudgeScores((prev) => ({ ...prev, [entry.id]: Number(e.target.value) }))}
+                              placeholder="Score"
+                              className={`${inputClass} py-1.5 text-xs`}
+                            />
+                            <input
+                              value={judgeNotes[entry.id] ?? entry.judgeFeedback ?? ''}
+                              onChange={(e) => setJudgeNotes((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                              placeholder="Judge feedback"
+                              className={`${inputClass} col-span-2 py-1.5 text-xs`}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await judgeBuildOffApi(adminActor, bo.id, {
+                                  entryId: entry.id,
+                                  judgeScore: judgeScores[entry.id] ?? 85,
+                                  judgeFeedback: judgeNotes[entry.id] || 'Solid execution.',
+                                  declareWinner: false,
+                                });
+                                onRefreshArena?.();
+                                onNotify('Saved judge score.');
+                              }}
+                              className={btnSecondary}
+                            >
+                              Save Score
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await judgeBuildOffApi(adminActor, bo.id, {
+                                  entryId: entry.id,
+                                  judgeScore: judgeScores[entry.id] ?? 95,
+                                  judgeFeedback: judgeNotes[entry.id] || 'Selected as Build-Off winner.',
+                                  declareWinner: true,
+                                });
+                                onRefreshArena?.();
+                                onNotify(`${entry.teamName} crowned Build-Off winner!`);
+                              }}
+                              className={btnPrimary}
+                            >
+                              Crown Winner
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {arenaBootstrap.buildOffs.every((b) => b.entries.length === 0) && (
+                      <p className={`text-xs ${textSecondary}`}>No Build-Off team entries to judge yet.</p>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-[var(--border-hairline)] space-y-2">
+                    <div className={`text-xs font-semibold ${textPrimary}`}>Project of the Week Nominations</div>
+                    {arenaBootstrap.potwNominations.map((nom) => (
+                      <div key={nom.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className={`truncate ${textPrimary}`}>
+                          {nom.title} by {nom.authorName} ({nom.voterIds.length} votes)
+                        </span>
+                        {nom.isWinner ? (
+                          <Badge variant="success">Winner</Badge>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await selectPotwWinnerApi(adminActor, nom.id, 'Outstanding architecture and usefulness.');
+                              onRefreshArena?.();
+                              onNotify(`Selected ${nom.title} as Project of the Week!`);
+                            }}
+                            className="text-[var(--accent-600)] font-semibold hover:underline cursor-pointer shrink-0"
+                          >
+                            Select Winner
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {arenaBootstrap.potwNominations.length === 0 && (
+                      <p className={`text-xs ${textSecondary}`}>No Project of the Week nominations submitted yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

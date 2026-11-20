@@ -1,6 +1,7 @@
 import type {
   CodeSubmission,
   CommunityPost,
+  CompetitionXpAwards,
   LeaderboardEntry,
   LeaderboardMap,
   LedgerEntry,
@@ -27,6 +28,12 @@ export const XP_RULES: { kind: XpKind; label: string; xp: number; note: string }
   { kind: 'quiz', label: 'Pass a quiz with 70% or more', xp: 30, note: 'Once per quiz' },
   { kind: 'code', label: 'Submit a new exercise', xp: 50, note: 'Resubmitting the same exercise earns nothing extra' },
   { kind: 'project', label: 'Finish or showcase a project', xp: 100, note: 'Once per project' },
+  { kind: 'arena_win', label: 'Win a Coding Arena duel', xp: 75, note: 'Verified match winner' },
+  { kind: 'arena_play', label: 'Complete a Coding Arena duel', xp: 25, note: 'Finished match participation' },
+  { kind: 'challenge', label: 'Solve a Daily / Weekly Arena Challenge', xp: 50, note: 'Passes isolated test suite' },
+  { kind: 'bounty', label: 'Complete an approved Bounty', xp: 90, note: 'Admin verified' },
+  { kind: 'buildoff', label: 'Place in a Team Build-Off', xp: 150, note: 'Team competition reward' },
+  { kind: 'potw', label: 'Project of the Week Winner', xp: 150, note: 'Judged community spotlight' },
   { kind: 'help', label: 'Help another member', xp: 15, note: 'Up to 20 helpful replies' },
   { kind: 'checkin', label: 'Daily check-in', xp: 5, note: 'Once a day' },
 ];
@@ -113,6 +120,7 @@ export interface AwardInput {
   posts: CommunityPost[];
   helpRequests: any[];
   showcaseProjects: ShowcaseProject[];
+  competitionXp?: CompetitionXpAwards | null;
 }
 
 interface Award {
@@ -185,6 +193,27 @@ export function collectAwards(input: AwardInput): Award[] {
   input.dailyLogs.forEach((l, i) => {
     awards.push({ key: `log:${l?.id ?? i}`, kind: 'checkin', xp: ruleXp('checkin'), label: 'Daily check-in' });
   });
+
+  if (input.competitionXp) {
+    input.competitionXp.duelWins.forEach((d) => {
+      awards.push({ key: `arena:win:${d.matchId}`, kind: 'arena_win', xp: d.xp, label: `Won duel: ${d.title}` });
+    });
+    input.competitionXp.duelParticipations.forEach((d) => {
+      awards.push({ key: `arena:play:${d.matchId}`, kind: 'arena_play', xp: d.xp, label: `Competed in duel: ${d.title}` });
+    });
+    input.competitionXp.challengesSolved.forEach((c) => {
+      awards.push({ key: `arena:ch:${c.challengeId}`, kind: 'challenge', xp: c.xp, label: `Solved challenge: ${c.title}` });
+    });
+    input.competitionXp.bountiesApproved.forEach((b) => {
+      awards.push({ key: `arena:bounty:${b.bountyId}`, kind: 'bounty', xp: b.xp, label: `Bounty approved: ${b.title}` });
+    });
+    input.competitionXp.buildOffResults.forEach((bo) => {
+      awards.push({ key: `arena:buildoff:${bo.buildOffId}`, kind: 'buildoff', xp: bo.xp, label: `${bo.won ? 'Won' : 'Placed in'} Build-Off: ${bo.title}` });
+    });
+    input.competitionXp.potwWins.forEach((p) => {
+      awards.push({ key: `arena:potw:${p.nominationId}`, kind: 'potw', xp: p.xp, label: `Project of the Week: ${p.title}` });
+    });
+  }
 
   return awards;
 }

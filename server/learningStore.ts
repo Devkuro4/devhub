@@ -1,12 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
+  ActiveQuizSession,
   CodeSubmission,
   CourseItem,
   DailyTarget,
   ImportedMaterialFile,
   ImportedMaterialPack,
   LearningPlan,
+  PersonalMilestone,
+  QuizAttempt,
+  QuizItem,
+  RoadmapItem,
+  RoadmapTopicProgress,
   SelfDirectedTopic,
   StudySessionLog,
 } from '../src/types.ts';
@@ -24,6 +30,13 @@ export interface OwnerLearningState {
   codeSubmissions: CodeSubmission[];
   dailyLogs: any[];
   studySessions: StudySessionLog[];
+  personalQuizzes?: QuizItem[];
+  quizAttempts?: QuizAttempt[];
+  activeQuizSession?: ActiveQuizSession | null;
+  roadmapProgress?: Record<string, RoadmapTopicProgress>;
+  customRoadmaps?: RoadmapItem[];
+  selectedRoadmapId?: string;
+  personalMilestones?: PersonalMilestone[];
   updatedAt: string;
 }
 
@@ -41,6 +54,13 @@ function emptyOwnerState(): OwnerLearningState {
     codeSubmissions: [],
     dailyLogs: [],
     studySessions: [],
+    personalQuizzes: [],
+    quizAttempts: [],
+    activeQuizSession: null,
+    roadmapProgress: {},
+    customRoadmaps: [],
+    selectedRoadmapId: undefined,
+    personalMilestones: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -140,6 +160,27 @@ export function saveLearningState(
   }
   if (Array.isArray(patch.studySessions)) {
     state.studySessions = patch.studySessions.slice(0, 300);
+  }
+  if (Array.isArray(patch.personalQuizzes)) {
+    state.personalQuizzes = patch.personalQuizzes.slice(0, 120).map((q) => ({ ...q, ownerId, isPersonal: true }));
+  }
+  if (Array.isArray(patch.quizAttempts)) {
+    state.quizAttempts = patch.quizAttempts.slice(0, 300);
+  }
+  if (patch.activeQuizSession !== undefined) {
+    state.activeQuizSession = patch.activeQuizSession;
+  }
+  if (patch.roadmapProgress && typeof patch.roadmapProgress === 'object' && !Array.isArray(patch.roadmapProgress)) {
+    state.roadmapProgress = patch.roadmapProgress;
+  }
+  if (Array.isArray(patch.customRoadmaps)) {
+    state.customRoadmaps = patch.customRoadmaps.slice(0, 50);
+  }
+  if (typeof patch.selectedRoadmapId === 'string') {
+    state.selectedRoadmapId = patch.selectedRoadmapId;
+  }
+  if (Array.isArray(patch.personalMilestones)) {
+    state.personalMilestones = patch.personalMilestones.slice(0, 200);
   }
   state.updatedAt = new Date().toISOString();
   saveStore(store);

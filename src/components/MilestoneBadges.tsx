@@ -13,7 +13,10 @@ import {
   Puzzle,
   Rocket,
   Sprout,
+  Swords,
+  Target,
   TrendingUp,
+  Trophy,
   Users,
 } from 'lucide-react';
 import type { MemberMilestone, MilestoneSummary, MilestoneTone } from '../types';
@@ -67,6 +70,12 @@ export function MilestoneIcon({
       return <Users className={className} />;
     case 'level':
       return <TrendingUp className={className} />;
+    case 'duel':
+      return <Swords className={className} />;
+    case 'bounty':
+      return <Target className={className} />;
+    case 'trophy':
+      return <Trophy className={className} />;
     default:
       return <Award className={className} />;
   }

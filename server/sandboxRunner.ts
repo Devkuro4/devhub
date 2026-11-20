@@ -1,0 +1,567 @@
+import { spawn } from 'node:child_process';
+import { transformSync } from 'esbuild';
+import type {
+  ArenaLanguage,
+  ArenaTestCase,
+  SandboxExecutionResult,
+  SandboxStatus,
+  SandboxTestResult,
+} from '../src/types.ts';
+
+const WALL_TIMEOUT_MS = 3500;
+const MEMORY_MB = 64;
+const CPU_SECONDS = 2;
+const MAX_OUTPUT_BYTES = 32 * 1024;
+const NOBODY_UID = 65534;
+const NOBODY_GID = 65534;
+
+export function getSandboxStatus(): SandboxStatus {
+  return {
+    mode: 'isolated_subprocess',
+    label: 'Isolated Subprocess Sandbox (unprivileged UID 65534, Node --permission / Python -I rlimit, zero fs/network/env)',
+    languages: ['javascript', 'typescript', 'python'],
+    limits: {
+      wallTimeoutMs: WALL_TIMEOUT_MS,
+      cpuSeconds: CPU_SECONDS,
+      memoryMb: MEMORY_MB,
+      maxOutputKb: Math.round(MAX_OUTPUT_BYTES / 1024),
+    },
+  };
+}
+
+function unprivilegedSpawnOptions(): {
+  env: Record<string, string>;
+  uid?: number;
+  gid?: number;
+  stdio: ['pipe', 'pipe', 'pipe'];
+} {
+  const opts: { env: Record<string, string>; uid?: number; gid?: number; stdio: ['pipe', 'pipe', 'pipe'] } = {
+    env: {},
+    stdio: ['pipe', 'pipe', 'pipe'],
+  };
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    opts.uid = NOBODY_UID;
+    opts.gid = NOBODY_GID;
+  }
+  return opts;
+}
+
+function spawnLimited(cmd: string, args: string[], stdinPayload: string): Promise<{
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  exitCode: number | null;
+}> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, unprivilegedSpawnOptions());
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let settled = false;
+
+    const finish = (exitCode: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ stdout, stderr, timedOut, exitCode });
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+      finish(null);
+    }, WALL_TIMEOUT_MS);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (stdout.length < MAX_OUTPUT_BYTES) {
+        stdout += chunk.toString('utf8').slice(0, MAX_OUTPUT_BYTES - stdout.length);
+      } else {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < MAX_OUTPUT_BYTES) {
+        stderr += chunk.toString('utf8').slice(0, MAX_OUTPUT_BYTES - stderr.length);
+      }
+    });
+
+    child.on('error', (err) => {
+      stderr += err.message;
+      finish(1);
+    });
+
+    child.on('close', (code) => {
+      finish(code);
+    });
+
+    try {
+      child.stdin.write(stdinPayload);
+      child.stdin.end();
+    } catch {
+      /* closed early */
+    }
+  });
+}
+
+// Isolated Node child-process harness (executed ONLY inside `node --permission --max-old-space-size=64` as UID 65534).
+const NODE_HARNESS_SOURCE = `
+'use strict';
+const vm = require('node:vm');
+
+let rawInput = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (c) => {
+  if (rawInput.length < 512 * 1024) rawInput += c;
+});
+process.stdin.on('end', () => {
+  try {
+    const payload = JSON.parse(rawInput);
+    const { code, entryPoint, tests } = payload;
+    const stdoutLogs = [];
+    const fmtVal = (v) => {
+      try {
+        if (typeof v === 'string') return v;
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
+    };
+    const deepEqual = (a, b) => {
+      if (Object.is(a, b)) return true;
+      if (typeof a !== typeof b || a === null || b === null) return false;
+      if (Array.isArray(a) !== Array.isArray(b)) return false;
+      if (Array.isArray(a)) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+          if (!deepEqual(a[i], b[i])) return false;
+        }
+        return true;
+      }
+      if (typeof a === 'object') {
+        const ka = Object.keys(a).sort();
+        const kb = Object.keys(b).sort();
+        if (!deepEqual(ka, kb)) return false;
+        for (const k of ka) {
+          if (!deepEqual(a[k], b[k])) return false;
+        }
+        return true;
+      }
+      return false;
+    };
+
+    const sandbox = Object.create(null);
+    sandbox.console = {
+      log: (...args) => { if (stdoutLogs.length < 60) stdoutLogs.push(args.map(fmtVal).join(' ')); },
+      warn: (...args) => { if (stdoutLogs.length < 60) stdoutLogs.push('[warn] ' + args.map(fmtVal).join(' ')); },
+      error: (...args) => { if (stdoutLogs.length < 60) stdoutLogs.push('[error] ' + args.map(fmtVal).join(' ')); },
+    };
+    sandbox.Math = Math;
+    sandbox.JSON = JSON;
+    sandbox.Array = Array;
+    sandbox.Object = Object;
+    sandbox.String = String;
+    sandbox.Number = Number;
+    sandbox.Boolean = Boolean;
+    sandbox.Map = Map;
+    sandbox.Set = Set;
+    sandbox.RegExp = RegExp;
+    sandbox.Date = Date;
+    sandbox.Error = Error;
+    sandbox.TypeError = TypeError;
+    sandbox.RangeError = RangeError;
+    sandbox.parseInt = parseInt;
+    sandbox.parseFloat = parseFloat;
+    sandbox.isNaN = isNaN;
+    sandbox.isFinite = isFinite;
+    sandbox.Infinity = Infinity;
+    sandbox.NaN = NaN;
+
+    const ctx = vm.createContext(sandbox);
+    const wrappedCode = code + '\\n;typeof ' + entryPoint + ' === "function" ? ' + entryPoint + ' : null;';
+    const fn = vm.runInContext(wrappedCode, ctx, { timeout: 800, displayErrors: true });
+    if (typeof fn !== 'function') {
+      process.stdout.write(JSON.stringify({
+        ok: false,
+        error: 'Function "' + entryPoint + '" was not found. Make sure you keep function ' + entryPoint + '(...).',
+        stdout: stdoutLogs.join('\\n'),
+        results: []
+      }));
+      return;
+    }
+
+    const results = [];
+    for (const tc of tests) {
+      const tStart = Date.now();
+      try {
+        const argsCopy = JSON.parse(JSON.stringify(tc.args));
+        ctx.__args = argsCopy;
+        ctx.__fn = fn;
+        const actual = vm.runInContext('__fn.apply(null, __args)', ctx, { timeout: 900, displayErrors: true });
+        const runtimeMs = Math.max(1, Date.now() - tStart);
+        const passed = deepEqual(actual, tc.expected);
+        results.push({
+          testId: tc.id,
+          label: tc.label || tc.id,
+          hidden: Boolean(tc.hidden),
+          passed,
+          actual: tc.hidden ? (passed ? '[passed]' : '[mismatch]') : fmtVal(actual),
+          expected: tc.hidden ? '[hidden]' : fmtVal(tc.expected),
+          runtimeMs,
+        });
+      } catch (err) {
+        const runtimeMs = Math.max(1, Date.now() - tStart);
+        results.push({
+          testId: tc.id,
+          label: tc.label || tc.id,
+          hidden: Boolean(tc.hidden),
+          passed: false,
+          error: err && err.message ? err.message : String(err),
+          expected: tc.hidden ? '[hidden]' : fmtVal(tc.expected),
+          runtimeMs,
+        });
+      }
+    }
+
+    process.stdout.write(JSON.stringify({
+      ok: true,
+      stdout: stdoutLogs.join('\\n').slice(0, 4000),
+      results
+    }));
+  } catch (err) {
+    process.stdout.write(JSON.stringify({
+      ok: false,
+      error: err && err.message ? err.message : String(err),
+      stdout: '',
+      results: []
+    }));
+  }
+});
+`;
+
+// Isolated Python child-process harness (executed ONLY inside `python3 -I` as UID 65534).
+const PYTHON_HARNESS_SOURCE = `
+import sys, json, time, signal, io, copy, resource
+
+resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
+resource.setrlimit(resource.RLIMIT_NOFILE, (16, 16))
+try:
+    resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+except Exception:
+    pass
+
+raw = sys.stdin.read(512 * 1024)
+payload = json.loads(raw)
+code = payload.get("code", "")
+entry_point = payload.get("entryPoint", "solve")
+tests = payload.get("tests", [])
+
+BLOCKED_AUDIT_PREFIXES = (
+    "open", "subprocess.", "os.system", "os.popen", "os.spawn", "os.exec", "os.fork",
+    "socket.", "urllib.", "http.", "ftplib.", "ctypes.", "webbrowser."
+)
+DISALLOWED_MODULES = {
+    "os", "sys", "subprocess", "socket", "pathlib", "shutil", "http", "urllib",
+    "ctypes", "multiprocessing", "threading", "asyncio", "importlib", "pty", "fcntl"
+}
+
+def _audit_hook(event, args):
+    if event == "open" or any(event.startswith(p) for p in BLOCKED_AUDIT_PREFIXES):
+        raise PermissionError(f"Sandbox policy blocked {event}")
+    if event == "import" and args:
+        mod = str(args[0]).split(".")[0]
+        if mod in DISALLOWED_MODULES:
+            raise PermissionError(f"Module '{mod}' is blocked in the coding arena sandbox")
+
+sys.addaudithook(_audit_hook)
+
+def _timeout_handler(signum, frame):
+    raise TimeoutError("Test execution exceeded 1s limit")
+
+signal.signal(signal.SIGALRM, _timeout_handler)
+
+stdout_buf = io.StringIO()
+old_stdout = sys.stdout
+sys.stdout = stdout_buf
+
+real_import = __import__
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    root_mod = str(name).split(".")[0]
+    if root_mod in DISALLOWED_MODULES:
+        raise ImportError(f"Module '{root_mod}' is blocked in the coding arena sandbox")
+    return real_import(name, globals, locals, fromlist, level)
+
+safe_builtins = dict(__builtins__) if isinstance(__builtins__, dict) else dict(vars(__builtins__))
+safe_builtins["__import__"] = _safe_import
+safe_builtins.pop("open", None)
+safe_builtins.pop("eval", None)
+safe_builtins.pop("exec", None)
+safe_builtins.pop("compile", None)
+
+ns = {"__builtins__": safe_builtins}
+try:
+    signal.alarm(1)
+    exec(compile(code, "<arena_submission>", "exec"), ns, ns)
+    signal.alarm(0)
+except Exception as exc:
+    signal.alarm(0)
+    sys.stdout = old_stdout
+    print(json.dumps({
+        "ok": False,
+        "error": f"{type(exc).__name__}: {exc}",
+        "stdout": stdout_buf.getvalue()[:4000],
+        "results": []
+    }))
+    sys.exit(0)
+
+fn = ns.get(entry_point)
+if not callable(fn):
+    sys.stdout = old_stdout
+    print(json.dumps({
+        "ok": False,
+        "error": f"Function '{entry_point}' not found. Keep def {entry_point}(...).",
+        "stdout": stdout_buf.getvalue()[:4000],
+        "results": []
+    }))
+    sys.exit(0)
+
+results = []
+for tc in tests:
+    t0 = time.monotonic()
+    try:
+        args_copy = copy.deepcopy(tc.get("args", []))
+        signal.alarm(1)
+        actual = fn(*args_copy)
+        signal.alarm(0)
+        elapsed = max(1, int((time.monotonic() - t0) * 1000))
+        expected = tc.get("expected")
+        passed = (actual == expected) and (type(actual) is type(expected) or not (isinstance(actual, bool) ^ isinstance(expected, bool)))
+        hidden = bool(tc.get("hidden", False))
+        results.append({
+            "testId": tc.get("id"),
+            "label": tc.get("label") or tc.get("id"),
+            "hidden": hidden,
+            "passed": bool(passed),
+            "actual": ("[passed]" if passed else "[mismatch]") if hidden else json.dumps(actual),
+            "expected": "[hidden]" if hidden else json.dumps(expected),
+            "runtimeMs": elapsed
+        })
+    except Exception as exc:
+        signal.alarm(0)
+        elapsed = max(1, int((time.monotonic() - t0) * 1000))
+        hidden = bool(tc.get("hidden", False))
+        results.append({
+            "testId": tc.get("id"),
+            "label": tc.get("label") or tc.get("id"),
+            "hidden": hidden,
+            "passed": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "expected": "[hidden]" if hidden else json.dumps(tc.get("expected")),
+            "runtimeMs": elapsed
+        })
+
+sys.stdout = old_stdout
+print(json.dumps({
+    "ok": True,
+    "stdout": stdout_buf.getvalue()[:4000],
+    "results": results
+}))
+`;
+
+function entry_point_ref(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, '') || 'solve';
+}
+
+export async function runIsolatedTests(input: {
+  language: ArenaLanguage;
+  code: string;
+  entryPoint: string;
+  tests: ArenaTestCase[];
+}): Promise<SandboxExecutionResult> {
+  const language: ArenaLanguage = ['javascript', 'typescript', 'python'].includes(input.language)
+    ? input.language
+    : 'javascript';
+  const entryPoint = entry_point_ref(input.entryPoint);
+  const tests = Array.isArray(input.tests) ? input.tests : [];
+  const sourceCode = String(input.code || '').slice(0, 64 * 1024);
+
+  if (!sourceCode.trim()) {
+    return {
+      ok: false,
+      language,
+      isolationMode: getSandboxStatus().label,
+      passedCount: 0,
+      totalCount: tests.length,
+      hiddenPassed: 0,
+      hiddenTotal: tests.filter((t) => t.hidden).length,
+      allPassed: false,
+      stdout: '',
+      error: 'No source code submitted.',
+      runtimeMs: 0,
+      results: [],
+    };
+  }
+
+  const tStart = Date.now();
+  const statusInfo = getSandboxStatus();
+
+  if (language === 'python') {
+    const { stdout, stderr, timedOut } = await spawnLimited(
+      'python3',
+      ['-I', '-c', PYTHON_HARNESS_SOURCE],
+      JSON.stringify({ code: sourceCode, entryPoint, tests })
+    );
+    const runtimeMs = Math.max(1, Date.now() - tStart);
+    if (timedOut) {
+      return {
+        ok: false,
+        language,
+        isolationMode: statusInfo.label,
+        passedCount: 0,
+        totalCount: tests.length,
+        hiddenPassed: 0,
+        hiddenTotal: tests.filter((t) => t.hidden).length,
+        allPassed: false,
+        stdout: '',
+        error: `Execution stopped after ${WALL_TIMEOUT_MS}ms time limit.`,
+        runtimeMs,
+        results: [],
+      };
+    }
+    try {
+      const parsed = JSON.parse(stdout.trim() || '{}');
+      const results: SandboxTestResult[] = Array.isArray(parsed.results) ? parsed.results : [];
+      const passedCount = results.filter((r) => r.passed).length;
+      const hidden = results.filter((r) => r.hidden);
+      return {
+        ok: Boolean(parsed.ok),
+        language,
+        isolationMode: statusInfo.label,
+        passedCount,
+        totalCount: tests.length,
+        hiddenPassed: hidden.filter((r) => r.passed).length,
+        hiddenTotal: hidden.length,
+        allPassed: Boolean(parsed.ok) && passedCount === tests.length && tests.length > 0,
+        stdout: String(parsed.stdout || ''),
+        error: parsed.error || (stderr.trim() ? stderr.trim() : undefined),
+        runtimeMs,
+        results,
+      };
+    } catch {
+      return {
+        ok: false,
+        language,
+        isolationMode: statusInfo.label,
+        passedCount: 0,
+        totalCount: tests.length,
+        hiddenPassed: 0,
+        hiddenTotal: tests.filter((t) => t.hidden).length,
+        allPassed: false,
+        stdout: stdout.slice(0, 1000),
+        error: stderr.trim() || 'Python sandbox failed to produce test output.',
+        runtimeMs,
+        results: [],
+      };
+    }
+  }
+
+  // JavaScript & TypeScript -> strip TypeScript types safely without executing user code, then run inside `--permission` Node child process
+  let executableJs = sourceCode;
+  if (language === 'typescript') {
+    try {
+      const transformed = transformSync(sourceCode, {
+        loader: 'ts',
+        format: 'cjs',
+        target: 'es2022',
+      });
+      // Allow both `export function solve(...)` and `function solve(...)`
+      executableJs = transformed.code.replace(/^\s*"use strict";\s*/m, '').replace(/module\.exports\s*=.*$/gm, '').replace(/exports\.\w+\s*=\s*\w+;?/g, '');
+    } catch (err: any) {
+      return {
+        ok: false,
+        language,
+        isolationMode: statusInfo.label,
+        passedCount: 0,
+        totalCount: tests.length,
+        hiddenPassed: 0,
+        hiddenTotal: tests.filter((t) => t.hidden).length,
+        allPassed: false,
+        stdout: '',
+        error: `TypeScript syntax error: ${err?.message || 'Invalid syntax'}`,
+        runtimeMs: Math.max(1, Date.now() - tStart),
+        results: [],
+      };
+    }
+  } else {
+    executableJs = sourceCode.replace(/^\s*export\s+(?=(async\s+)?function\s)/gm, '');
+  }
+
+  const { stdout, stderr, timedOut } = await spawnLimited(
+    'node',
+    ['--permission', `--max-old-space-size=${MEMORY_MB}`, '--stack-size=512', '-e', NODE_HARNESS_SOURCE],
+    JSON.stringify({ code: executableJs, entryPoint, tests })
+  );
+
+  const runtimeMs = Math.max(1, Date.now() - tStart);
+  if (timedOut) {
+    return {
+      ok: false,
+      language,
+      isolationMode: statusInfo.label,
+      passedCount: 0,
+      totalCount: tests.length,
+      hiddenPassed: 0,
+      hiddenTotal: tests.filter((t) => t.hidden).length,
+      allPassed: false,
+      stdout: '',
+      error: `Execution stopped after ${WALL_TIMEOUT_MS}ms time limit.`,
+      runtimeMs,
+      results: [],
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(stdout.trim() || '{}');
+    const results: SandboxTestResult[] = Array.isArray(parsed.results) ? parsed.results : [];
+    const passedCount = results.filter((r) => r.passed).length;
+    const hidden = results.filter((r) => r.hidden);
+    return {
+      ok: Boolean(parsed.ok),
+      language,
+      isolationMode: statusInfo.label,
+      passedCount,
+      totalCount: tests.length,
+      hiddenPassed: hidden.filter((r) => r.passed).length,
+      hiddenTotal: hidden.length,
+      allPassed: Boolean(parsed.ok) && passedCount === tests.length && tests.length > 0,
+      stdout: String(parsed.stdout || ''),
+      error: parsed.error || (stderr.trim() ? stderr.trim() : undefined),
+      runtimeMs,
+      results,
+    };
+  } catch {
+    return {
+      ok: false,
+      language,
+      isolationMode: statusInfo.label,
+      passedCount: 0,
+      totalCount: tests.length,
+      hiddenPassed: 0,
+      hiddenTotal: tests.filter((t) => t.hidden).length,
+      allPassed: false,
+      stdout: stdout.slice(0, 1000),
+      error: stderr.trim() || 'Isolated runner failed to produce structured test results.',
+      runtimeMs,
+      results: [],
+    };
+  }
+}
