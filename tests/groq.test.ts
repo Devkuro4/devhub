@@ -17,8 +17,8 @@ import {
 import * as ai from '../server/aiService.ts';
 import { apiError, completion as reply, installFakeGroq, rawStreamResponse, type FakeHandlers } from './fakeGroq.ts';
 
-const MAIN = 'llama-3.3-70b-versatile';
-const FALLBACK = 'llama-3.1-8b-instant';
+const MAIN = 'openai/gpt-oss-120b';
+const FALLBACK = 'openai/gpt-oss-20b';
 
 let calls: any[] = [];
 let streamCalls: any[] = [];
@@ -376,7 +376,7 @@ test('the API key never appears in any status payload', () => {
 // ---------------------------------------------------------------- free-tier protection
 test('429 on the main model: switches to the lighter fallback model and reports which model answered', async () => {
   handler = (req) => {
-    if (req.model === MAIN) throw apiError(429, 'Rate limit reached for model `llama-3.3-70b-versatile` on tokens per minute (TPM). Please try again in 8s.');
+    if (req.model === MAIN) throw apiError(429, 'Rate limit reached for model `openai/gpt-oss-120b` on tokens per minute (TPM). Please try again in 8s.');
     return reply('from fallback');
   };
   const r = await generateText({ model: MAIN, systemInstruction: '', prompt: 'p' });
@@ -450,4 +450,16 @@ test('mentor prompt keeps recent turns within a bounded transcript budget', asyn
   assert.match(prompt, /latest question/);
   assert.match(prompt, /turn-29/);
   assert.doesNotMatch(prompt, /turn-0 /);
+});
+
+
+test('retired Groq model ids (Llama 3.3 70B etc.) are upgraded to supported replacements', async () => {
+  const g = await import('../server/groqClient.ts');
+  assert.equal(g.resolveModel('llama-3.3-70b-versatile'), 'openai/gpt-oss-120b');
+  assert.equal(g.resolveModel('llama-3.1-8b-instant'), 'openai/gpt-oss-20b');
+  assert.equal(g.resolveModel('openai/gpt-oss-120b'), 'openai/gpt-oss-120b');
+  const prev = process.env.GROQ_MODEL;
+  process.env.GROQ_MODEL = 'llama-3.3-70b-versatile';
+  assert.equal(g.getConfiguredModel(), 'openai/gpt-oss-120b');
+  if (prev === undefined) delete process.env.GROQ_MODEL; else process.env.GROQ_MODEL = prev;
 });

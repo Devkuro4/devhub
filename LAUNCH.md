@@ -29,7 +29,7 @@ finish the steps below.
 | Name | Value |
 |---|---|
 | `GROQ_API_KEY` | **Required.** Your Groq API key from [Groq Console](https://console.groq.com/keys) (server only, never prefix with `VITE_`). Without it every AI feature shows a friendly "not configured" message |
-| `GROQ_MODEL` | Optional. Defaults to `llama-3.3-70b-versatile`. Any current Groq model ID works (see console.groq.com/docs/models) |
+| `GROQ_MODEL` | Optional. Defaults to `openai/gpt-oss-120b`. Any current Groq model ID works (see console.groq.com/docs/models) |
 | `VITE_SUPABASE_URL` | the Project URL |
 | `VITE_SUPABASE_ANON_KEY` | the anon / publishable key |
 | `NODE_VERSION` | `22` |
@@ -101,7 +101,7 @@ By default anyone who finds the link can create an account. Pick one:
   automatically (up to `GROQ_MAX_RETRIES`, default 2) before showing a message.
 - **Groq free tier:** it needs no card, but each model has its own caps on requests, tokens per minute and tokens per day.
   Dev Hub paces itself to `GROQ_MAX_RPM` (default 20) and, on a rate limit, switches to `GROQ_FALLBACK_MODEL`
-  (default `llama-3.1-8b-instant`, which has its own separate limits). The real provider error text appears in
+  (default `openai/gpt-oss-20b`, which has its own separate limits). The real provider error text appears in
   Admin Console, AI Settings, in the error list.
 - **No live web search:** Groq chat models answer from their training knowledge. The mentor and the "Search the web"
   panel no longer return live source links; their prompts tell the model not to invent links.

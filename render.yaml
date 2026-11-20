@@ -13,8 +13,8 @@ services:
         value: "22"
       - key: GROQ_API_KEY   # required: Groq API key (https://console.groq.com/keys), server only
         sync: false
-      - key: GROQ_MODEL     # optional: defaults to llama-3.3-70b-versatile
-        value: llama-3.3-70b-versatile
+      - key: GROQ_MODEL     # optional: defaults to openai/gpt-oss-120b
+        value: openai/gpt-oss-120b
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY

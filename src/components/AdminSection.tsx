@@ -1150,14 +1150,14 @@ export const AdminSection = ({
                 <div className={`${cardClass} p-5 space-y-3`}>
                   <label className={`block text-xs font-medium ${textSecondary}`}>Active Groq Model</label>
                   <select
-                    value={aiStatus.settings?.model || 'llama-3.3-70b-versatile'}
+                    value={aiStatus.settings?.model || 'openai/gpt-oss-120b'}
                     onChange={(e) => handleSaveAiSettings({ model: e.target.value })}
                     className={inputClass}
                   >
-                    {(aiStatus.modelChoices || ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b']).map((m: string) => (
+                    {(aiStatus.modelChoices || ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']).map((m: string) => (
                       <option key={m} value={m}>
                         {m}
-                        {m === 'llama-3.1-8b-instant' ? ' (Fastest, highest free limits)' : m === 'openai/gpt-oss-120b' ? ' (Highest quality)' : m === 'llama-3.3-70b-versatile' ? ' (Recommended)' : ''}
+                        {m === 'openai/gpt-oss-20b' ? ' (Faster, higher free limits)' : m === 'openai/gpt-oss-120b' ? ' (Recommended)' : ''}
                       </option>
                     ))}
                   </select>

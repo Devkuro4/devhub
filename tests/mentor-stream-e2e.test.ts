@@ -35,7 +35,7 @@ function setup(streamImpl: (req: any, n: number) => Promise<AsyncIterable<any>>)
   __setSleepForTests(async () => {});
   const seen: any[] = [];
   installFakeGroq(() => ({ chat: async () => { throw new Error('unexpected non-stream call'); }, stream: (r: any, n: number) => streamImpl(r, n) }), { chat: [], stream: seen });
-  ai.updateAiSettings({ enabled: true, dailyLimitPerUser: 500, model: 'llama-3.3-70b-versatile' });
+  ai.updateAiSettings({ enabled: true, dailyLimitPerUser: 500, model: 'openai/gpt-oss-120b' });
   return seen;
 }
 function pointFetchAt(base: string) {
@@ -53,9 +53,9 @@ test('browser client receives streamed tokens in order and the complete reply', 
     const res = await requestMentorChatStream(input as any, 'e2e-user', (t) => tokens.push(t));
     assert.deepEqual(tokens, ['Loops ', 'repeat ', 'work.']);
     assert.equal(res.text, 'Loops repeat work.');
-    assert.equal(res.model, 'llama-3.3-70b-versatile');
+    assert.equal(res.model, 'openai/gpt-oss-120b');
     assert.equal(seen.length, 1);
-    assert.equal(seen[0].model, 'llama-3.3-70b-versatile');
+    assert.equal(seen[0].model, 'openai/gpt-oss-120b');
   } finally { restore(); await srv.close(); }
 });
 

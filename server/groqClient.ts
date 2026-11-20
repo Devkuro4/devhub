@@ -15,13 +15,31 @@
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
-/** Strong general-purpose default. Override with GROQ_MODEL. */
-export const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
+/** Strong general-purpose default. Override with GROQ_MODEL. (llama-3.3-70b-versatile was shut down by Groq on 2026-08-16.) */
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+
+/** Default lighter model used when the main one is rate limited or unavailable. */
+export const DEFAULT_GROQ_FALLBACK_MODEL = 'openai/gpt-oss-20b';
+
+/**
+ * Models Groq has shut down, mapped to their recommended replacements. Stale GROQ_MODEL env values or
+ * saved admin settings that still name one of these are upgraded automatically instead of failing every request.
+ */
+const RETIRED_MODELS: Record<string, string> = {
+  'llama-3.3-70b-versatile': 'openai/gpt-oss-120b',
+  'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
+  'llama-3.1-70b-versatile': 'openai/gpt-oss-120b',
+  'llama3-70b-8192': 'openai/gpt-oss-120b',
+  'llama3-8b-8192': 'openai/gpt-oss-20b',
+  'qwen/qwen3-32b': 'openai/gpt-oss-120b',
+  'meta-llama/llama-4-scout-17b-16e-instruct': 'openai/gpt-oss-120b',
+};
+export function resolveModel(name: string): string {
+  return RETIRED_MODELS[String(name || '').trim().toLowerCase()] ?? name;
+}
 
 /** Models offered in the admin picker. The configured GROQ_MODEL is always added to this list. */
 export const GROQ_MODEL_CHOICES = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
 ];
@@ -41,7 +59,7 @@ export function isValidModelName(name: string): boolean {
 
 export function getConfiguredModel(): string {
   const fromEnv = String(process.env.GROQ_MODEL ?? '').trim().replace(/^['"]|['"]$/g, '');
-  return isValidModelName(fromEnv) ? fromEnv : DEFAULT_GROQ_MODEL;
+  return isValidModelName(fromEnv) ? resolveModel(fromEnv) : DEFAULT_GROQ_MODEL;
 }
 
 export function getGroqApiKey(): string | null {
@@ -53,9 +71,9 @@ export function getGroqApiKey(): string | null {
 const timeoutMs = () => intFromEnv('GROQ_TIMEOUT_MS', 45_000, 1_000, 120_000);
 /** Lighter model used when the main model hits its rate limit / quota. Set to "off" to disable. */
 export function getFallbackModel(): string | null {
-  const raw = String(process.env.GROQ_FALLBACK_MODEL ?? 'llama-3.1-8b-instant').trim().replace(/^['"]|['"]$/g, '');
+  const raw = String(process.env.GROQ_FALLBACK_MODEL ?? DEFAULT_GROQ_FALLBACK_MODEL).trim().replace(/^['"]|['"]$/g, '');
   if (!raw || raw.toLowerCase() === 'off') return null;
-  return isValidModelName(raw) ? raw : null;
+  return isValidModelName(raw) ? resolveModel(raw) : null;
 }
 /** Requests per minute this server will send to Groq (keeps free-tier keys under their per-minute cap). 0 = unlimited. */
 const maxRpm = () => intFromEnv('GROQ_MAX_RPM', 20, 0, 1000);
@@ -414,10 +432,13 @@ function buildBody(opts: BaseOptions, model: string, extra: Record<string, any> 
   const messages: Array<{ role: string; content: string }> = [];
   if (opts.systemInstruction) messages.push({ role: 'system', content: opts.systemInstruction });
   messages.push({ role: 'user', content: opts.prompt });
+  const resolved = resolveModel(model);
   return {
-    model,
+    model: resolved,
     messages,
     max_tokens: Math.min(opts.maxOutputTokens ?? maxOutputCap(), maxOutputCap()),
+    // gpt-oss models "think" before answering; keep that short so answers are fast and fit the token cap.
+    ...(/^openai\/gpt-oss/i.test(resolved) ? { reasoning_effort: 'low' } : {}),
     ...extra,
   };
 }
@@ -501,7 +522,7 @@ async function retrying<T>(attempt: (n: number) => Promise<T>, outer?: AbortSign
     } catch (err) {
       last = classifyError(err);
       if (n === limit || outer?.aborted) throw last;
-      if (last.code === 'rate_limit' && state && degrade(state)) {
+      if ((last.code === 'rate_limit' || last.code === 'model_unavailable') && state && degrade(state)) {
         await sleepImpl(400);
         continue;
       }
