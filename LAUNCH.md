@@ -28,8 +28,8 @@ finish the steps below.
 
 | Name | Value |
 |---|---|
-| `GEMINI_API_KEY` | **Required.** Your Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) (server only, never prefix with `VITE_`). Without it every AI feature shows a friendly "not configured" message |
-| `GEMINI_MODEL` | Optional. Defaults to `gemini-3.8-flash`. Any current Gemini model ID works |
+| `GROQ_API_KEY` | **Required.** Your Groq API key from [Groq Console](https://console.groq.com/keys) (server only, never prefix with `VITE_`). Without it every AI feature shows a friendly "not configured" message |
+| `GROQ_MODEL` | Optional. Defaults to `llama-3.3-70b-versatile`. Any current Groq model ID works (see console.groq.com/docs/models) |
 | `VITE_SUPABASE_URL` | the Project URL |
 | `VITE_SUPABASE_ANON_KEY` | the anon / publishable key |
 | `NODE_VERSION` | `22` |
@@ -42,10 +42,10 @@ finish the steps below.
 
 - [ ] Open `https://YOUR-SITE/api/health`. You should see `"loginCheck":"on"` and a `keyType` that says `ok` or
       `legacy jwt`. If it says `off (demo mode)`, the Supabase variables did not reach the server. Re-check step 2.
-- [ ] The same page should show `"aiKey":"set"`. If it says `MISSING (set GEMINI_API_KEY)`, add the key in Render and redeploy.
-- [ ] Live AI smoke test (the automated tests use a fake Gemini, so this is the one real check): sign in as admin, open
+- [ ] The same page should show `"aiKey":"set"`. If it says `MISSING (set GROQ_API_KEY)`, add the key in Render and redeploy.
+- [ ] Live AI smoke test (the automated tests use a fake Groq, so this is the one real check): sign in as admin, open
       Admin Console, AI Settings, press **Test AI Connection**. You should see the model name and "Dev Hub AI connection verified."
-      A 429/"busy" message means your Gemini quota is exhausted; an "invalid key" message means `GEMINI_API_KEY` is wrong.
+      A 429/"busy" message means your Groq quota is exhausted; an "invalid key" message means `GROQ_API_KEY` is wrong.
 - [ ] Open the site. You should see **Sign up / Sign in**, and no orange "Demo mode" note in the sidebar.
 
 ## 4. Make yourself the admin
@@ -96,14 +96,16 @@ By default anyone who finds the link can create an account. Pick one:
   paid Starter plan removes that.
 - **AI limits:** each member gets 40 AI requests a day by default (Admin Console, AI Settings). Those counters and any
   settings you change live in the server's memory, so they reset when the server restarts or wakes up.
-- **Gemini's own limits** apply to your key. If many people use the mentor at once and you see "busy" messages, check your
-  Gemini API quota and billing tier in Google AI Studio. Dev Hub already retries short rate limits and outages
-  automatically (up to `GEMINI_MAX_RETRIES`, default 2) before showing a message.
-- **Gemini free tier:** it works, but its per-minute and per-day request caps are low and differ per model. Dev Hub paces
-  itself to `GEMINI_MAX_RPM` (default 8) and, on a rate limit, drops live web search and then switches to
-  `GEMINI_FALLBACK_MODEL`. If many members use it, enable billing on the Google project and raise `GEMINI_MAX_RPM`.
-  The real Google error text appears in Admin Console, AI Settings, in the error list.
-- **Moving from Groq?** Delete `GROQ_API_KEY` from Render. It is no longer read. Then add `GEMINI_API_KEY` and redeploy.
+- **Groq's own limits** apply to your key. If many people use the mentor at once and you see "busy" messages, check your
+  limits in the Groq Console (Settings, Limits). Dev Hub already retries short rate limits and outages
+  automatically (up to `GROQ_MAX_RETRIES`, default 2) before showing a message.
+- **Groq free tier:** it needs no card, but each model has its own caps on requests, tokens per minute and tokens per day.
+  Dev Hub paces itself to `GROQ_MAX_RPM` (default 20) and, on a rate limit, switches to `GROQ_FALLBACK_MODEL`
+  (default `llama-3.1-8b-instant`, which has its own separate limits). The real provider error text appears in
+  Admin Console, AI Settings, in the error list.
+- **No live web search:** Groq chat models answer from their training knowledge. The mentor and the "Search the web"
+  panel no longer return live source links; their prompts tell the model not to invent links.
+- **Moving from Gemini?** Delete `GEMINI_API_KEY` from Render. It is no longer read. Then add `GROQ_API_KEY` and redeploy.
 - **Supabase free projects pause** after a week without activity, and the free plan has no backups you should rely on.
   Check your plan's backup options once the team is using it daily.
 - **Community posts** are shared between members and saved last-write-wins. If two people post in the exact same moment,

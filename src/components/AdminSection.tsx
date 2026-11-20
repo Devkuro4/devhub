@@ -1106,7 +1106,7 @@ export const AdminSection = ({
               <div>
                 <h2 className={`font-display text-2xl ${textPrimary}`}>AI service and usage</h2>
                 <p className={`text-xs ${textSecondary}`}>
-                  The Gemini API key lives on the server only, set as GEMINI_API_KEY.
+                  The Groq API key lives on the server only, set as GROQ_API_KEY.
                 </p>
               </div>
             </div>
@@ -1143,21 +1143,21 @@ export const AdminSection = ({
                     {aiStatus.configured ? 'Configured on Server' : 'Not Configured Yet'}
                   </Badge>
                   <p className={`text-xs ${textSecondary}`}>
-                    Set <code>GEMINI_API_KEY</code> in the server environment variables (Render dashboard → Environment).
+                    Set <code>GROQ_API_KEY</code> in the server environment variables (Render dashboard → Environment).
                   </p>
                 </div>
 
                 <div className={`${cardClass} p-5 space-y-3`}>
-                  <label className={`block text-xs font-medium ${textSecondary}`}>Active Gemini Model</label>
+                  <label className={`block text-xs font-medium ${textSecondary}`}>Active Groq Model</label>
                   <select
-                    value={aiStatus.settings?.model || 'gemini-3.8-flash'}
+                    value={aiStatus.settings?.model || 'llama-3.3-70b-versatile'}
                     onChange={(e) => handleSaveAiSettings({ model: e.target.value })}
                     className={inputClass}
                   >
-                    {(aiStatus.modelChoices || ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon']).map((m: string) => (
+                    {(aiStatus.modelChoices || ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b']).map((m: string) => (
                       <option key={m} value={m}>
                         {m}
-                        {m.includes('flash-lite') ? ' (Fastest, cheapest)' : m === 'gemini-4-argon' ? ' (Highest quality)' : m === 'gemini-3.8-flash' ? ' (Recommended)' : ''}
+                        {m === 'llama-3.1-8b-instant' ? ' (Fastest, highest free limits)' : m === 'openai/gpt-oss-120b' ? ' (Highest quality)' : m === 'llama-3.3-70b-versatile' ? ' (Recommended)' : ''}
                       </option>
                     ))}
                   </select>

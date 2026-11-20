@@ -1,24 +1,24 @@
 import { createHash } from 'node:crypto';
 import {
   AiProviderError,
-  GEMINI_MODEL_CHOICES,
+  GROQ_MODEL_CHOICES,
   classifyError,
   generateJson,
   generateText,
   getConfiguredModel,
-  getGeminiApiKey,
+  getGroqApiKey,
   isValidModelName,
   streamText,
   type GroundingSource,
-} from './geminiClient.ts';
+} from './groqClient.ts';
 
-// All AI features in Dev Hub run on Google Gemini through server/geminiClient.ts.
+// All AI features in Dev Hub run on Groq through server/groqClient.ts.
 // This file holds the feature-level functions (roadmaps, quizzes, mentor, reviews...) plus usage
 // accounting, per-member daily limits and the admin settings. The API key is read from the
-// server environment (GEMINI_API_KEY) and is never sent to the browser.
+// server environment (GROQ_API_KEY) and is never sent to the browser.
 
 // The schemas below describe the JSON each AI task must return. Values are plain JSON Schema types
-// (converted automatically to Gemini Type enums by geminiClient.ts).
+// (described to the model and enforced locally by groqClient.ts).
 const Type = {
   OBJECT: 'object',
   ARRAY: 'array',
@@ -32,7 +32,7 @@ export type SupportedModel = string;
 export type { GroundingSource };
 
 export interface AiRuntimeSettings {
-  provider: 'Gemini';
+  provider: 'Groq';
   model: SupportedModel;
   dailyLimitPerUser: number;
   enabled: boolean;
@@ -69,14 +69,14 @@ export class AiServiceError extends Error {
   }
 }
 
-if (process.env.GROQ_API_KEY && !getGeminiApiKey()) {
-  console.warn('[ai] GROQ_API_KEY is set but Groq is no longer supported. Set GEMINI_API_KEY instead.');
+if (process.env.GEMINI_API_KEY && !getGroqApiKey()) {
+  console.warn('[ai] GEMINI_API_KEY is set but Gemini is no longer used. Set GROQ_API_KEY instead.');
 }
 
-export const MODEL_CHOICES: string[] = Array.from(new Set([getConfiguredModel(), ...GEMINI_MODEL_CHOICES]));
+export const MODEL_CHOICES: string[] = Array.from(new Set([getConfiguredModel(), ...GROQ_MODEL_CHOICES]));
 
 const runtimeSettings: AiRuntimeSettings = {
-  provider: 'Gemini',
+  provider: 'Groq',
   model: getConfiguredModel(),
   dailyLimitPerUser: 40,
   enabled: true,
@@ -141,8 +141,8 @@ function checkRateAndAvailability(userId: string, operation: string) {
   if (!runtimeSettings.enabled) {
     throw new AiServiceError('AI features are currently paused by the community administrator.', 503);
   }
-  if (!getGeminiApiKey()) {
-    throw new AiServiceError('AI service key is not configured on the server yet. An admin needs to set GEMINI_API_KEY.', 503);
+  if (!getGroqApiKey()) {
+    throw new AiServiceError('AI service key is not configured on the server yet. An admin needs to set GROQ_API_KEY.', 503);
   }
   const userCalls = usageStats.perUserCallsToday[userId] || 0;
   if (userCalls >= runtimeSettings.dailyLimitPerUser) {
@@ -167,7 +167,7 @@ function formatAiError(err: any, operation: string): AiServiceError {
   const httpStatus = e.code === 'rate_limit' ? 429 : e.code === 'timeout' ? 504 : e.code === 'unavailable' ? 503 : e.code === 'blocked' ? 422 : 500;
   const message = e.code === 'model_unavailable' ? `The AI model "${runtimeSettings.model}" is not available. Ask an admin to pick another model.` : e.message;
   const err2 = new AiServiceError(message, httpStatus);
-  // Admin-only diagnostics: Google's own wording (never contains keys or prompts).
+  // Admin-only diagnostics: the provider's own wording (never contains keys or prompts).
   (err2 as any).detail = detail ? String(detail).slice(0, 200) : '';
   return err2;
 }
@@ -289,15 +289,15 @@ async function* runTextStream(
   }
 }
 
-/** True when the Gemini key is set. Used by /api/health so a missing key is obvious at launch. */
+/** True when the Groq key is set. Used by /api/health so a missing key is obvious at launch. */
 export function isAiConfigured() {
-  return Boolean(getGeminiApiKey());
+  return Boolean(getGroqApiKey());
 }
 
 export function getAiStatus() {
   resetDailyCountersIfNeeded();
   return {
-    configured: Boolean(getGeminiApiKey()),
+    configured: Boolean(getGroqApiKey()),
     settings: { ...runtimeSettings },
     modelChoices: Array.from(new Set([...MODEL_CHOICES, runtimeSettings.model])),
     stats: {
@@ -345,7 +345,7 @@ export async function testAiConnection(userId: string) {
 
 
 // ---------------------------------------------------------------------------
-// Response validators: AI output is conformed to its schema in geminiClient.ts, then checked here
+// Response validators: AI output is conformed to its schema in groqClient.ts, then checked here
 // for the fields each feature cannot work without. A rejected answer triggers one automatic retry;
 // if it fails again the member sees a friendly error and nothing is saved or displayed.
 // ---------------------------------------------------------------------------
@@ -1108,7 +1108,7 @@ Be supportive, practical, and honest about what could be verified from the submi
   );
 }
 
-// 9. AI Mentor Chat (with optional web search)
+// 9. AI Mentor Chat
 export interface MentorChatInput {
   message: string;
   history: { sender: string; text: string }[];
@@ -1218,7 +1218,7 @@ ${teachingMethod}
 
 Level guide: ${levelGuide}
 ${hintRule}
-When live web search is enabled, verify current documentation, APIs, and best practices without inventing links. Reply in the same language the learner writes in.`;
+You have no live web access: answer from your training knowledge, say when something may have changed recently, and never invent links or URLs (name official docs such as MDN or the framework's own docs instead). Reply in the same language the learner writes in.`;
 
   // The conversation is saved on the member's account, so we can send a longer transcript.
   // Each message is trimmed so a very long paste cannot crowd out the rest.
@@ -1248,7 +1248,7 @@ export async function* streamMentorReply(userId: string, input: MentorChatInput,
   });
 }
 
-// 9b. Live web-search Developer Lookup
+// 9b. Developer Lookup (answers from model knowledge; Groq has no live web access)
 export async function searchDeveloperDocs(
   userId: string,
   input: { query: string; field: string; skillLevel: string }
@@ -1256,7 +1256,7 @@ export async function searchDeveloperDocs(
   const query = String(input.query || '').trim();
   if (!query) throw new Error('Enter a question or topic to search.');
   const systemInstruction = `You are Dev Hub's live documentation & resource finder helping a ${input.skillLevel || 'Beginner'} developer studying ${input.field || 'Web Development'}.
-Use your web search tool to verify current documentation, release changes, and trustworthy beginner-friendly references. Summarize clearly in plain language with practical takeaways (3-5 short bullets or concise paragraphs).`;
+You have no live web access, so answer from your training knowledge, say when details may have changed recently, never invent links or URLs, and name the official documentation to check (for example MDN or the framework's own docs). Summarize clearly in plain language with practical takeaways (3-5 short bullets or concise paragraphs).`;
 
   const result = await runTextOperation(
     userId,

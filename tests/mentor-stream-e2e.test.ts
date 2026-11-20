@@ -1,10 +1,11 @@
-// End-to-end over a real HTTP socket: browser client -> SSE route handler -> aiService -> (fake) Gemini.
+// End-to-end over a real HTTP socket: browser client -> SSE route handler -> aiService -> (fake) Groq.
 // Express itself is not involved: a tiny shim supplies res.status()/res.json() for the handler.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { __setClientFactoryForTests, __setSleepForTests } from '../server/geminiClient.ts';
+import { __setSleepForTests } from '../server/groqClient.ts';
+import { installFakeGroq } from './fakeGroq.ts';
 import * as ai from '../server/aiService.ts';
 import { createMentorStreamHandler } from '../server/mentorStream.ts';
 import { requestMentorChatStream } from '../src/lib/aiClient.ts';
@@ -28,13 +29,13 @@ function startServer(userId = 'e2e-user') {
 }
 
 function setup(streamImpl: (req: any, n: number) => Promise<AsyncIterable<any>>) {
-  process.env.GEMINI_API_KEY = 'test-key-not-real';
-  process.env.GEMINI_TIMEOUT_MS = '1000';
-  process.env.GEMINI_MAX_RPM = '0';
+  process.env.GROQ_API_KEY = 'test-key-not-real';
+  process.env.GROQ_TIMEOUT_MS = '1000';
+  process.env.GROQ_MAX_RPM = '0';
   __setSleepForTests(async () => {});
   const seen: any[] = [];
-  __setClientFactoryForTests(() => ({ models: { generateContentStream: async (r: any) => { seen.push(r); return streamImpl(r, seen.length); } } }));
-  ai.updateAiSettings({ enabled: true, dailyLimitPerUser: 500, model: 'gemini-3.8-flash' });
+  installFakeGroq(() => ({ chat: async () => { throw new Error('unexpected non-stream call'); }, stream: (r: any, n: number) => streamImpl(r, n) }), { chat: [], stream: seen });
+  ai.updateAiSettings({ enabled: true, dailyLimitPerUser: 500, model: 'llama-3.3-70b-versatile' });
   return seen;
 }
 function pointFetchAt(base: string) {
@@ -52,9 +53,9 @@ test('browser client receives streamed tokens in order and the complete reply', 
     const res = await requestMentorChatStream(input as any, 'e2e-user', (t) => tokens.push(t));
     assert.deepEqual(tokens, ['Loops ', 'repeat ', 'work.']);
     assert.equal(res.text, 'Loops repeat work.');
-    assert.equal(res.model, 'gemini-3.8-flash');
+    assert.equal(res.model, 'llama-3.3-70b-versatile');
     assert.equal(seen.length, 1);
-    assert.equal(seen[0].model, 'gemini-3.8-flash');
+    assert.equal(seen[0].model, 'llama-3.3-70b-versatile');
   } finally { restore(); await srv.close(); }
 });
 
@@ -83,11 +84,11 @@ test('errors before any text (daily limit) come back as HTTP 429 JSON, not a bro
   } finally { restore(); await srv.close(); ai.updateAiSettings({ dailyLimitPerUser: 500 }); }
 });
 
-test('closing the connection mid-answer aborts the Gemini request', async () => {
+test('closing the connection mid-answer aborts the Groq request', async () => {
   let aborted = false;
   setup(async (req) => (async function* () {
     yield { text: 'start ' };
-    await new Promise<void>((resolve) => { req.config.abortSignal.addEventListener('abort', () => { aborted = true; resolve(); }); setTimeout(resolve, 3000); });
+    await new Promise<void>((resolve) => { req.signal.addEventListener('abort', () => { aborted = true; resolve(); }); setTimeout(resolve, 3000); });
   })());
   const srv = await startServer();
   const restore = pointFetchAt(srv.base);

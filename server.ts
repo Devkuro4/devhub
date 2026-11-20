@@ -148,7 +148,7 @@ app.use('/api', (req, res, next) => {
 
 // Lets hosts (Render, Railway...) check that the server is up.
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GEMINI_API_KEY)' });
+  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GROQ_API_KEY)' });
 });
 
 app.get('/devhub-source.zip', (_req, res) => {
