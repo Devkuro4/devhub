@@ -97,7 +97,19 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
       } else if (ev.type === 'chat:rooms') {
         for (const c of clients) {
           if (c.verified && c.ws.readyState === WebSocket.OPEN) {
-            c.ws.send(JSON.stringify({ type: 'chat:rooms', rooms: listChatRoomsForUser(c.userId) }));
+            const rooms = listChatRoomsForUser(c.userId);
+            c.ws.send(JSON.stringify({ type: 'chat:rooms', rooms }));
+            // If a member leaves a private group, move their socket out immediately
+            // so they cannot keep receiving that room's messages after access is revoked.
+            if (!rooms.some((room) => room.id === c.roomId)) {
+              c.roomId = 'general';
+              c.ws.send(JSON.stringify({
+                type: 'chat:history',
+                roomId: 'general',
+                history: getChatHistoryForRoom('general'),
+                presence: getRoomPresence('general'),
+              }));
+            }
           }
         }
       } else if (ev.type === 'chat:message:updated') {
@@ -311,7 +323,16 @@ export function setupChatServer(httpServer: HttpServer, allowedOrigins: string[]
           ws.send(JSON.stringify({ type: 'chat:error', code: 'rejected', message: saved.error }));
           return;
         }
-        broadcastToRoom(roomId, { type: 'chat:message', roomId, message: saved.message });
+        const savedRoom = listChatRoomsForUser(client.userId).find((room) => room.id === roomId);
+        const payload = { type: 'chat:message', roomId, message: saved.message };
+        if (savedRoom?.isDirect) {
+          // Deliver DMs to both participants even when the recipient is viewing another room.
+          // The recipient's authenticated socket receives the unread update without exposing
+          // the message to any other member.
+          for (const participantId of savedRoom.participantIds || []) broadcastToUser(participantId, payload);
+        } else {
+          broadcastToRoom(roomId, payload);
+        }
       } else if (msg.type === 'chat:delete') {
         const roomId = typeof msg.roomId === 'string' ? msg.roomId : client.roomId;
         const messageId = typeof msg.messageId === 'string' ? msg.messageId : '';

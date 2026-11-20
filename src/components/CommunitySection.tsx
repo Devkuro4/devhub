@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { Badge, EmptyState, Modal, PageHeader, SectionTabs, SkeletonBlock } from './ui';
 import { getUrlError } from '../lib/url';
+import { apiOpenDirectChat } from '../lib/communityClient';
 import { requestGroundedSearch, type GroundedSource } from '../lib/aiClient';
 import { StudyGroupChatPanel, useStudyGroupChat, type MentionCandidate } from './StudyGroupChat';
 import { MentionPickerBar, MentionText, type ReportDraftTarget } from './CommunityModals';
@@ -136,6 +137,7 @@ export interface CommunityActionsProp {
     maxMembers?: number;
   }) => Promise<StudyGroup | null | void>;
   toggleJoinStudyGroup: (groupId: string) => Promise<void> | void;
+  removeStudyGroupMember: (groupId: string, memberId: string) => Promise<void> | void;
   updateStudyGroupWorkspace: (
     groupId: string,
     input: { addGoal?: string; toggleGoalId?: string; addLink?: { title: string; url: string } }
@@ -257,6 +259,8 @@ export const CommunitySection = ({
   const mutedReason = myMute?.reason;
 
   const { unreadCount: chatUnread, upsertRoomAndOpen } = useStudyGroupChat();
+  const [memberSearch, setMemberSearch] = useState('');
+  const [startingDm, setStartingDm] = useState<string | null>(null);
 
   const postDraftKey = `devhub_draft_${currentUserId}_community_post`;
   const helpDraftKey = `devhub_draft_${currentUserId}_community_help`;
@@ -927,7 +931,7 @@ export const CommunitySection = ({
 
   const communityTabs: { id: CommunitySubTab; label: string; badge?: number }[] = [
     { id: 'community-home', label: 'Community Home' },
-    { id: 'study-chat', label: 'Study Chat', badge: chatUnread },
+    { id: 'study-chat', label: 'Messages', badge: chatUnread },
     { id: 'study-groups', label: 'Study Groups', badge: studyGroups.length },
     { id: 'community', label: 'Discussions', badge: visiblePosts.length },
     { id: 'events', label: 'Events', badge: presentations.length },
@@ -1131,7 +1135,38 @@ export const CommunitySection = ({
 
       {/* 0A. LIVE STUDY GROUP CHAT */}
       {subTab === 'study-chat' && (
-        <StudyGroupChatPanel
+        <div className="space-y-5">
+          <section className={`${cardClass} p-5 sm:p-6 space-y-4`}>
+            <div className="space-y-1">
+              <h2 className={`text-lg font-semibold ${textPrimary}`}>Find a member</h2>
+              <p className={`text-sm ${textSecondary}`}>Search the Dev Hub directory and start a private conversation.</p>
+            </div>
+            <div className="relative">
+              <Search className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${textSecondary}`} aria-hidden="true" />
+              <input value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} placeholder="Search by name, username, or skill..." className={`${inputClass} !pl-10 min-h-11 w-full`} />
+            </div>
+            {(() => {
+              const q = memberSearch.trim().toLowerCase();
+              const candidates = Object.values(memberProfiles).filter((m) => m.id !== currentUserId && (!q || [m.name, m.username, m.field, m.bio].join(' ').toLowerCase().includes(q))).slice(0, 8);
+              return candidates.length ? <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{candidates.map((member) => (
+                <div key={member.id} className={`flex items-center justify-between gap-3 rounded-xl border ${borderClass} p-3`}>
+                  <button type="button" onClick={() => onOpenMemberProfile?.(member.id, member.name)} className="min-w-0 text-left">
+                    <span className={`block font-medium truncate ${textPrimary}`}>{member.name}</span>
+                    <span className={`block text-xs truncate ${textSecondary}`}>{member.field || member.username || 'Dev Hub member'}</span>
+                  </button>
+                  <button type="button" disabled={startingDm === member.id} onClick={async () => {
+                    setStartingDm(member.id);
+                    try {
+                      const result = await apiOpenDirectChat({ userId: currentUserId, userName: currentUserName }, member.id, member.name);
+                      upsertRoomAndOpen(result.room);
+                    } catch (err: any) { onNotify(err?.message || 'Could not start conversation.', 'error'); }
+                    finally { setStartingDm(null); }
+                  }} className={`${btnSecondary} shrink-0 !min-h-9 !px-3`}><MessageSquare className="w-4 h-4" /> Message</button>
+                </div>
+              ))}</div> : <p className={`text-sm ${textSecondary}`}>{q ? 'No members match that search.' : 'Member profiles will appear here as people join Dev Hub.'}</p>;
+            })()}
+          </section>
+          <StudyGroupChatPanel
           styles={styles}
           currentUserId={currentUserId}
           isAdmin={isAdminMode}
@@ -1151,7 +1186,8 @@ export const CommunitySection = ({
               : undefined
           }
           onSelectMember={(id, name) => onOpenMemberProfile?.(id, name)}
-        />
+          />
+        </div>
       )}
 
       {/* 0B. STUDY GROUPS */}
@@ -1168,6 +1204,9 @@ export const CommunitySection = ({
           }}
           onToggleJoinGroup={async (groupId) => {
             if (actions) await actions.toggleJoinStudyGroup(groupId);
+          }}
+          onRemoveMember={async (groupId, memberId) => {
+            if (actions) await actions.removeStudyGroupMember(groupId, memberId);
           }}
           onUpdateWorkspace={async (groupId, input) => {
             if (actions) await actions.updateStudyGroupWorkspace(groupId, input);

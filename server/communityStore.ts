@@ -905,6 +905,9 @@ export function toggleJoinStudyGroup(
   if (idx < 0) return { ok: false, status: 404, error: 'Study group not found.' };
   const group = store.studyGroups[idx];
   const isMember = group.memberIds.includes(actor.userId);
+  if (isMember && group.creatorId === actor.userId) {
+    return { ok: false, status: 403, error: 'Group creators stay as the group owner so members always have someone managing the space.' };
+  }
 
   if (!isMember && group.maxMembers && group.memberIds.length >= group.maxMembers) {
     return { ok: false, status: 400, error: 'This study group is currently full.' };
@@ -938,8 +941,37 @@ export function toggleJoinStudyGroup(
   }
 
   saveStore();
+  emit({ type: 'chat:rooms', rooms: store.chatRooms });
   emit({ type: 'community:sync', reason: 'study_group_membership', updatedAt: new Date().toISOString() });
   return { ok: true, group: updated, joined: !isMember };
+}
+
+export function removeStudyGroupMember(
+  actor: { userId: string; isAdmin: boolean },
+  groupId: string,
+  targetUserId: string
+): { ok: true; group: StudyGroup } | { ok: false; status: number; error: string } {
+  const idx = store.studyGroups.findIndex((g) => g.id === groupId);
+  if (idx < 0) return { ok: false, status: 404, error: 'Study group not found.' };
+  const group = store.studyGroups[idx];
+  if (group.creatorId !== actor.userId && !actor.isAdmin) {
+    return { ok: false, status: 403, error: 'Only the group creator or a community admin can manage members.' };
+  }
+  if (!targetUserId || targetUserId === group.creatorId) {
+    return { ok: false, status: 400, error: 'The group creator cannot be removed.' };
+  }
+  const memberIndex = group.memberIds.indexOf(targetUserId);
+  if (memberIndex < 0) return { ok: false, status: 404, error: 'That member is not in this group.' };
+  const updated: StudyGroup = {
+    ...group,
+    memberIds: group.memberIds.filter((id) => id !== targetUserId),
+    memberNames: group.memberNames.filter((_, index) => index !== memberIndex),
+  };
+  store.studyGroups[idx] = updated;
+  saveStore();
+  emit({ type: 'chat:rooms', rooms: store.chatRooms });
+  emit({ type: 'community:sync', reason: 'study_group_member_removed', updatedAt: new Date().toISOString() });
+  return { ok: true, group: updated };
 }
 
 export function updateStudyGroupWorkspace(
@@ -1192,9 +1224,13 @@ export function toggleEventAction(
 // ============================================================================
 export function listChatRoomsForUser(userId?: string): StudyChatRoom[] {
   return store.chatRooms.filter((r) => {
-    if (!r.isDirect) return true;
-    if (!userId) return false;
-    return (r.participantIds || []).includes(userId);
+    if (r.isDirect) return Boolean(userId && (r.participantIds || []).includes(userId));
+    // Default public study rooms are open; private study-group rooms require membership.
+    if (r.groupId) {
+      const group = store.studyGroups.find((g) => g.id === r.groupId);
+      return Boolean(userId && group?.memberIds.includes(userId));
+    }
+    return true;
   });
 }
 
@@ -1213,6 +1249,9 @@ export function getOrCreateDirectRoom(
   }
   const pair = [actor.userId, cleanPeerId].sort();
   const roomId = `dm-${Buffer.from(pair.join('::')).toString('base64url').slice(0, 28)}`;
+  if (!store.memberProfiles[cleanPeerId] && !store.teamRoster.some((m) => m.id === cleanPeerId)) {
+    return { ok: false, status: 404, error: 'That member could not be found.' };
+  }
   const existing = store.chatRooms.find((r) => r.id === roomId);
   if (existing) return { ok: true, room: existing };
 
@@ -1241,6 +1280,12 @@ export function appendChatMessage(msg: StudyChatMessage): { ok: true; message: S
   if (!room) return { ok: false, error: 'Room does not exist.' };
   if (room.isDirect && !(room.participantIds || []).includes(msg.senderId)) {
     return { ok: false, error: 'You do not have access to this direct room.' };
+  }
+  if (room.groupId) {
+    const group = store.studyGroups.find((g) => g.id === room.groupId);
+    if (!group || !group.memberIds.includes(msg.senderId)) {
+      return { ok: false, error: 'Join this study group before sending messages.' };
+    }
   }
 
   const list = store.chatMessages[msg.roomId] || [];

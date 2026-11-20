@@ -70,6 +70,7 @@ import {
   toggleEventAction,
   toggleHelpResolved,
   toggleJoinStudyGroup,
+  removeStudyGroupMember,
   togglePostReaction,
   updateOrModerateComment,
   updatePost,
@@ -521,6 +522,12 @@ app.post('/api/community/study-groups/:id/join', (req, res) => {
   const out = toggleJoinStudyGroup(actorOf(res), req.params.id);
   if ('error' in out) return res.status(out.status).json({ error: out.error });
   res.json({ group: out.group, joined: out.joined });
+});
+
+app.delete('/api/community/study-groups/:id/members/:memberId', (req, res) => {
+  const out = removeStudyGroupMember(actorOf(res), req.params.id, req.params.memberId);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ group: out.group });
 });
 
 app.patch('/api/community/study-groups/:id', (req, res) => {

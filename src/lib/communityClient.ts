@@ -156,6 +156,7 @@ export function apiDeleteComment(actor: CommunityActorRef, postId: string, comme
   );
 }
 
+
 export function apiCreateStudyGroup(
   actor: CommunityActorRef,
   input: { name: string; field: string; topic: string; description: string; level?: string; schedule?: string; maxMembers?: number }
@@ -165,6 +166,14 @@ export function apiCreateStudyGroup(
 
 export function apiToggleJoinStudyGroup(actor: CommunityActorRef, groupId: string) {
   return apiReq<{ group: StudyGroup; joined: boolean }>('POST', `/api/community/study-groups/${encodeURIComponent(groupId)}/join`, actor);
+}
+
+export function apiRemoveStudyGroupMember(actor: CommunityActorRef, groupId: string, memberId: string) {
+  return apiReq<{ group: StudyGroup }>(
+    'DELETE',
+    `/api/community/study-groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberId)}`,
+    actor
+  );
 }
 
 export function apiUpdateStudyGroupWorkspace(

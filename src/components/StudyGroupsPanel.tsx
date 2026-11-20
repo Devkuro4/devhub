@@ -32,6 +32,7 @@ export const StudyGroupsPanel: React.FC<{
     maxMembers?: number;
   }) => Promise<StudyGroup | null | void>;
   onToggleJoinGroup: (groupId: string) => Promise<void> | void;
+  onRemoveMember: (groupId: string, memberId: string) => Promise<void> | void;
   onUpdateWorkspace: (
     groupId: string,
     input: { addGoal?: string; toggleGoalId?: string; addLink?: { title: string; url: string } }
@@ -56,6 +57,7 @@ export const StudyGroupsPanel: React.FC<{
   mutedReason,
   onCreateGroup,
   onToggleJoinGroup,
+  onRemoveMember,
   onUpdateWorkspace,
   onOpenGroupChat,
   onSelectMember,
@@ -349,17 +351,15 @@ export const StudyGroupsPanel: React.FC<{
                         {activeGroup.memberIds.map((mid, idx) => {
                           const mName = activeGroup.memberNames[idx] || 'Member';
                           return (
-                            <button
-                              key={mid}
-                              type="button"
-                              onClick={() => onSelectMember(mid, mName)}
-                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${borderClass} ${subtleBgClass} hover:border-[var(--accent-600)] text-xs font-medium ${textPrimary} cursor-pointer`}
-                            >
-                              <span className="w-5 h-5 rounded-full bg-[var(--accent-600)] text-white text-[10px] font-bold flex items-center justify-center">
-                                {mName.slice(0, 1).toUpperCase()}
-                              </span>
-                              <span>{mName}{mid === currentUserId ? ' (you)' : ''}</span>
-                            </button>
+                            <div key={mid} className={`inline-flex items-center gap-1 rounded-full border ${borderClass} ${subtleBgClass} pr-1`}>
+                              <button type="button" onClick={() => onSelectMember(mid, mName)} className={`inline-flex items-center gap-2 px-2 py-1.5 text-xs font-medium ${textPrimary} cursor-pointer`}>
+                                <span className="w-5 h-5 rounded-full bg-[var(--accent-600)] text-white text-[10px] font-bold flex items-center justify-center">{mName.slice(0, 1).toUpperCase()}</span>
+                                <span>{mName}{mid === currentUserId ? ' (you)' : ''}</span>
+                              </button>
+                              {activeGroup.creatorId === currentUserId && mid !== currentUserId && (
+                                <button type="button" onClick={() => onRemoveMember(activeGroup.id, mid)} aria-label={`Remove ${mName} from group`} title="Remove member" className="w-7 h-7 rounded-full text-[var(--ink-muted)] hover:text-red-500 hover:bg-[var(--surface-elevated)]">×</button>
+                              )}
+                            </div>
                           );
                         })}
                       </div>

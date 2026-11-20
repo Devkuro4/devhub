@@ -117,6 +117,7 @@ import {
   apiToggleEventAction,
   apiToggleHelpResolved,
   apiToggleJoinStudyGroup,
+  apiRemoveStudyGroupMember,
   apiUpdateComment,
   apiUpdatePost,
   apiUpdateStudyGroupWorkspace,
@@ -1655,6 +1656,15 @@ export default function App() {
         notify(res.joined ? `Joined ${res.group.name}!` : `Left ${res.group.name}.`);
       } catch (err: any) {
         notify(err?.message || 'Could not update membership.', 'error');
+      }
+    },
+    removeStudyGroupMember: async (groupId, memberId) => {
+      try {
+        const res = await apiRemoveStudyGroupMember(communityActor, groupId, memberId);
+        setStudyGroups((prev) => prev.map((g) => (g.id === groupId ? res.group : g)));
+        notify('Member removed from the study group.');
+      } catch (err: any) {
+        notify(err?.message || 'Could not remove group member.', 'error');
       }
     },
     updateStudyGroupWorkspace: async (groupId, input) => {

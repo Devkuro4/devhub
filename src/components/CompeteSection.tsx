@@ -3,6 +3,7 @@ import { recommendChallenges } from '../lib/adaptive';
 import {
   ArrowRight,
   Award,
+  Calendar,
   Check,
   Code2,
   Flame,
@@ -228,10 +229,10 @@ export const CompeteSection = ({
 
   const tabs: { id: CompeteTab; label: string; badge?: string | number }[] = [
     { id: 'compete', label: 'Overview' },
-    { id: 'arena', label: 'Coding Arena', badge: liveMatchesCount > 0 ? liveMatchesCount : undefined },
-    { id: 'arena-challenges', label: 'Daily & Weekly' },
+    { id: 'arena', label: 'Code Duels', badge: liveMatchesCount > 0 ? liveMatchesCount : undefined },
+    { id: 'arena-challenges', label: 'Daily & Weekly Challenges' },
     { id: 'buildoffs', label: 'Build-Offs & POTW' },
-    { id: 'bounties', label: 'Bounty Board', badge: openBountiesCount > 0 ? openBountiesCount : undefined },
+    { id: 'bounties', label: 'Bounties', badge: openBountiesCount > 0 ? openBountiesCount : undefined },
     { id: 'leaderboard', label: 'Leaderboard & Season' },
     { id: 'badges', label: 'Badges', badge: `${milestones.earnedCount}/${milestones.totalCount}` },
     { id: 'compete-history', label: 'History' },
@@ -247,8 +248,8 @@ export const CompeteSection = ({
   return (
     <div data-tour="compete-section" className="space-y-6">
       <PageHeader
-        title="Competition Centre & Coding Arena"
-        description="Challenge peers in synchronized 1v1 and 2v2 coding duels, ship weekly builds, claim engineering bounties, and climb seasonal standings."
+        title="Compete"
+        description="Practice with friendly coding duels, take on challenges, build with others, and track your progress."
       />
       <SectionTabs tabs={tabs} active={subTab} onChange={setSubTab} />
 
@@ -345,47 +346,36 @@ export const CompeteSection = ({
           </div>
 
           {/* Competition Modes Directory */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {[
-              {
-                icon: Swords,
-                title: '1v1 & 2v2 Coding Arena',
-                desc: 'Synchronized countdowns, isolated test grading, speed & scored duels, plus private 2v2 team collaboration.',
-                actionLabel: 'Open Arena',
-                tab: 'arena' as CompeteTab,
-              },
-              {
-                icon: Hammer,
-                title: 'Team Build-Offs & POTW',
-                desc: 'Team up on scoped weekend builds, nominate shipped work for Project of the Week, and receive judge reviews.',
-                actionLabel: 'View Build-Offs',
-                tab: 'buildoffs' as CompeteTab,
-              },
-              {
-                icon: History,
-                title: 'Bounties & Competition Ledger',
-                desc: 'Claim verified engineering bounties (+90 XP) and inspect official seasonal results and match outcomes.',
-                actionLabel: 'Explore Bounties',
-                tab: 'bounties' as CompeteTab,
-              },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <article key={item.title} className={`${cardClass} p-5 flex flex-col justify-between gap-4`}>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 text-[var(--accent-600)]" />
-                      <h3 className={`text-base font-semibold ${textPrimary}`}>{item.title}</h3>
+          <section className="space-y-3">
+            <div className="space-y-1">
+              <h3 className={`text-lg font-semibold ${textPrimary}`}>Choose how to compete</h3>
+              <p className={`text-sm ${textSecondary}`}>Jump into one activity at a time. Your progress is saved as you go.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {[
+                { icon: Swords, title: 'Code Duels', desc: 'Go head-to-head in a live coding match.', actionLabel: 'Find a duel', tab: 'arena' as CompeteTab },
+                { icon: Target, title: 'Bounties', desc: 'Solve practical tasks and submit your work for review.', actionLabel: 'Browse bounties', tab: 'bounties' as CompeteTab },
+                { icon: Hammer, title: 'Build-Offs', desc: 'Build with other members and share what you ship.', actionLabel: 'View build-offs', tab: 'buildoffs' as CompeteTab },
+                { icon: Zap, title: 'Daily Challenges', desc: 'Try a focused coding task for today.', actionLabel: 'View daily challenges', tab: 'arena-challenges' as CompeteTab },
+                { icon: Calendar, title: 'Weekly Challenges', desc: 'Take on a bigger challenge across the week.', actionLabel: 'View weekly challenges', tab: 'arena-challenges' as CompeteTab },
+                { icon: Trophy, title: 'Leaderboards', desc: 'See weekly and all-time community standings.', actionLabel: 'View leaderboards', tab: 'leaderboard' as CompeteTab },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <article key={item.title} className={`${cardClass} p-5 flex flex-col justify-between gap-4`}>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-4 h-4 text-[var(--accent-600)]" aria-hidden="true" />
+                        <h4 className={`text-base font-semibold ${textPrimary}`}>{item.title}</h4>
+                      </div>
+                      <p className={`text-sm ${textSecondary}`}>{item.desc}</p>
                     </div>
-                    <p className={`text-sm ${textSecondary}`}>{item.desc}</p>
-                  </div>
-                  <button type="button" onClick={() => setSubTab(item.tab)} className={btnSecondary}>
-                    {item.actionLabel}
-                  </button>
-                </article>
-              );
-            })}
-          </div>
+                    <button type="button" onClick={() => setSubTab(item.tab)} className={btnSecondary}>{item.actionLabel}</button>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
 
           {fit.items.length > 0 && (
             <section aria-label="Challenges for your level" className={`${cardClass} p-5 space-y-3`}>
