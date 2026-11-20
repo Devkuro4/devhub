@@ -26,7 +26,7 @@ an AI mentor that guides instead of doing the thinking, real projects, and a com
 
 ## 2. Run locally
 
-    cp .env.example .env     # paste GEMINI_API_KEY (or GROQ_API_KEY) and the two Supabase values
+    cp .env.example .env     # paste GEMINI_API_KEY and the two Supabase values
     npm install
     npm run dev              # http://localhost:3000
 
@@ -41,7 +41,7 @@ On Render:
 
 1. Push this folder to GitHub.
 2. Render, New, Blueprint, pick the repo. It reads `render.yaml`.
-3. Fill in the secrets: `GEMINI_API_KEY` (or `GROQ_API_KEY`), `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+3. Fill in the secrets: `GEMINI_API_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 4. After it deploys, copy the live URL into Supabase, Authentication, URL Configuration (Site URL and Redirect URLs).
 
 On Railway: New Project, Deploy from GitHub repo, pick the repo, add the same variables **before** the first
@@ -78,7 +78,8 @@ Sign out and back in. You will now see the Admin screens. Roles are enforced by 
   admin role from there, never from the browser (`server/auth.ts`).
 - AI status, settings and test routes are admin-only.
 - Per-member daily AI limits are enforced on the verified user id.
-- The AI keys (Gemini, Groq) live only on the server. Never prefix them with `VITE_`.
+- The Gemini API key (`GEMINI_API_KEY`) lives only on the server. Never prefix it with `VITE_`.
+- All AI calls go through `server/geminiClient.ts` (timeouts, bounded retries, response validation, streaming). Feature code is in `server/aiService.ts`.
 - Study chat and course-link checks also require a signed-in member; the chat identity comes from the verified account, not the browser.
 - Members can see each other's names but not email addresses (column rules in `supabase/schema.sql`).
 - Real data security comes from the database rules in `supabase/schema.sql`.

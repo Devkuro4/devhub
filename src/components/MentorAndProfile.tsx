@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from './ui';
 import { ProfileMilestonesCard } from './MilestoneBadges';
-import { requestMentorChat, type GroundedSource } from '../lib/aiClient';
+import { requestMentorChat, requestMentorChatStream, StreamUnsupportedError, type GroundedSource } from '../lib/aiClient';
 import { HELP_LEVELS } from '../lib/independence';
 import { MAX_CHATS, MAX_MESSAGES_PER_CHAT, chatTitle, groupChats, normalizeStore } from '../lib/mentorChats';
 import type {
@@ -211,6 +211,8 @@ export const MentorSection = ({
   // Hint ladder: the member chooses how much help they want. Starting small builds independence.
   const [helpLevel, setHelpLevel] = useState<HelpLevel>(2);
   const [busyChatId, setBusyChatId] = useState<string | null>(null);
+  // The reply as it arrives (shown live, then saved to the chat once complete).
+  const [streamText, setStreamText] = useState('');
   // Connection errors are shown but never saved or sent to the AI as if the mentor had said them.
   const [error, setError] = useState<{ chatId: string; text: string } | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
@@ -254,8 +256,7 @@ export const MentorSection = ({
     setBusyChatId(chatId);
 
     try {
-      const res = await requestMentorChat(
-        {
+      const mentorRequest = {
           message: trimmed,
           history,
           useWebSearch,
@@ -273,9 +274,17 @@ export const MentorSection = ({
             biggestDifficulty: profile.biggestDifficulty || '',
             contentPreference: profile.contentPreference || '',
           },
-        },
-        user.id
-      );
+        };
+
+      setStreamText('');
+      let res;
+      try {
+        res = await requestMentorChatStream(mentorRequest, user.id, (piece) => setStreamText((t) => t + piece));
+      } catch (streamErr) {
+        // Only an old browser that cannot read streams falls back; real errors are shown, never re-sent.
+        if (!(streamErr instanceof StreamUnsupportedError)) throw streamErr;
+        res = await requestMentorChat(mentorRequest, user.id);
+      }
 
       addMessage(chatId, { id: `a-${Date.now()}`, sender: 'mentor', text: res.text, sources: res.sources, at: new Date().toISOString() });
       onLogHelp?.({
@@ -292,6 +301,7 @@ export const MentorSection = ({
       });
     } finally {
       setBusyChatId(null);
+      setStreamText('');
     }
   };
 
@@ -308,7 +318,7 @@ export const MentorSection = ({
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, busyChatId, store.activeId, error]);
+  }, [messages.length, busyChatId, store.activeId, error, streamText]);
 
   // The message box grows with what you type (up to a limit), like a chat app.
   useEffect(() => {
@@ -529,7 +539,15 @@ export const MentorSection = ({
                   <div className={`text-sm leading-relaxed ${textPrimary}`}>{error.text}</div>
                 </div>
               )}
-              {showSpinner && (
+              {showSpinner && streamText && (
+                <div className="flex gap-3 max-w-[94%]" aria-live="polite">
+                  <span aria-hidden="true" className="w-[3px] rounded-full bg-[var(--spark)] shrink-0" />
+                  <div className={`text-sm leading-relaxed min-w-0 ${textPrimary}`}>
+                    <FormattedMessageText text={streamText} isUser={false} subtleBgClass={subtleBgClass} borderClass={borderClass} textPrimary={textPrimary} />
+                  </div>
+                </div>
+              )}
+              {showSpinner && !streamText && (
                 <div className={`flex items-center gap-2 text-xs ${textSecondary}`} role="status">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-600)]" />
                   {useWebSearch ? 'Checking current docs…' : 'Thinking it through…'}

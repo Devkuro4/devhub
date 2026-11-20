@@ -1,7 +1,24 @@
-import { GoogleGenAI, Type as GeminiType } from '@google/genai';
+import { createHash } from 'node:crypto';
+import {
+  AiProviderError,
+  GEMINI_MODEL_CHOICES,
+  classifyError,
+  generateJson,
+  generateText,
+  getConfiguredModel,
+  getGeminiApiKey,
+  isValidModelName,
+  streamText,
+  type GroundingSource,
+} from './geminiClient.ts';
+
+// All AI features in Dev Hub run on Google Gemini through server/geminiClient.ts.
+// This file holds the feature-level functions (roadmaps, quizzes, mentor, reviews...) plus usage
+// accounting, per-member daily limits and the admin settings. The API key is read from the
+// server environment (GEMINI_API_KEY) and is never sent to the browser.
 
 // The schemas below describe the JSON each AI task must return. Values are plain JSON Schema types
-// (converted automatically to Gemini Type enums when using @google/genai).
+// (converted automatically to Gemini Type enums by geminiClient.ts).
 const Type = {
   OBJECT: 'object',
   ARRAY: 'array',
@@ -11,23 +28,11 @@ const Type = {
   BOOLEAN: 'boolean',
 } as const;
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-
-const DEFAULT_GEMINI_MODEL = 'gemini-4-hydrogen';
-const DEFAULT_GROQ_MODEL = (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim();
-const REASONING_EFFORT = (['low', 'medium', 'high'].includes(String(process.env.GROQ_REASONING_EFFORT))
-  ? String(process.env.GROQ_REASONING_EFFORT)
-  : 'low') as 'low' | 'medium' | 'high';
-
 export type SupportedModel = string;
-
-export interface GroundingSource {
-  title: string;
-  uri: string;
-}
+export type { GroundingSource };
 
 export interface AiRuntimeSettings {
-  provider: 'Gemini' | 'Groq';
+  provider: 'Gemini';
   model: SupportedModel;
   dailyLimitPerUser: number;
   enabled: boolean;
@@ -54,103 +59,28 @@ export interface AiUsageStats {
   perUserCallsToday: Record<string, number>;
 }
 
-function getGeminiApiKey(): string | null {
-  const key = process.env.GEMINI_API_KEY?.trim().replace(/^['"]|['"]$/g, '');
-  if (!key || key === 'MY_GEMINI_API_KEY' || key.toLowerCase().includes('your-gemini')) return null;
-  return key;
+/** Error thrown to routes: friendly message plus the HTTP status the route should answer with. */
+export class AiServiceError extends Error {
+  httpStatus: number;
+  constructor(message: string, httpStatus = 500) {
+    super(message);
+    this.name = 'AiServiceError';
+    this.httpStatus = httpStatus;
+  }
 }
 
-function getGroqApiKey(): string | null {
-  const key = process.env.GROQ_API_KEY?.trim().replace(/^['"]|['"]$/g, '');
-  if (!key || key === 'MY_GROQ_API_KEY' || key.toLowerCase().includes('your-groq')) return null;
-  return key;
+if (process.env.GROQ_API_KEY && !getGeminiApiKey()) {
+  console.warn('[ai] GROQ_API_KEY is set but Groq is no longer supported. Set GEMINI_API_KEY instead.');
 }
 
-const initialProvider: 'Gemini' | 'Groq' = getGeminiApiKey() || !getGroqApiKey() ? 'Gemini' : 'Groq';
-export const MODEL_CHOICES: string[] = Array.from(
-  new Set([
-    DEFAULT_GEMINI_MODEL,
-    'gemini-3.1-flash-lite',
-    DEFAULT_GROQ_MODEL,
-    'openai/gpt-oss-120b',
-    'openai/gpt-oss-20b',
-  ])
-);
+export const MODEL_CHOICES: string[] = Array.from(new Set([getConfiguredModel(), ...GEMINI_MODEL_CHOICES]));
 
 const runtimeSettings: AiRuntimeSettings = {
-  provider: initialProvider,
-  model: initialProvider === 'Gemini' ? DEFAULT_GEMINI_MODEL : DEFAULT_GROQ_MODEL,
+  provider: 'Gemini',
+  model: getConfiguredModel(),
   dailyLimitPerUser: 40,
   enabled: true,
 };
-
-let cachedGeminiClient: { key: string; client: GoogleGenAI } | null = null;
-function getGeminiClient(apiKey: string): GoogleGenAI {
-  if (cachedGeminiClient && cachedGeminiClient.key === apiKey) {
-    return cachedGeminiClient.client;
-  }
-  const client = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
-  cachedGeminiClient = { key: apiKey, client };
-  return client;
-}
-
-function toGeminiSchema(schema: any): any {
-  if (!schema || typeof schema !== 'object') return schema;
-  const mapType = (t: string | undefined) => {
-    switch (t) {
-      case 'object':
-        return GeminiType.OBJECT;
-      case 'array':
-        return GeminiType.ARRAY;
-      case 'string':
-        return GeminiType.STRING;
-      case 'number':
-        return GeminiType.NUMBER;
-      case 'integer':
-        return GeminiType.INTEGER;
-      case 'boolean':
-        return GeminiType.BOOLEAN;
-      default:
-        return t;
-    }
-  };
-  const out: any = { ...schema };
-  if (typeof out.type === 'string') out.type = mapType(out.type);
-  if (out.properties && typeof out.properties === 'object') {
-    const props: Record<string, any> = {};
-    for (const [k, v] of Object.entries(out.properties)) {
-      props[k] = toGeminiSchema(v);
-    }
-    out.properties = props;
-  }
-  if (out.items) {
-    out.items = toGeminiSchema(out.items);
-  }
-  return out;
-}
-
-function extractGeminiSources(response: any): GroundingSource[] {
-  const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (!Array.isArray(chunks)) return [];
-  const out: GroundingSource[] = [];
-  const seen = new Set<string>();
-  for (const chunk of chunks) {
-    const uri = chunk?.web?.uri || chunk?.retrievedContext?.uri;
-    const title = chunk?.web?.title || chunk?.retrievedContext?.title || uri;
-    if (typeof uri === 'string' && uri.startsWith('http') && !seen.has(uri)) {
-      seen.add(uri);
-      out.push({ title: String(title || uri).trim(), uri });
-    }
-  }
-  return out.slice(0, 6);
-}
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -181,21 +111,6 @@ function resetDailyCountersIfNeeded() {
   }
 }
 
-function getActiveProvider(): { provider: 'Gemini' | 'Groq'; apiKey: string; defaultModel: string } {
-  const geminiKey = getGeminiApiKey();
-  const groqKey = getGroqApiKey();
-  if (runtimeSettings.provider === 'Groq' && groqKey) {
-    return { provider: 'Groq', apiKey: groqKey, defaultModel: DEFAULT_GROQ_MODEL };
-  }
-  if (geminiKey) {
-    return { provider: 'Gemini', apiKey: geminiKey, defaultModel: DEFAULT_GEMINI_MODEL };
-  }
-  if (groqKey) {
-    return { provider: 'Groq', apiKey: groqKey, defaultModel: DEFAULT_GROQ_MODEL };
-  }
-  throw new Error('AI service key is not configured on the server yet.');
-}
-
 function recordError(operation: string, message: string) {
   usageStats.lastErrorAt = new Date().toISOString();
   usageStats.errors = [
@@ -213,130 +128,62 @@ function estimateTokensFromText(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-function checkRateAndAvailability(userId: string, operation: string): { provider: 'Gemini' | 'Groq'; apiKey: string; defaultModel: string } {
+function recordSuccess(tokens: number, latencyMs: number) {
+  usageStats.estimatedTokens += tokens;
+  usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
+  usageStats.lastSuccessAt = new Date().toISOString();
+  usageStats.lastLatencyMs = latencyMs;
+}
+
+/** Checks the AI is on and the member is under their daily limit, then counts the request once. */
+function checkRateAndAvailability(userId: string, operation: string) {
   resetDailyCountersIfNeeded();
   if (!runtimeSettings.enabled) {
-    throw new Error('AI features are currently paused by the community administrator.');
+    throw new AiServiceError('AI features are currently paused by the community administrator.', 503);
   }
-  const active = getActiveProvider();
+  if (!getGeminiApiKey()) {
+    throw new AiServiceError('AI service key is not configured on the server yet. An admin needs to set GEMINI_API_KEY.', 503);
+  }
   const userCalls = usageStats.perUserCallsToday[userId] || 0;
   if (userCalls >= runtimeSettings.dailyLimitPerUser) {
-    throw new Error(`Daily AI limit (${runtimeSettings.dailyLimitPerUser} requests) reached for today. Try again tomorrow or ask an admin to raise the limit.`);
+    throw new AiServiceError(
+      `Daily AI limit (${runtimeSettings.dailyLimitPerUser} requests) reached for today. Try again tomorrow or ask an admin to raise the limit.`,
+      429
+    );
   }
   usageStats.perUserCallsToday[userId] = userCalls + 1;
   usageStats.totalCalls += 1;
   usageStats.callsToday += 1;
   usageStats.byOperation[operation] = (usageStats.byOperation[operation] || 0) + 1;
-  return active;
 }
 
-class GroqHttpError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
+/** Map any failure to a friendly error with a safe HTTP status (never 401/403: those would look like a logout). */
+function formatAiError(err: any, operation: string): AiServiceError {
+  if (err instanceof AiServiceError) return err;
+  const e = err instanceof AiProviderError ? err : classifyError(err);
+  const detail = (e as any).detail;
+  // Server log only: no prompts, no keys.
+  console.error(`[ai] ${operation} failed (${e.code}${e.status ? ` ${e.status}` : ''})${detail ? `: ${detail}` : ''}`);
+  const httpStatus = e.code === 'rate_limit' ? 429 : e.code === 'timeout' ? 504 : e.code === 'unavailable' ? 503 : e.code === 'blocked' ? 422 : 500;
+  const message = e.code === 'model_unavailable' ? `The AI model "${runtimeSettings.model}" is not available. Ask an admin to pick another model.` : e.message;
+  return new AiServiceError(message, httpStatus);
 }
 
-async function groqRequest(apiKey: string, body: Record<string, unknown>): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000);
-  try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    const raw = await res.text();
-    let data: any = null;
-    try {
-      data = JSON.parse(raw);
-    } catch {}
-    if (!res.ok) {
-      const message = String(data?.error?.message || raw || `Groq request failed (${res.status})`).slice(0, 500);
-      throw new GroqHttpError(message, res.status);
-    }
-    return data;
-  } catch (err: any) {
-    if (err?.name === 'AbortError') throw new GroqHttpError('The AI took too long to answer. Please try again.', 504);
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
+/** HTTP status a route should use for an error thrown by this module. */
+export function aiErrorStatus(err: any): number {
+  return err instanceof AiServiceError ? err.httpStatus : 500;
 }
 
-async function groqChat(apiKey: string, body: Record<string, unknown>, optionalKeys: string[]): Promise<any> {
-  try {
-    return await groqRequest(apiKey, body);
-  } catch (err: any) {
-    if (err instanceof GroqHttpError && err.status === 400 && optionalKeys.some((k) => k in body)) {
-      const slim = { ...body };
-      for (const k of optionalKeys) delete slim[k];
-      return groqRequest(apiKey, slim);
-    }
-    throw err;
-  }
-}
-
-function modelOptions(model: string): Record<string, unknown> {
-  return /gpt-oss/i.test(model) ? { reasoning_effort: REASONING_EFFORT } : {};
-}
-
-function cleanModelText(text: unknown): string {
-  return String(text ?? '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .trim();
-}
-
-function parseJsonLoose(raw: string): any {
-  const text = cleanModelText(raw).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  try {
-    return JSON.parse(text);
-  } catch {
-    const first = text.indexOf('{');
-    const last = text.lastIndexOf('}');
-    if (first >= 0 && last > first) return JSON.parse(text.slice(first, last + 1));
-    throw new Error('The AI returned an answer in an unexpected format. Please try again.');
-  }
-}
-
-function extractSources(choice: any): GroundingSource[] {
-  const out: GroundingSource[] = [];
-  const seen = new Set<string>();
-  const add = (url: unknown, title: unknown) => {
-    if (typeof url !== 'string' || !url.startsWith('http') || seen.has(url)) return;
-    seen.add(url);
-    out.push({ title: typeof title === 'string' && title.trim() ? title.trim() : url, uri: url });
-  };
-  const msg = choice?.message;
-  for (const a of Array.isArray(msg?.annotations) ? msg.annotations : []) {
-    add(a?.url_citation?.url ?? a?.url, a?.url_citation?.title ?? a?.title);
-  }
-  for (const t of Array.isArray(msg?.executed_tools) ? msg.executed_tools : []) {
-    const results = t?.search_results?.results;
-    for (const r of Array.isArray(results) ? results : []) add(r?.url, r?.title);
-  }
-  return out.slice(0, 6);
-}
-
-function formatAiError(err: any, fallback: string): Error {
-  if (err instanceof GroqHttpError) {
-    if (err.status === 401) return new Error('AI provider rejected the API key. Check server credentials.');
-    if (err.status === 429) return new Error('AI provider is busy or the rate limit was reached. Please wait a moment and try again.');
-    if (err.status === 404 || /model.*(not found|does not exist|decommission|no longer)/i.test(err.message)) {
-      return new Error(`The AI model "${runtimeSettings.model}" is not available. Ask an admin to pick another model.`);
-    }
-    return new Error(err.message || fallback);
-  }
-  const raw = String(err?.message || '').trim();
-  if (/RESOURCE_EXHAUSTED|429/i.test(raw)) {
-    return new Error('AI rate limit was reached temporarily. Please wait a moment and try again.');
-  }
-  if (/API_KEY_INVALID|PERMISSION_DENIED/i.test(raw)) {
-    return new Error('AI service key is missing or invalid in Settings > Secrets.');
-  }
-  return err instanceof Error ? err : new Error(raw || fallback);
+// Identical requests that are already running (double-clicks, retried tabs) share one provider call
+// and count once against the member's daily limit.
+const inflight = new Map<string, Promise<any>>();
+function dedupe<T>(parts: unknown[], run: () => Promise<T>): Promise<T> {
+  const key = createHash('sha1').update(JSON.stringify(parts)).digest('hex');
+  const existing = inflight.get(key);
+  if (existing) return existing as Promise<T>;
+  const promise = run().finally(() => inflight.delete(key));
+  inflight.set(key, promise);
+  return promise;
 }
 
 async function runTextOperation(
@@ -346,65 +193,27 @@ async function runTextOperation(
   systemInstruction: string,
   options?: { useWebSearch?: boolean; forceModel?: SupportedModel }
 ): Promise<{ text: string; model: string; latencyMs: number; sources: GroundingSource[] }> {
-  const started = Date.now();
-  try {
-    const { provider, apiKey, defaultModel } = checkRateAndAvailability(userId, operation);
-    const chosen = options?.forceModel || runtimeSettings.model || defaultModel;
-
-    if (provider === 'Gemini') {
-      const modelToUse = chosen.startsWith('gemini-') ? chosen : DEFAULT_GEMINI_MODEL;
-      const ai = getGeminiClient(apiKey);
-      const config: Record<string, any> = {
+  const model = options?.forceModel && isValidModelName(options.forceModel) ? options.forceModel : runtimeSettings.model;
+  return dedupe([userId, operation, model, systemInstruction, prompt, Boolean(options?.useWebSearch)], async () => {
+    const started = Date.now();
+    try {
+      checkRateAndAvailability(userId, operation);
+      const result = await generateText({
+        model,
         systemInstruction,
-      };
-      if (options?.useWebSearch) {
-        config.tools = [{ googleSearch: {} }];
-      }
-      const response = await ai.models.generateContent({
-        model: modelToUse,
-        contents: prompt,
-        config,
+        prompt,
+        useSearch: options?.useWebSearch,
+        maxOutputTokens: 8192,
       });
-      const text = cleanModelText(response.text);
-      const sources = options?.useWebSearch ? extractGeminiSources(response) : [];
       const latencyMs = Date.now() - started;
-      const tokens = Number(response.usageMetadata?.totalTokenCount) || estimateTokensFromText(prompt + text);
-      usageStats.estimatedTokens += tokens;
-      usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
-      usageStats.lastSuccessAt = new Date().toISOString();
-      usageStats.lastLatencyMs = latencyMs;
-      return { text, model: modelToUse, latencyMs, sources };
+      recordSuccess(result.totalTokens ?? estimateTokensFromText(prompt + result.text), latencyMs);
+      return { text: result.text, model: result.model, latencyMs, sources: result.sources };
+    } catch (err: any) {
+      const clean = formatAiError(err, operation);
+      recordError(operation, clean.message);
+      throw clean;
     }
-
-    const modelToUse = !chosen.startsWith('gemini-') ? chosen : DEFAULT_GROQ_MODEL;
-    const body: Record<string, unknown> = {
-      model: modelToUse,
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.6,
-      max_completion_tokens: 3000,
-      ...modelOptions(modelToUse),
-    };
-    if (options?.useWebSearch) body.tools = [{ type: 'browser_search' }];
-
-    const data = await groqChat(apiKey, body, ['tools', 'reasoning_effort', 'max_completion_tokens']);
-    const choice = data?.choices?.[0];
-    const text = cleanModelText(choice?.message?.content);
-    const sources = options?.useWebSearch ? extractSources(choice) : [];
-    const latencyMs = Date.now() - started;
-    const tokens = Number(data?.usage?.total_tokens) || estimateTokensFromText(prompt + text);
-    usageStats.estimatedTokens += tokens;
-    usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
-    usageStats.lastSuccessAt = new Date().toISOString();
-    usageStats.lastLatencyMs = latencyMs;
-    return { text, model: modelToUse, latencyMs, sources };
-  } catch (err: any) {
-    const cleanErr = formatAiError(err, 'AI request failed');
-    recordError(operation, cleanErr.message);
-    throw cleanErr;
-  }
+  });
 }
 
 async function runJsonOperation<T>(
@@ -412,83 +221,82 @@ async function runJsonOperation<T>(
   operation: string,
   prompt: string,
   systemInstruction: string,
-  responseSchema: any
+  responseSchema: any,
+  validate?: (data: any) => T
 ): Promise<{ data: T; model: string; latencyMs: number }> {
+  const model = runtimeSettings.model;
+  return dedupe([userId, operation, model, systemInstruction, prompt, responseSchema], async () => {
+    const started = Date.now();
+    try {
+      checkRateAndAvailability(userId, operation);
+      const result = await generateJson<T>({
+        model,
+        systemInstruction,
+        prompt,
+        schema: responseSchema,
+        validate,
+        maxOutputTokens: 16384,
+      });
+      const latencyMs = Date.now() - started;
+      recordSuccess(result.totalTokens ?? estimateTokensFromText(prompt + JSON.stringify(result.data)), latencyMs);
+      return { data: result.data, model: result.model, latencyMs };
+    } catch (err: any) {
+      const clean = formatAiError(err, operation);
+      recordError(operation, clean.message);
+      throw clean;
+    }
+  });
+}
+
+/**
+ * Streaming variant of runTextOperation. Yields `token` events as text arrives and a final `done`
+ * event with the full cleaned text. Counts once against the daily limit.
+ */
+async function* runTextStream(
+  userId: string,
+  operation: string,
+  prompt: string,
+  systemInstruction: string,
+  options?: { useWebSearch?: boolean; signal?: AbortSignal }
+): AsyncGenerator<{ type: 'token'; text: string } | { type: 'done'; text: string; model: string; latencyMs: number; sources: GroundingSource[] }> {
   const started = Date.now();
   try {
-    const { provider, apiKey, defaultModel } = checkRateAndAvailability(userId, operation);
-
-    if (provider === 'Gemini') {
-      const modelToUse = runtimeSettings.model.startsWith('gemini-') ? runtimeSettings.model : DEFAULT_GEMINI_MODEL;
-      const ai = getGeminiClient(apiKey);
-      const response = await ai.models.generateContent({
-        model: modelToUse,
-        contents: prompt,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: toGeminiSchema(responseSchema),
-        },
-      });
-      const raw = cleanModelText(response.text) || '{}';
-      const parsed = parseJsonLoose(raw) as T;
-      const latencyMs = Date.now() - started;
-      const tokens = Number(response.usageMetadata?.totalTokenCount) || estimateTokensFromText(prompt + raw);
-      usageStats.estimatedTokens += tokens;
-      usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
-      usageStats.lastSuccessAt = new Date().toISOString();
-      usageStats.lastLatencyMs = latencyMs;
-      return { data: parsed, model: modelToUse, latencyMs };
+    checkRateAndAvailability(userId, operation);
+    for await (const ev of streamText({
+      model: runtimeSettings.model,
+      systemInstruction,
+      prompt,
+      useSearch: options?.useWebSearch,
+      signal: options?.signal,
+      maxOutputTokens: 8192,
+    })) {
+      if (ev.type === 'token') {
+        yield ev;
+      } else {
+        const latencyMs = Date.now() - started;
+        recordSuccess(ev.totalTokens ?? estimateTokensFromText(prompt + ev.text), latencyMs);
+        yield { type: 'done', text: ev.text, model: ev.model, latencyMs, sources: ev.sources };
+      }
     }
-
-    const modelToUse = !runtimeSettings.model.startsWith('gemini-') ? runtimeSettings.model : DEFAULT_GROQ_MODEL;
-    const jsonInstruction = `${systemInstruction}
-
-Return ONLY one valid JSON object, with no markdown and no commentary, that follows this JSON Schema exactly. Fill every field:
-${JSON.stringify(responseSchema)}`;
-    const body: Record<string, unknown> = {
-      model: modelToUse,
-      messages: [
-        { role: 'system', content: jsonInstruction },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.4,
-      max_completion_tokens: 6000,
-      response_format: { type: 'json_object' },
-      ...modelOptions(modelToUse),
-    };
-    const data = await groqChat(apiKey, body, ['response_format', 'reasoning_effort', 'max_completion_tokens']);
-    const raw = cleanModelText(data?.choices?.[0]?.message?.content) || '{}';
-    const parsed = parseJsonLoose(raw) as T;
-    const latencyMs = Date.now() - started;
-    const tokens = Number(data?.usage?.total_tokens) || estimateTokensFromText(prompt + raw);
-    usageStats.estimatedTokens += tokens;
-    usageStats.estimatedCostUsd = Number((usageStats.estimatedTokens * 0.0000003).toFixed(5));
-    usageStats.lastSuccessAt = new Date().toISOString();
-    usageStats.lastLatencyMs = latencyMs;
-    return { data: parsed, model: modelToUse, latencyMs };
   } catch (err: any) {
-    const cleanErr = formatAiError(err, 'Structured AI request failed');
-    recordError(operation, cleanErr.message);
-    throw cleanErr;
+    const clean = formatAiError(err, operation);
+    // A browser that simply closed the tab is not an error worth surfacing in the admin log.
+    if (!options?.signal?.aborted) recordError(operation, clean.message);
+    throw clean;
   }
 }
 
-/** True when at least one AI key is set. Used by /api/health so a missing key is obvious at launch. */
+/** True when the Gemini key is set. Used by /api/health so a missing key is obvious at launch. */
 export function isAiConfigured() {
-  return Boolean(getGeminiApiKey() || getGroqApiKey());
+  return Boolean(getGeminiApiKey());
 }
 
 export function getAiStatus() {
   resetDailyCountersIfNeeded();
-  const hasGemini = Boolean(getGeminiApiKey());
-  const hasGroq = Boolean(getGroqApiKey());
-  const activeProvider: 'Gemini' | 'Groq' =
-    runtimeSettings.provider === 'Groq' && hasGroq ? 'Groq' : hasGemini ? 'Gemini' : hasGroq ? 'Groq' : runtimeSettings.provider;
   return {
-    configured: hasGemini || hasGroq,
-    settings: { ...runtimeSettings, provider: activeProvider },
-    modelChoices: MODEL_CHOICES.filter((m) => (m.startsWith('gemini-') ? hasGemini : hasGroq)),
+    configured: Boolean(getGeminiApiKey()),
+    settings: { ...runtimeSettings },
+    modelChoices: Array.from(new Set([...MODEL_CHOICES, runtimeSettings.model])),
     stats: {
       totalCalls: usageStats.totalCalls,
       callsToday: usageStats.callsToday,
@@ -505,14 +313,8 @@ export function getAiStatus() {
 }
 
 export function updateAiSettings(patch: Partial<AiRuntimeSettings>) {
-  if (typeof patch.model === 'string' && /^[A-Za-z0-9._\/:-]{3,80}$/.test(patch.model.trim())) {
-    const nextModel = patch.model.trim();
-    const wantsGemini = nextModel.startsWith('gemini-');
-    // Ignore a model whose provider has no key on this server (it could only fail for every member).
-    if (wantsGemini ? getGeminiApiKey() : getGroqApiKey()) {
-      runtimeSettings.model = nextModel;
-      runtimeSettings.provider = wantsGemini ? 'Gemini' : 'Groq';
-    }
+  if (typeof patch.model === 'string' && isValidModelName(patch.model.trim())) {
+    runtimeSettings.model = patch.model.trim();
   }
   if (typeof patch.dailyLimitPerUser === 'number' && patch.dailyLimitPerUser >= 5 && patch.dailyLimitPerUser <= 500) {
     runtimeSettings.dailyLimitPerUser = Math.round(patch.dailyLimitPerUser);
@@ -536,6 +338,81 @@ export async function testAiConnection(userId: string) {
     latencyMs: result.latencyMs,
     reply: result.text,
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Response validators: AI output is conformed to its schema in geminiClient.ts, then checked here
+// for the fields each feature cannot work without. A rejected answer triggers one automatic retry;
+// if it fails again the member sees a friendly error and nothing is saved or displayed.
+// ---------------------------------------------------------------------------
+const hasText = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
+function need(ok: boolean, what: string) {
+  if (!ok) throw new Error(`AI answer is missing ${what}`);
+}
+const clampMinutes = (n: unknown, fallback = 30) => {
+  const v = Math.round(Number(n)) || fallback;
+  return Math.min(240, Math.max(5, v));
+};
+
+function validateRoadmap(d: any) {
+  need(hasText(d.title), 'a title');
+  d.stages = (d.stages as any[])
+    .map((s) => ({ ...s, topics: (s.topics as any[]).filter((t) => hasText(t?.name)) }))
+    .filter((s) => hasText(s.stageName) && s.topics.length > 0);
+  need(d.stages.length > 0, 'roadmap stages');
+  return d;
+}
+
+function validateLearningPlan(d: any) {
+  d.dailyTargets = (d.dailyTargets as any[])
+    .filter((t) => hasText(t?.topic) || hasText(t?.objective))
+    .map((t) => ({ ...t, estimatedMinutes: clampMinutes(t.estimatedMinutes, 30) }));
+  need(d.dailyTargets.length > 0, 'daily targets');
+  return d;
+}
+
+function validateDailyExercise(d: any) {
+  need(hasText(d.title), 'an exercise title');
+  need(hasText(d.instructions), 'exercise instructions');
+  d.estimatedMinutes = clampMinutes(d.estimatedMinutes, 25);
+  return d;
+}
+
+const REVIEW_STATUSES = ['Demonstrated', 'Practised', 'Needs Revision'];
+function validateCodeReview(d: any) {
+  need(hasText(d.whatYouDidWell) || hasText(d.whatNeedsImprovement) || hasText(d.nextStep), 'review feedback');
+  const match = REVIEW_STATUSES.find((s) => s.toLowerCase() === String(d.recommendedStatus || '').trim().toLowerCase());
+  need(Boolean(match), 'a valid recommended status');
+  d.recommendedStatus = match;
+  return d;
+}
+
+function validateShortAnswerEval(d: any) {
+  need(hasText(d.feedback), 'feedback');
+  return d;
+}
+
+function validateWeeklyProject(d: any) {
+  need(hasText(d.title), 'a project title');
+  need(hasText(d.whatItShouldDo) || hasText(d.shortDescription), 'a project description');
+  need((d.requirements as any[]).length > 0, 'project requirements');
+  return d;
+}
+
+function validateProjectReview(d: any) {
+  need(hasText(d.summary), 'a review summary');
+  return d;
+}
+
+function validateWeeklySummary(d: any) {
+  need(hasText(d.whatYouLearned) || hasText(d.encouragementNote), 'a summary');
+  return d;
+}
+
+function validateExcerptExplanation(d: any) {
+  need(hasText(d.summary), 'an explanation');
+  return d;
 }
 
 // 1. Roadmap Generation
@@ -589,7 +466,8 @@ Organize into 3 to 4 progressive stages with 3 to 5 clear, real-world topics per
     'roadmapGeneration',
     prompt,
     'You are an experienced, supportive developer educator designing realistic industry learning roadmaps. Never invent fake technologies.',
-    schema
+    schema,
+    validateRoadmap
   );
 }
 
@@ -692,7 +570,8 @@ Return a structured 5-day starter learning plan with plain-English objectives, p
     'learningPlanGeneration',
     prompt,
     'You are a patient learning coach organizing external courses into clear daily targets without overwhelming beginners. Never claim to have watched videos you did not see.',
-    schema
+    schema,
+    validateLearningPlan
   );
 
   if (learningPlanCache.size >= 100) {
@@ -755,7 +634,8 @@ Keep it achievable in 20-35 minutes. Provide a gentle starting hint without givi
     'dailyExerciseGeneration',
     prompt,
     'You design practical beginner-to-intermediate coding exercises. Never include the completed solution.',
-    schema
+    schema,
+    validateDailyExercise
   );
 }
 
@@ -827,7 +707,8 @@ Rules:
     'codeReview',
     prompt,
     'You are an encouraging coding mentor reviewing student submissions. Explain clearly in plain language and ask targeted understanding-check questions.',
-    schema
+    schema,
+    validateCodeReview
   );
 }
 
@@ -1107,7 +988,8 @@ Rules:
     'quizEvaluation',
     prompt,
     'You grade learner short answers fairly for conceptual understanding while clarifying misconceptions clearly.',
-    schema
+    schema,
+    validateShortAnswerEval
   );
 }
 
@@ -1165,7 +1047,8 @@ Make sure it is realistic for 1 week, directly applies what they studied, includ
     'weeklyProjectGeneration',
     prompt,
     'You design practical, motivating weekly coding projects matched to a developer’s exact current skills.',
-    schema
+    schema,
+    validateWeeklyProject
   );
 }
 
@@ -1217,33 +1100,50 @@ Be supportive, practical, and honest about what could be verified from the submi
     'projectReview',
     prompt,
     'You review student software projects encouragingly, checking requirements, code organization, and true understanding.',
-    schema
+    schema,
+    validateProjectReview
   );
 }
 
 // 9. AI Mentor Chat (with optional web search)
-export async function mentorChatReply(
-  userId: string,
-  input: {
-    message: string;
-    history: { sender: string; text: string }[];
-    useWebSearch?: boolean;
-    hintLevel?: number;
+export interface MentorChatInput {
+  message: string;
+  history: { sender: string; text: string }[];
+  useWebSearch?: boolean;
+  hintLevel?: number;
+  context: {
+    field: string;
+    skillLevel: string;
+    roadmapTitle: string;
+    activeCourse: string;
+    currentTopic: string;
+    weakTopics: string[];
+    recentSubmissions: string[];
+    activeProject: string;
+    learningGoal?: string;
+    biggestDifficulty?: string;
+    contentPreference?: string;
+  };
+}
+
+/** Builds the mentor's system instruction and prompt. Shared by the normal and streaming replies. */
+function buildMentorPrompt(rawInput: MentorChatInput): { prompt: string; systemInstruction: string } {
+  const rawContext: any = rawInput?.context || {};
+  const input: MentorChatInput = {
+    ...rawInput,
+    history: Array.isArray(rawInput?.history) ? rawInput.history : [],
     context: {
-      field: string;
-      skillLevel: string;
-      roadmapTitle: string;
-      activeCourse: string;
-      currentTopic: string;
-      weakTopics: string[];
-      recentSubmissions: string[];
-      activeProject: string;
-      learningGoal?: string;
-      biggestDifficulty?: string;
-      contentPreference?: string;
-    };
+      ...rawContext,
+      field: String(rawContext.field || 'Web Development'),
+      skillLevel: String(rawContext.skillLevel || 'Beginner'),
+      roadmapTitle: String(rawContext.roadmapTitle || 'Not chosen yet'),
+      weakTopics: Array.isArray(rawContext.weakTopics) ? rawContext.weakTopics : [],
+      recentSubmissions: Array.isArray(rawContext.recentSubmissions) ? rawContext.recentSubmissions : [],
+    },
+  };
+  if (!String(input.message || '').trim()) {
+    throw new AiServiceError('Type a message for the mentor.', 400);
   }
-) {
   // Hint ladder: the learner chooses how much help they want. Less help is the default
   // path to independence; more help is always available, and is recorded for their score.
   // Every level keeps the same rule: ONE small step per reply, then stop and let the learner think.
@@ -1326,8 +1226,22 @@ When live web search is enabled, verify current documentation, APIs, and best pr
     .join('\n');
 
   const prompt = `${recentTranscript ? `Conversation so far:\n${recentTranscript}\n\n` : ''}Learner: ${clip(String(input.message || ''))}\n\n(Continue as the Mentor: react to the learner's latest message, then take ONE small next step and ask ONE question.)`;
+  return { prompt, systemInstruction };
+}
+
+export async function mentorChatReply(userId: string, input: MentorChatInput) {
+  const { prompt, systemInstruction } = buildMentorPrompt(input);
   return runTextOperation(userId, 'aiMentoring', prompt, systemInstruction, {
     useWebSearch: input.useWebSearch !== false,
+  });
+}
+
+/** Streaming mentor reply: yields `token` events, then one `done` event with the full text and sources. */
+export async function* streamMentorReply(userId: string, input: MentorChatInput, signal?: AbortSignal) {
+  const { prompt, systemInstruction } = buildMentorPrompt(input);
+  yield* runTextStream(userId, 'aiMentoring', prompt, systemInstruction, {
+    useWebSearch: input.useWebSearch !== false,
+    signal,
   });
 }
 
@@ -1408,7 +1322,8 @@ Use warm, plain, non-judgmental language.`;
     'weeklyProgressSummary',
     prompt,
     'You write clear, encouraging weekly learning reflections focused on real practice and steady growth.',
-    schema
+    schema,
+    validateWeeklySummary
   );
 }
 
@@ -1486,7 +1401,8 @@ Return:
     'materialExcerptExplain',
     prompt,
     'You are a patient coding tutor explaining a single study file excerpt cleanly in plain English. Do not execute code or claim access to external videos.',
-    schema
+    schema,
+    validateExcerptExplanation
   );
 
   if (excerptExplainCache.size >= 120) {

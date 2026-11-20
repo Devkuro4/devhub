@@ -1106,7 +1106,7 @@ export const AdminSection = ({
               <div>
                 <h2 className={`font-display text-2xl ${textPrimary}`}>AI service and usage</h2>
                 <p className={`text-xs ${textSecondary}`}>
-                  The Groq key lives on the server only, set as GROQ_API_KEY.
+                  The Gemini API key lives on the server only, set as GEMINI_API_KEY.
                 </p>
               </div>
             </div>
@@ -1143,21 +1143,21 @@ export const AdminSection = ({
                     {aiStatus.configured ? 'Configured on Server' : 'Not Configured Yet'}
                   </Badge>
                   <p className={`text-xs ${textSecondary}`}>
-                    Set <code>GROQ_API_KEY</code> in the server environment variables (Railway Variables).
+                    Set <code>GEMINI_API_KEY</code> in the server environment variables (Render dashboard → Environment).
                   </p>
                 </div>
 
                 <div className={`${cardClass} p-5 space-y-3`}>
-                  <label className={`block text-xs font-medium ${textSecondary}`}>Active Groq Model</label>
+                  <label className={`block text-xs font-medium ${textSecondary}`}>Active Gemini Model</label>
                   <select
-                    value={aiStatus.settings?.model || 'openai/gpt-oss-120b'}
+                    value={aiStatus.settings?.model || 'gemini-3.8-flash'}
                     onChange={(e) => handleSaveAiSettings({ model: e.target.value })}
                     className={inputClass}
                   >
-                    {(aiStatus.modelChoices || ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']).map((m: string) => (
+                    {(aiStatus.modelChoices || ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon']).map((m: string) => (
                       <option key={m} value={m}>
                         {m}
-                        {m.endsWith('120b') ? ' (Best quality)' : m.endsWith('20b') ? ' (Faster, cheaper)' : ''}
+                        {m.includes('flash-lite') ? ' (Fastest, cheapest)' : m === 'gemini-4-argon' ? ' (Highest quality)' : m === 'gemini-3.8-flash' ? ' (Recommended)' : ''}
                       </option>
                     ))}
                   </select>

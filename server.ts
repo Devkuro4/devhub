@@ -21,7 +21,9 @@ import {
   updateAiSettings,
   evaluateShortAnswer,
   explainMaterialExcerpt,
+  aiErrorStatus,
 } from './server/aiService.ts';
+import { createMentorStreamHandler } from './server/mentorStream.ts';
 import {
   MAX_MATERIAL_BYTES,
   UnsafeArchiveError,
@@ -146,7 +148,7 @@ app.use('/api', (req, res, next) => {
 
 // Lets hosts (Render, Railway...) check that the server is up.
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GROQ_API_KEY)' });
+  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GEMINI_API_KEY)' });
 });
 
 app.get('/devhub-source.zip', (_req, res) => {
@@ -185,7 +187,7 @@ app.post('/api/ai/test', requireAdmin, async (req, res) => {
     const result = await testAiConnection(getUserId(req, res));
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err?.message || 'AI connection test failed.' });
+    res.status(aiErrorStatus(err)).json({ ok: false, error: err?.message || 'AI connection test failed.' });
   }
 });
 
@@ -860,7 +862,7 @@ app.post('/api/ai/roadmap', async (req, res) => {
     const out = await generateAiRoadmap(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not generate roadmap.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate roadmap.' });
   }
 });
 
@@ -869,7 +871,7 @@ app.post('/api/ai/learning-plan', async (req, res) => {
     const out = await generateLearningPlan(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not generate learning plan.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate learning plan.' });
   }
 });
 
@@ -878,7 +880,7 @@ app.post('/api/ai/daily-exercise', async (req, res) => {
     const out = await generateDailyExercise(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not generate exercise.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate exercise.' });
   }
 });
 
@@ -887,7 +889,7 @@ app.post('/api/ai/code-review', async (req, res) => {
     const out = await reviewCodeSubmission(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not review code submission.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not review code submission.' });
   }
 });
 
@@ -896,7 +898,7 @@ app.post('/api/ai/quiz', async (req, res) => {
     const out = await generateAiQuiz(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not generate quiz.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate quiz.' });
   }
 });
 
@@ -905,7 +907,7 @@ app.post('/api/ai/evaluate-quiz', async (req, res) => {
     const out = await evaluateShortAnswer(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not evaluate answer.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not evaluate answer.' });
   }
 });
 
@@ -914,7 +916,7 @@ app.post('/api/ai/weekly-project', async (req, res) => {
     const out = await generateWeeklyProject(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not generate weekly project.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate weekly project.' });
   }
 });
 
@@ -923,7 +925,7 @@ app.post('/api/ai/project-review', async (req, res) => {
     const out = await reviewProjectSubmission(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not review project.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not review project.' });
   }
 });
 
@@ -932,16 +934,19 @@ app.post('/api/ai/mentor', async (req, res) => {
     const out = await mentorChatReply(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Mentor could not reply right now.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Mentor could not reply right now.' });
   }
 });
+
+// Same reply as /api/ai/mentor, delivered as server-sent events (see server/mentorStream.ts).
+app.post('/api/ai/mentor/stream', createMentorStreamHandler(getUserId));
 
 app.post('/api/ai/search', async (req, res) => {
   try {
     const out = await searchDeveloperDocs(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Live search lookup failed right now.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Live search lookup failed right now.' });
   }
 });
 
@@ -950,7 +955,7 @@ app.post('/api/ai/weekly-summary', async (req, res) => {
     const out = await generateWeeklySummary(getUserId(req, res), req.body);
     res.json(out);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Could not generate weekly summary.' });
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate weekly summary.' });
   }
 });
 
@@ -979,7 +984,7 @@ app.post('/api/ai/explain-excerpt', async (req, res) => {
     res.json(out);
   } catch (err: any) {
     const msg = err?.message || 'Could not explain that excerpt.';
-    const status = /video|at least 15|required/i.test(msg) ? 400 : 500;
+    const status = /video|at least 15|required/i.test(msg) ? 400 : aiErrorStatus(err);
     res.status(status).json({ error: msg });
   }
 });

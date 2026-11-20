@@ -337,6 +337,75 @@ export async function requestMentorChat(
   return postJson<{ text: string; model: string; latencyMs: number; sources?: GroundedSource[] }>('/api/ai/mentor', input, userId);
 }
 
+/** Thrown when this browser cannot read a streamed response, so the caller may use the normal request instead. */
+export class StreamUnsupportedError extends Error {}
+
+/**
+ * Same request as requestMentorChat, but the reply arrives as it is written.
+ * `onToken` receives each new piece of text; the promise resolves with the complete reply.
+ */
+export async function requestMentorChatStream(
+  input: Parameters<typeof requestMentorChat>[0],
+  userId: string | undefined,
+  onToken: (text: string) => void,
+  signal?: AbortSignal
+): Promise<{ text: string; model: string; latencyMs: number; sources?: GroundedSource[] }> {
+  const res = await fetch(`${API_BASE}/api/ai/mentor/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(await authHeaders()),
+      ...(userId ? { 'X-Devhub-User': userId } : {}),
+    },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `Request failed (${res.status})`);
+  }
+  if (!res.body || typeof res.body.getReader !== 'function') throw new StreamUnsupportedError('Streaming is not supported here.');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let final: { text: string; model: string; latencyMs: number; sources?: GroundedSource[] } | null = null;
+
+  const handleFrame = (frame: string) => {
+    let event = 'message';
+    const dataLines: string[] = [];
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+    }
+    if (!dataLines.length) return;
+    let payload: any;
+    try {
+      payload = JSON.parse(dataLines.join('\n'));
+    } catch {
+      return;
+    }
+    if (event === 'token' && typeof payload?.text === 'string') onToken(payload.text);
+    else if (event === 'done') final = payload;
+    else if (event === 'error') throw new Error(payload?.error || 'The mentor stopped replying.');
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) >= 0) {
+      handleFrame(buffer.slice(0, sep));
+      buffer = buffer.slice(sep + 2);
+    }
+  }
+  if (buffer.trim()) handleFrame(buffer);
+  if (!final || typeof (final as any).text !== 'string') throw new Error('The mentor reply was cut off. Please try again.');
+  return final;
+}
+
 export async function requestGroundedSearch(
   input: { query: string; field: string; skillLevel: string },
   userId?: string
