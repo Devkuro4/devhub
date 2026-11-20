@@ -172,7 +172,27 @@ process.stdin.on('end', () => {
     );
 
     const wrappedCode = code + '\\n;typeof ' + entryPoint + ' === "function" ? ' + entryPoint + ' : null;';
-    const fn = vm.runInContext(wrappedCode, ctx, { timeout: 800, displayErrors: true });
+    let fn = vm.runInContext(wrappedCode, ctx, { timeout: 800, displayErrors: true });
+    if (typeof fn !== 'function') {
+      // Be forgiving: accept class Solution { solve() {} }, or a single function with a different name.
+      try {
+        fn = vm.runInContext(
+          '(typeof Solution === \"function\" && typeof Solution.prototype.' + entryPoint + ' === \"function\") ? function () { var o = new Solution(); return o.' + entryPoint + '.apply(o, arguments); } : null;',
+          ctx, { timeout: 800 });
+      } catch (e0) { fn = null; }
+    }
+    if (typeof fn !== 'function') {
+      const found = [];
+      const reFn = /function\\s+([A-Za-z_$][\\w$]*)\\s*\\(/g;
+      const reArrow = /(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:async\\s*)?(?:function\\b|\\([^)]*\\)\\s*=>|[A-Za-z_$][\\w$]*\\s*=>)/g;
+      let mm;
+      while ((mm = reFn.exec(code))) found.push(mm[1]);
+      while ((mm = reArrow.exec(code))) found.push(mm[1]);
+      const uniq = Array.from(new Set(found));
+      if (uniq.length === 1) {
+        try { fn = vm.runInContext('typeof ' + uniq[0] + ' === \"function\" ? ' + uniq[0] + ' : null;', ctx, { timeout: 800 }); } catch (e1) { fn = null; }
+      }
+    }
     if (typeof fn !== 'function') {
       process.stdout.write(JSON.stringify({
         ok: false,
@@ -449,6 +469,32 @@ export async function runIsolatedTests(input: {
 
   const tStart = Date.now();
   const statusInfo = getSandboxStatus();
+
+  // Pasting code into the wrong language tab is the most common mistake: say so clearly instead of a cryptic syntax error.
+  const looksPython = /^\s*def\s+[A-Za-z_]\w*\s*\(.*\)\s*(->\s*[^:]+)?:\s*$/m.test(sourceCode) || /^\s*(elif\s.+|else|except(\s.+)?|for\s.+\sin\s.+|while\s.+):\s*$/m.test(sourceCode);
+  const looksJs = /(^|\s)function\s*\*?\s*[A-Za-z_$]?[\w$]*\s*\(/.test(sourceCode) || /^\s*(const|let|var)\s+[A-Za-z_$][\w$]*\s*=/m.test(sourceCode) || /=>\s*[{(\w]/.test(sourceCode);
+  const wrongTab =
+    (language !== 'python' && looksPython && !looksJs)
+      ? 'This looks like Python code, but the ' + (language === 'typescript' ? 'TypeScript' : 'JavaScript') + ' tab is selected. Click the "Python 3" tab, paste your code there, and submit again.'
+      : (language === 'python' && looksJs && !looksPython)
+        ? 'This looks like JavaScript code, but the Python 3 tab is selected. Click the JavaScript tab, paste your code there, and submit again.'
+        : null;
+  if (wrongTab) {
+    return {
+      ok: false,
+      language,
+      isolationMode: statusInfo.label,
+      passedCount: 0,
+      totalCount: tests.length,
+      hiddenPassed: 0,
+      hiddenTotal: tests.filter((t) => t.hidden).length,
+      allPassed: false,
+      stdout: '',
+      error: wrongTab,
+      runtimeMs: Math.max(1, Date.now() - tStart),
+      results: [],
+    };
+  }
 
   if (language === 'python') {
     const { stdout, stderr, timedOut } = await spawnLimited(
