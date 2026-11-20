@@ -22,6 +22,7 @@ import { PageHeader } from './ui';
 import { ProfileMilestonesCard } from './MilestoneBadges';
 import { requestMentorChat, requestMentorChatStream, StreamUnsupportedError, type GroundedSource } from '../lib/aiClient';
 import { HELP_LEVELS } from '../lib/independence';
+import { offlineSupportFallback, isSensitiveForTitle } from '../lib/mentorEmotion';
 import { MAX_CHATS, MAX_MESSAGES_PER_CHAT, chatTitle, groupChats, normalizeStore } from '../lib/mentorChats';
 import type {
   AiHelpEvent,
@@ -252,7 +253,7 @@ export const MentorSection = ({
     const chatId = base?.id ?? `c-${Date.now()}`;
     const history = (base?.messages ?? []).slice(-16).map((m) => ({ sender: m.sender, text: m.text }));
     const userMsg: MentorChatMessage = { id: `u-${Date.now()}`, sender: 'user', text: trimmed, at: new Date().toISOString() };
-    addMessage(chatId, userMsg, { createWithTitle: chatTitle(trimmed) });
+    addMessage(chatId, userMsg, { createWithTitle: isSensitiveForTitle(trimmed) ? 'Private check-in' : chatTitle(trimmed) });
     setError(null);
     setInput('');
     setBusyChatId(chatId);
@@ -291,7 +292,8 @@ export const MentorSection = ({
       }
 
       addMessage(chatId, { id: `a-${Date.now()}`, sender: 'mentor', text: res.text, sources: res.sources, at: new Date().toISOString() });
-      onLogHelp?.({
+      // A care reply is not "help with the topic", so it must not lower the independence score.
+      if (res.model !== 'dev-hub-safety-reply') onLogHelp?.({
         id: `help-${Date.now()}`,
         at: new Date().toISOString(),
         source: 'mentor',
@@ -303,7 +305,7 @@ export const MentorSection = ({
         chatId,
         text: controller.signal.aborted
           ? 'Request cancelled. You can send another message whenever you are ready.'
-          : `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${currentTopic}), test a small 5–10 line example, or post your question in Community Discussions!`,
+          : offlineSupportFallback(trimmed, currentTopic) ?? `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${currentTopic}), test a small 5–10 line example, or post your question in Community Discussions!`,
       });
     } finally {
       if (requestControllerRef.current === controller) requestControllerRef.current = null;

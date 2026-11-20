@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { ArenaProblem } from '../src/types.ts';
 import {
+  EMOTIONAL_INTELLIGENCE_RULES,
+  assessEmotionalContext,
+  buildEmotionGuidance,
+  crisisReply,
+  type EmotionAssessment,
+} from '../src/lib/mentorEmotion.ts';
+import {
   AiProviderError,
   GROQ_MODEL_CHOICES,
   classifyError,
@@ -1197,6 +1204,9 @@ Be supportive, practical, and honest about what could be verified from the submi
 }
 
 // 9. AI Mentor Chat
+/** Reported as the model name for the fixed safety reply (no AI provider was called). */
+export const SAFETY_REPLY_MODEL = 'dev-hub-safety-reply';
+
 export interface MentorChatInput {
   message: string;
   history: { sender: string; text: string }[];
@@ -1218,7 +1228,7 @@ export interface MentorChatInput {
 }
 
 /** Builds the mentor's system instruction and prompt. Shared by the normal and streaming replies. */
-function buildMentorPrompt(rawInput: MentorChatInput): { prompt: string; systemInstruction: string } {
+function buildMentorPrompt(rawInput: MentorChatInput): { prompt: string; systemInstruction: string; emotion: EmotionAssessment } {
   const rawContext: any = rawInput?.context || {};
   const input: MentorChatInput = {
     ...rawInput,
@@ -1288,6 +1298,16 @@ GOAL: the learner should get better at reading code, tracing code, and reasoning
 If their question is not about code (a concept, a career or study question), use the same approach: start with the big picture in a few sentences, then go one small step at a time and check in.
 If they ask a quick factual question, answer it directly in 1 to 3 sentences, then offer to go deeper.`;
 
+  // Emotional context is worked out per message, used for this one prompt, and never stored or logged.
+  const emotion = assessEmotionalContext(String(input.message || ''), input.history, {
+    weakTopics: input.context.weakTopics,
+    currentTopic: input.context.currentTopic,
+  });
+  const emotionGuidance = buildEmotionGuidance(emotion, {
+    weakTopics: input.context.weakTopics,
+    currentTopic: input.context.currentTopic,
+  });
+
   const systemInstruction = `You are Dev Hub’s Personal Study Mentor.
 Member context:
 - Field: ${input.context.field}
@@ -1304,8 +1324,10 @@ Member context:
 
 ${teachingMethod}
 
+${EMOTIONAL_INTELLIGENCE_RULES}
+
 Level guide: ${levelGuide}
-${hintRule}
+${hintRule}${emotionGuidance}
 You have no live web access: answer from your training knowledge, say when something may have changed recently, and never invent links or URLs (name official docs such as MDN or the framework's own docs instead). Reply in the same language the learner writes in.`;
 
   // The conversation is saved on the member's account, so we can send a longer transcript.
@@ -1326,11 +1348,16 @@ You have no live web access: answer from your training knowledge, say when somet
   const recentTranscript = recentTranscriptParts.join('\n');
 
   const prompt = `${recentTranscript ? `Conversation so far:\n${recentTranscript}\n\n` : ''}Learner: ${clip(String(input.message || ''))}\n\n(Continue as the Mentor: react to the learner's latest message, then take ONE small next step and ask ONE question.)`;
-  return { prompt, systemInstruction };
+  return { prompt, systemInstruction, emotion };
 }
 
 export async function mentorChatReply(userId: string, input: MentorChatInput) {
-  const { prompt, systemInstruction } = buildMentorPrompt(input);
+  const { prompt, systemInstruction, emotion } = buildMentorPrompt(input);
+  // Thoughts of self-harm or immediate danger get a fixed, careful reply that needs no AI call, so it
+  // works even when the AI is busy or the daily limit is used up, and it never counts against the limit.
+  if (emotion.level === 'crisis' || emotion.level === 'crisis_immediate') {
+    return { text: crisisReply(emotion.level), model: SAFETY_REPLY_MODEL, latencyMs: 0, sources: [] as GroundingSource[] };
+  }
   return runTextOperation(userId, 'aiMentoring', prompt, systemInstruction, {
     useWebSearch: input.useWebSearch !== false,
   });
@@ -1338,7 +1365,13 @@ export async function mentorChatReply(userId: string, input: MentorChatInput) {
 
 /** Streaming mentor reply: yields `token` events, then one `done` event with the full text and sources. */
 export async function* streamMentorReply(userId: string, input: MentorChatInput, signal?: AbortSignal) {
-  const { prompt, systemInstruction } = buildMentorPrompt(input);
+  const { prompt, systemInstruction, emotion } = buildMentorPrompt(input);
+  if (emotion.level === 'crisis' || emotion.level === 'crisis_immediate') {
+    const text = crisisReply(emotion.level);
+    yield { type: 'token' as const, text };
+    yield { type: 'done' as const, text, model: SAFETY_REPLY_MODEL, latencyMs: 0, sources: [] as GroundingSource[] };
+    return;
+  }
   yield* runTextStream(userId, 'aiMentoring', prompt, systemInstruction, {
     useWebSearch: input.useWebSearch !== false,
     signal,

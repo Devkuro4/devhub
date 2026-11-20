@@ -96,3 +96,12 @@ Sign out and back in. You will now see the Admin screens. Roles are enforced by 
 
 Same repo, second deployment with `VITE_APP_MODE=admin` (and optionally `VITE_MEMBER_SITE_URL`) on its own domain.
 It only lets admins in and has no sign-up. For a small team, a single site with admin roles is enough.
+
+## Emotionally aware mentor
+
+The AI Mentor (Groq) notices how a learner is feeling and answers accordingly. Plain technical questions get a plain, direct answer with no emotional commentary.
+
+- **Frustration, overwhelm, self-doubt, disappointment, low motivation, wanting to quit:** short, warm reply, one small step, and a choice to talk, take a break or try a different way. Repeated difficulty and "that didn't help" make the mentor change its explanation instead of repeating it.
+- **Self-harm or immediate danger:** a fixed, careful reply (`crisisReply` in `src/lib/mentorEmotion.ts`) is sent without calling the AI, so it works even when Groq is busy or the daily limit is used. It does not count against the limit. It asks whether the person is safe, points to a trusted person and local emergency or crisis help (findahelpline.com), and says the mentor is not a professional.
+- **Privacy:** the feeling check runs per message on the server, is never saved or logged, and chats stay in the member's own private data. Sensitive first messages get the chat-list title "Private check-in". Members can delete any chat.
+- The detection is a simple English phrase check. The mentor's system prompt carries the same rules for paraphrases and other languages. Tests: `tests/mentor-emotion.test.ts`.
