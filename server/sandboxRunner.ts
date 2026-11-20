@@ -238,7 +238,7 @@ process.stdin.on('end', () => {
 
 // Isolated Python child-process harness (executed ONLY inside `python3 -I` as UID 65534).
 const PYTHON_HARNESS_SOURCE = `
-import sys, json, time, signal, io, copy, resource
+import sys, json, time, signal, io, copy, resource, inspect
 
 resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
 resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
@@ -339,10 +339,31 @@ except Exception as exc:
 
 fn = ns.get(entry_point)
 if not callable(fn):
+    # Be forgiving: accept LeetCode-style classes (class Solution: def solve(self, ...)),
+    # or a lone function/method with a different name, as long as the answer is right.
+    try:
+        for _v in list(ns.values()):
+            if inspect.isclass(_v) and callable(getattr(_v, entry_point, None)):
+                fn = getattr(_v(), entry_point)
+                break
+        if not callable(fn):
+            _funcs = [v for k, v in ns.items() if inspect.isfunction(v) and not k.startswith("_")]
+            if len(_funcs) == 1:
+                fn = _funcs[0]
+            else:
+                for _v in list(ns.values()):
+                    if inspect.isclass(_v):
+                        _ms = [m for n, m in inspect.getmembers(_v(), inspect.ismethod) if not n.startswith("_")]
+                        if len(_ms) == 1:
+                            fn = _ms[0]
+                            break
+    except Exception:
+        pass
+if not callable(fn):
     sys.stdout = old_stdout
     print(json.dumps({
         "ok": False,
-        "error": f"Function '{entry_point}' not found. Keep def {entry_point}(...).",
+        "error": f"Function '{entry_point}' not found. Define it like: def {entry_point}(...): ... and return the answer (do not use input() or print()).",
         "stdout": stdout_buf.getvalue()[:4000],
         "results": []
     }))

@@ -5,6 +5,9 @@ import { runIsolatedTests } from '../server/sandboxRunner.ts';
 
 // A known-good reference solution for every built-in problem. If a test case or description is wrong, this fails.
 const REFERENCE: Record<string, string> = {
+  'prob-sum-list': `function solve(nums) { return nums.reduce((a, b) => a + b, 0); }`,
+  'prob-count-vowels': `function solve(s) { return (s.match(/[aeiou]/gi) || []).length; }`,
+  'prob-is-palindrome': `function solve(s) { const t = s.toLowerCase(); return t === t.split('').reverse().join(''); }`,
   'prob-two-sum': `function solve(nums, target) {
     const seen = new Map();
     for (let i = 0; i < nums.length; i++) {
