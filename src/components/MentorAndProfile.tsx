@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Compass,
   ExternalLink,
-  Globe,
   Loader2,
   MessageSquare,
   PanelLeft,
@@ -14,6 +13,7 @@ import {
   RotateCcw,
   Save,
   Send,
+  Square,
   Settings,
   Trash2,
   User,
@@ -207,7 +207,6 @@ export const MentorSection = ({
   const groups = groupChats(store.chats);
 
   const [input, setInput] = useState('');
-  const [useWebSearch, setUseWebSearch] = useState(true);
   // Hint ladder: the member chooses how much help they want. Starting small builds independence.
   const [helpLevel, setHelpLevel] = useState<HelpLevel>(2);
   const [busyChatId, setBusyChatId] = useState<string | null>(null);
@@ -219,7 +218,10 @@ export const MentorSection = ({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const busy = busyChatId !== null;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   const update = (fn: (s: MentorChatStore) => MentorChatStore) => onChatChange((prev) => fn(normalizeStore(prev)));
 
@@ -254,12 +256,14 @@ export const MentorSection = ({
     setError(null);
     setInput('');
     setBusyChatId(chatId);
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
 
     try {
       const mentorRequest = {
           message: trimmed,
           history,
-          useWebSearch,
+          useWebSearch: false,
           hintLevel: helpLevel,
           context: {
             field: profile.field || selectedRoadmap.field,
@@ -279,7 +283,7 @@ export const MentorSection = ({
       setStreamText('');
       let res;
       try {
-        res = await requestMentorChatStream(mentorRequest, user.id, (piece) => setStreamText((t) => t + piece));
+        res = await requestMentorChatStream(mentorRequest, user.id, (piece) => setStreamText((t) => t + piece), controller.signal);
       } catch (streamErr) {
         // Only an old browser that cannot read streams falls back; real errors are shown, never re-sent.
         if (!(streamErr instanceof StreamUnsupportedError)) throw streamErr;
@@ -297,9 +301,12 @@ export const MentorSection = ({
     } catch (err: any) {
       setError({
         chatId,
-        text: `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${currentTopic}), test a small 5–10 line example, or post your question in Community Discussions!`,
+        text: controller.signal.aborted
+          ? 'Request cancelled. You can send another message whenever you are ready.'
+          : `I couldn’t reach the live AI mentor right now (${err?.message || 'connection issue'}). In the meantime, focus on your current step (${currentTopic}), test a small 5–10 line example, or post your question in Community Discussions!`,
       });
     } finally {
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
       setBusyChatId(null);
       setStreamText('');
     }
@@ -550,7 +557,7 @@ export const MentorSection = ({
               {showSpinner && !streamText && (
                 <div className={`flex items-center gap-2 text-xs ${textSecondary}`} role="status">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-600)]" />
-                  {useWebSearch ? 'Checking current docs…' : 'Thinking it through…'}
+                  Thinking it through…
                 </div>
               )}
             </div>
@@ -598,24 +605,27 @@ export const MentorSection = ({
                         {h.label}
                       </button>
                     ))}
+                  </div>
+                  {busy ? (
                     <button
                       type="button"
-                      onClick={() => setUseWebSearch((v) => !v)}
-                      aria-pressed={useWebSearch}
-                      title="Lets the mentor look things up on the web for current docs"
-                      className={`inline-flex items-center gap-1 ${pill(useWebSearch)}`}
+                      onClick={() => requestControllerRef.current?.abort()}
+                      aria-label="Stop generating"
+                      title="Stop generating"
+                      className="w-8 h-8 shrink-0 rounded-full border border-[var(--accent-500)] text-[var(--accent-600)] flex items-center justify-center cursor-pointer"
                     >
-                      <Globe className="w-3 h-3" /> Web
+                      <Square className="w-3.5 h-3.5" />
                     </button>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={busy || !input.trim()}
-                    aria-label="Send"
-                    className="w-8 h-8 shrink-0 rounded-full bg-[var(--accent-600)] text-white flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
-                  </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!input.trim()}
+                      aria-label="Send"
+                      className="w-8 h-8 shrink-0 rounded-full bg-[var(--accent-600)] text-white flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
               <p className={`mt-1.5 text-center text-xs ${textSecondary}`}>

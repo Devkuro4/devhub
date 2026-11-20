@@ -391,19 +391,25 @@ export async function requestMentorChatStream(
     else if (event === 'error') throw new Error(payload?.error || 'The mentor stopped replying.');
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-    let sep: number;
-    while ((sep = buffer.indexOf('\n\n')) >= 0) {
-      handleFrame(buffer.slice(0, sep));
-      buffer = buffer.slice(sep + 2);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      let sep: number;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        handleFrame(buffer.slice(0, sep));
+        buffer = buffer.slice(sep + 2);
+      }
     }
+    if (buffer.trim()) handleFrame(buffer);
+    if (!final || typeof (final as any).text !== 'string') throw new Error('The mentor reply was cut off. Please try again.');
+    return final;
+  } finally {
+    // Release the stream promptly on cancellation, malformed events, and mid-stream errors.
+    try { await reader.cancel(); } catch { /* already closed or aborted */ }
+    reader.releaseLock();
   }
-  if (buffer.trim()) handleFrame(buffer);
-  if (!final || typeof (final as any).text !== 'string') throw new Error('The mentor reply was cut off. Please try again.');
-  return final;
 }
 
 export async function requestGroundedSearch(

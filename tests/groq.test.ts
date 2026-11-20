@@ -416,3 +416,38 @@ test("admin error log shows the provider's reason; members see only the friendly
   await assert.rejects(ai.testAiConnection('diag-user'), (e: any) => !/limit 5/.test(e.message));
   assert.match(ai.getAiStatus().stats.errors[0].message, /limit 5 per minute/);
 });
+
+test('learning-plan cache is scoped to the member and includes every prompt-defining input', async () => {
+  const payload = { courseTitle: 'Cache course', platform: 'Docs', field: 'Web', currentLesson: 'Intro', description: 'desc', modules: ['one'], roadmapTitle: 'Roadmap', roadmapTopics: ['HTML'], skillLevel: 'Beginner', studyTime: '1h' };
+  handler = () => reply(JSON.stringify({ planSummary: 'p', dailyTargets: [{ dayLabel: 'Day 1', topic: 'HTML', objective: 'o', estimatedMinutes: 20, whatYouWillUnderstand: 'w' }], coveredRoadmapTopics: [], missingRoadmapTopics: [], advice: 'a' }));
+  await ai.generateLearningPlan('cache-user-a', payload);
+  await ai.generateLearningPlan('cache-user-a', payload);
+  assert.equal(calls.length, 1, 'same member and same input reuse the short-lived cache');
+  await ai.generateLearningPlan('cache-user-b', payload);
+  assert.equal(calls.length, 2, 'another member never receives a cached member response');
+  await ai.generateLearningPlan('cache-user-a', { ...payload, roadmapTopics: ['HTML', 'CSS'] });
+  assert.equal(calls.length, 3, 'different roadmap context does not collide');
+});
+
+test('material-explanation cache is member-, field-, model- and full-excerpt-specific', async () => {
+  const payload = { fileName: 'notes.md', excerpt: 'A sufficiently long code excerpt about loops and iteration.', skillLevel: 'Beginner', field: 'Web' };
+  handler = () => reply(JSON.stringify({ summary: 's', keyConcepts: ['k'], practicePrompt: 'p' }));
+  await ai.explainMaterialExcerpt('excerpt-user-a', payload);
+  await ai.explainMaterialExcerpt('excerpt-user-a', payload);
+  assert.equal(calls.length, 1, 'identical same-member explanations are reused');
+  await ai.explainMaterialExcerpt('excerpt-user-b', payload);
+  await ai.explainMaterialExcerpt('excerpt-user-a', { ...payload, field: 'Data Science' });
+  await ai.explainMaterialExcerpt('excerpt-user-a', { ...payload, excerpt: `${payload.excerpt} A second distinct paragraph.` });
+  assert.equal(calls.length, 4, 'member, field and full excerpt differences cannot collide');
+});
+
+test('mentor prompt keeps recent turns within a bounded transcript budget', async () => {
+  handler = () => reply('A concise next step.');
+  const history = Array.from({ length: 30 }, (_, i) => ({ sender: i % 2 ? 'assistant' : 'user', text: `turn-${i} ${'context '.repeat(260)}` }));
+  await ai.mentorChatReply('bounded-history-user', { message: 'latest question', history, context: { field: 'Web', skillLevel: 'Beginner', roadmapTitle: 'R', activeCourse: '', currentTopic: '', weakTopics: [], recentSubmissions: [], activeProject: '' } });
+  const prompt = calls[0].messages.find((m: any) => m.role === 'user').content as string;
+  assert.ok(prompt.length < 8200, `prompt was ${prompt.length} chars`);
+  assert.match(prompt, /latest question/);
+  assert.match(prompt, /turn-29/);
+  assert.doesNotMatch(prompt, /turn-0 /);
+});

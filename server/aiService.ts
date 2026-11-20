@@ -491,10 +491,14 @@ export async function generateLearningPlan(
   }
 ) {
   const cacheKey = JSON.stringify({
+    userId,
+    model: runtimeSettings.model,
     courseTitle: (input.courseTitle || '').trim().toLowerCase(),
     platform: (input.platform || '').trim().toLowerCase(),
     field: (input.field || '').trim().toLowerCase(),
     currentLesson: (input.currentLesson || '').trim().toLowerCase(),
+    description: (input.description || '').trim().toLowerCase(),
+    roadmapTopics: (input.roadmapTopics || []).slice(0, 60).map((t) => String(t).trim().toLowerCase()),
     modules: (input.modules || []).slice(0, 40).map((m) => m.trim().toLowerCase()),
     roadmapTitle: (input.roadmapTitle || '').trim().toLowerCase(),
     skillLevel: (input.skillLevel || '').trim().toLowerCase(),
@@ -855,6 +859,9 @@ export async function generateAiQuiz(
   }
 ) {
   const targetCount = Math.min(6, Math.max(4, Number(input.questionCount) || 5));
+  const existingPrompts = Array.isArray(input.existingQuestionPrompts)
+    ? input.existingQuestionPrompts.slice(0, 12).map((q) => String(q || '').trim().slice(0, 280)).filter(Boolean)
+    : [];
   const compactContext = String(input.materialContext || '')
     .replace(/\r\n/g, '\n')
     .trim()
@@ -905,7 +912,7 @@ ${weakList.length ? `Focus Weak Topics: ${weakList.join(', ')}\n` : ''}${
     compactContext
       ? `Targeted Study Material Excerpt (ground questions in these real concepts):\n"""\n${compactContext}\n"""\n`
       : ''
-  }Avoid repeating or closely paraphrasing these existing questions: ${input.existingQuestionPrompts.slice(0, 12).join(' | ') || 'None'}
+  }Avoid repeating or closely paraphrasing these existing questions: ${existingPrompts.join(' | ') || 'None'}
 ${extraNote}
 Rules:
 1. Include a genuine mix using ONLY these exact "type" values: "mcq", "true_false", "code_output", "find_error", "short_answer". Include at least one "true_false" and one "short_answer" when possible.
@@ -923,14 +930,14 @@ Rules:
     schema
   );
 
-  let valid = validateAndNormalizeQuizQuestions(first?.data?.questions || [], input.topic, input.existingQuestionPrompts || []);
+  let valid = validateAndNormalizeQuizQuestions(first?.data?.questions || [], input.topic, existingPrompts);
   let resolvedTitle = String(first?.data?.title || '').trim() || `${input.topic} (${input.quizScope || 'Quiz'})`;
   let totalLatency = first?.latencyMs || 0;
   let lastModel = first?.model || '';
 
   // At most ONE corrective retry if validation rejected most questions
   if (valid.length < 2) {
-    const avoidAll = [...(input.existingQuestionPrompts || []), ...valid.map((q) => q.prompt)];
+    const avoidAll = [...existingPrompts, ...valid.map((q) => q.prompt)];
     const retry = await runJsonOperation<{ title: string; questions: any[] }>(
       userId,
       'quizGeneration',
@@ -1222,11 +1229,20 @@ You have no live web access: answer from your training knowledge, say when somet
 
   // The conversation is saved on the member's account, so we can send a longer transcript.
   // Each message is trimmed so a very long paste cannot crowd out the rest.
-  const clip = (t: string) => (t.length > 1800 ? `${t.slice(0, 1800)}…` : t);
-  const recentTranscript = input.history
-    .slice(-16)
-    .map((m) => `${m.sender === 'user' ? 'Learner' : 'Mentor'}: ${clip(String(m.text || ''))}`)
-    .join('\n');
+  const clip = (t: string, max = 1400) => (t.length > max ? `${t.slice(0, max)}…` : t);
+  // Keep the most recent useful turns, with a total transcript budget so large pasted code
+  // cannot crowd out the latest question or the learner profile.
+  const history = input.history.slice(-12);
+  const recentTranscriptParts: string[] = [];
+  let transcriptChars = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const item = history[i];
+    const line = `${item.sender === 'user' ? 'Learner' : 'Mentor'}: ${clip(String(item.text || ''), 1100)}`;
+    if (transcriptChars + line.length > 6500) break;
+    recentTranscriptParts.unshift(line);
+    transcriptChars += line.length + 1;
+  }
+  const recentTranscript = recentTranscriptParts.join('\n');
 
   const prompt = `${recentTranscript ? `Conversation so far:\n${recentTranscript}\n\n` : ''}Learner: ${clip(String(input.message || ''))}\n\n(Continue as the Mentor: react to the learner's latest message, then take ONE small next step and ask ONE question.)`;
   return { prompt, systemInstruction };
@@ -1355,9 +1371,12 @@ export async function explainMaterialExcerpt(
 
   const question = String(input.question || '').trim().slice(0, 400);
   const cacheKey = JSON.stringify({
+    userId,
+    model: runtimeSettings.model,
+    field: String(input.field || '').toLowerCase(),
     fileName: fileName.toLowerCase(),
     fileKind: String(input.fileKind || '').toLowerCase(),
-    excerpt: excerpt.slice(0, 2000),
+    excerpt,
     question: question.toLowerCase(),
     skillLevel: String(input.skillLevel || 'Beginner').toLowerCase(),
   });
