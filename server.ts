@@ -631,7 +631,8 @@ app.post('/api/arena/generate-problem', async (req, res) => {
       difficulty: req.body?.difficulty,
     });
     registerCustomArenaProblem(problem);
-    res.status(201).json({ problem });
+    // Only the id goes back: the statement and tests stay secret until the match starts, even from the creator.
+    res.status(201).json({ problemId: problem.id, difficulty: problem.difficulty });
   } catch (err: any) {
     res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate a coding challenge.' });
   }
@@ -640,6 +641,7 @@ app.post('/api/arena/generate-problem', async (req, res) => {
 app.post('/api/arena/matches', (req, res) => {
   const actor = actorOf(res);
   const match = createArenaMatch({ userId: actor.userId, userName: actor.userName }, req.body || {});
+  if ('error' in match) return res.status(match.status).json({ error: match.error });
   res.status(201).json({ match });
 });
 

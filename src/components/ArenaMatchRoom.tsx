@@ -106,6 +106,7 @@ export const ArenaMatchRoom = ({
   const [creating, setCreating] = useState(false);
   const [format, setFormat] = useState<ArenaMatchFormat>('1v1');
   const [scoringType, setScoringType] = useState<ArenaScoringType>('speed');
+  const [problemSource, setProblemSource] = useState<'builtin' | 'ai'>('builtin');
   const [battleTopic, setBattleTopic] = useState('');
   const [battleDifficulty, setBattleDifficulty] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [allowedLangs, setAllowedLangs] = useState<ArenaLanguage[]>(['javascript', 'typescript', 'python']);
@@ -150,6 +151,9 @@ export const ArenaMatchRoom = ({
   const [localRunResult, setLocalRunResult] = useState<SandboxExecutionResult | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedMatchKey = useRef<string>('');
+  // While I'm typing or have just switched language, don't let a (slightly stale) server echo overwrite my local state.
+  const lastLocalEditAt = useRef(0);
+  const ignoreRemoteLangUntil = useRef(0);
 
   // Sync editor when entering a match or receiving teammate edits
   useEffect(() => {
@@ -158,7 +162,8 @@ export const ArenaMatchRoom = ({
       setLocalRunResult(null);
       return;
     }
-    const key = `${activeMatch.id}:${myTeam.teamId}`;
+    // Include "revealed" so the editor reloads (with the starter code) the moment the match goes live.
+    const key = `${activeMatch.id}:${myTeam.teamId}:${activeMatch.problem.revealed ? 'live' : 'hidden'}`;
     const priv = myTeam.privateState;
     if (lastLoadedMatchKey.current !== key) {
       lastLoadedMatchKey.current = key;
@@ -171,7 +176,11 @@ export const ArenaMatchRoom = ({
       setConfirmForfeit(false);
     } else {
       // Teammate live sync (don't overwrite if I'm the latest editor in the last 800ms)
-      if (priv.activeLanguage !== language && activeMatch.allowedLanguages.includes(priv.activeLanguage)) {
+      if (
+        priv.activeLanguage !== language &&
+        activeMatch.allowedLanguages.includes(priv.activeLanguage) &&
+        Date.now() >= ignoreRemoteLangUntil.current
+      ) {
         setLanguage(priv.activeLanguage);
         setCode(priv.codeByLanguage?.[priv.activeLanguage] ?? '');
       } else {
@@ -179,8 +188,8 @@ export const ArenaMatchRoom = ({
         if (
           typeof remoteCode === 'string' &&
           remoteCode !== code &&
-          priv.lastEditedBy &&
-          priv.lastEditedBy !== actor.userName
+          Date.now() - lastLocalEditAt.current > 1500 &&
+          (priv.lastEditedById ? priv.lastEditedById !== myUserId : Boolean(priv.lastEditedBy) && priv.lastEditedBy !== actor.userName)
         ) {
           setCode(remoteCode);
         }
@@ -189,7 +198,7 @@ export const ArenaMatchRoom = ({
         setLocalRunResult(priv.lastRun);
       }
     }
-  }, [activeMatch, myTeam?.privateState, language, actor.userName]);
+  }, [activeMatch, myTeam?.privateState, language, actor.userName, myUserId]);
 
   // Sync WebSocket subscription whenever selected match changes
   useEffect(() => {
@@ -208,19 +217,29 @@ export const ArenaMatchRoom = ({
   const handleCreateMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const requestedTopic = battleTopic.trim();
-    if (requestedTopic.length < 2) {
+    if (problemSource === 'ai' && requestedTopic.length < 2) {
       onNotify('Type a topic with at least 2 characters.', 'error');
       return;
     }
     setCreating(true);
     try {
-      const generated = await generateArenaProblemApi(actor, { topic: requestedTopic, difficulty: battleDifficulty });
+      let problemId = 'random';
+      if (problemSource === 'ai') {
+        try {
+          const generated = await generateArenaProblemApi(actor, { topic: requestedTopic, difficulty: battleDifficulty });
+          problemId = generated.problemId;
+        } catch (genErr: any) {
+          onNotify(`${genErr?.message || 'Could not generate a challenge.'} Switch to "Built-in problem" to start a duel without AI.`, 'error');
+          return;
+        }
+      }
       const res = await createArenaMatchApi(actor, {
         title: customTitle.trim() || undefined,
         format,
         teamSize: format === '2v2' ? 2 : 1,
         scoringType,
-        problemId: generated.problem.id,
+        problemId,
+        difficulty: battleDifficulty,
         allowedLanguages: allowedLangs,
         durationSeconds,
       });
@@ -260,6 +279,8 @@ export const ArenaMatchRoom = ({
 
   const handleLanguageChange = (nextLang: ArenaLanguage) => {
     setLanguage(nextLang);
+    ignoreRemoteLangUntil.current = Date.now() + 2500;
+    lastLocalEditAt.current = Date.now();
     const saved = myTeam?.privateState?.codeByLanguage?.[nextLang] ?? activeMatch?.problem.starterCode[nextLang] ?? '';
     setCode(saved);
     if (activeMatch && myParticipant) {
@@ -269,6 +290,7 @@ export const ArenaMatchRoom = ({
 
   const handleCodeChange = (nextCode: string) => {
     setCode(nextCode);
+    lastLocalEditAt.current = Date.now();
     if (!activeMatch || !myParticipant) return;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
@@ -389,8 +411,14 @@ export const ArenaMatchRoom = ({
     const oppDisconnectedSec =
       activeMatch.status === 'active' &&
       oppParticipants.length > 0 &&
-      oppParticipants.every((p) => !p.connected && p.disconnectedAtMs)
-        ? Math.floor((serverNow - Math.min(...oppParticipants.map((p) => p.disconnectedAtMs || serverNow))) / 1000)
+      oppParticipants.every((p) => !p.connected)
+        ? Math.max(
+            0,
+            Math.floor(
+              // Same rule as the server: a team is absent since its most recent sign of life (socket drop or REST activity).
+              (serverNow - Math.max(...oppParticipants.map((p) => Math.max(p.disconnectedAtMs || 0, Date.parse(p.lastSeenAt) || 0)))) / 1000
+            )
+          )
         : 0;
 
     const statusBadge = (() => {
@@ -435,7 +463,11 @@ export const ArenaMatchRoom = ({
                 </Badge>
               </div>
               <p className={`text-xs ${textSecondary} flex items-center gap-2 mt-0.5`}>
-                <span>Problem: {activeMatch.problem.title} ({activeMatch.problem.difficulty})</span>
+                <span>
+                  {activeMatch.problem.revealed
+                    ? `Problem: ${activeMatch.problem.title} (${activeMatch.problem.difficulty})`
+                    : `Problem: hidden until the match starts (${activeMatch.problem.difficulty})`}
+                </span>
                 <span>·</span>
                 <span className="inline-flex items-center gap-1">
                   {wsConnected ? <Wifi className="w-3.5 h-3.5 text-[var(--success-ink)]" /> : <WifiOff className="w-3.5 h-3.5 text-[var(--warning-ink)]" />}
@@ -609,6 +641,21 @@ export const ArenaMatchRoom = ({
           {/* Problem & Private Team Chat */}
           <div className="lg:col-span-5 space-y-5">
             <section className={`${cardClass} p-6 space-y-4`}>
+              {!activeMatch.problem.revealed ? (
+                <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Badge variant="neutral">{activeMatch.problem.difficulty}</Badge>
+                <span className={`text-xs font-mono ${textSecondary}`}>
+                  {activeMatch.problem.totalTestsCount} tests ({activeMatch.problem.hiddenTestsCount} hidden)
+                </span>
+              </div>
+              <h3 className={`text-lg font-semibold ${textPrimary}`}>Problem revealed when the match starts</h3>
+              <p className={`text-sm leading-relaxed ${textSecondary}`}>
+                The statement, examples and starter code stay hidden for everyone until the countdown ends, so nobody gets a head start.
+              </p>
+                </>
+              ) : (
+                <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Badge variant="neutral">{activeMatch.problem.category}</Badge>
                 <span className={`text-xs font-mono ${textSecondary}`}>
@@ -646,6 +693,8 @@ export const ArenaMatchRoom = ({
                   ))}
                 </ul>
               </div>
+                </>
+              )}
             </section>
 
             {/* Private Team Chat (only shown to members of that team — never exposed to opponents) */}
@@ -720,6 +769,7 @@ export const ArenaMatchRoom = ({
                     <button
                       type="button"
                       onClick={handleResetStarter}
+                      disabled={!activeMatch.problem.revealed}
                       title="Reset to starter code"
                       className={`${btnSecondary} px-3 min-h-[40px]`}
                     >
@@ -728,7 +778,7 @@ export const ArenaMatchRoom = ({
                   </div>
                 </div>
 
-                {myTeam.privateState.lastEditedBy && (
+                {activeMatch.problem.revealed && myTeam.privateState.lastEditedBy && (
                   <p className={`text-xs ${textSecondary}`}>
                     Last synced edit by <strong>{myTeam.privateState.lastEditedBy}</strong> · Entry function:{' '}
                     <code className="font-mono">{activeMatch.problem.entryPoint}</code>
@@ -753,7 +803,8 @@ export const ArenaMatchRoom = ({
                   }}
                   spellCheck={false}
                   rows={14}
-                  readOnly={activeMatch.status === 'completed' || activeMatch.status === 'forfeited' || activeMatch.status === 'cancelled'}
+                  readOnly={!activeMatch.problem.revealed || activeMatch.status === 'completed' || activeMatch.status === 'forfeited' || activeMatch.status === 'cancelled'}
+                  placeholder={activeMatch.problem.revealed ? undefined : 'The editor unlocks when the match starts.'}
                   aria-label="Solution code editor"
                   className="w-full p-4 rounded-xl border border-[var(--border-strong)] bg-[var(--panel-deep)] text-[#FAFAFA] font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[var(--accent-500)]"
                 />
@@ -987,12 +1038,38 @@ export const ArenaMatchRoom = ({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <span className={`block text-xs font-medium ${textSecondary}`}>Problem source</span>
+            <div className="flex flex-wrap gap-2">
+              {([
+                ['builtin', 'Built-in problem (random, no AI needed)'],
+                ['ai', 'Generate with AI (type a topic)'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={problemSource === value}
+                  onClick={() => setProblemSource(value)}
+                  className={`px-4 min-h-[44px] rounded-full text-sm font-medium border cursor-pointer ${
+                    problemSource === value
+                      ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)]'
+                      : `${borderClass} ${textPrimary} bg-[var(--surface-elevated)]`
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className={`text-xs ${textSecondary}`}>The problem is picked when you create the match and stays hidden from everyone, including you, until it starts.</p>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {problemSource === 'ai' && (
             <div className="space-y-1.5">
               <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-topic">Your topic <span className="font-normal opacity-75">(type any programming topic)</span></label>
-              <input id="arena-battle-topic" name="topic" type="text" required minLength={2} maxLength={120} autoComplete="off" value={battleTopic} onChange={(e) => setBattleTopic(e.target.value)} placeholder="Type a topic, e.g. recursion in JavaScript" className={inputClass} aria-describedby="arena-battle-topic-help" />
+              <input id="arena-battle-topic" name="topic" type="text" required={problemSource === 'ai'} minLength={2} maxLength={120} autoComplete="off" value={battleTopic} onChange={(e) => setBattleTopic(e.target.value)} placeholder="Type a topic, e.g. recursion in JavaScript" className={inputClass} aria-describedby="arena-battle-topic-help" />
               <p id="arena-battle-topic-help" className={`text-xs ${textSecondary}`}>You choose the topic by typing it here—there is no preset topic list. Groq will generate a new challenge based on exactly what you enter. <span className="tabular-nums">{battleTopic.length}/120</span></p>
             </div>
+            )}
             <div className="space-y-1.5">
               <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-difficulty">Difficulty</label>
               <select id="arena-battle-difficulty" value={battleDifficulty} onChange={(e) => setBattleDifficulty(e.target.value as typeof battleDifficulty)} className={inputClass}>
@@ -1039,8 +1116,8 @@ export const ArenaMatchRoom = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={creating || battleTopic.trim().length < 2} className={btnPrimary}>
-              <Sparkles className="w-4 h-4" /> {creating ? 'Generating challenge…' : 'Generate Challenge & Open Match'}
+            <button type="submit" disabled={creating || (problemSource === 'ai' && battleTopic.trim().length < 2)} className={btnPrimary}>
+              <Sparkles className="w-4 h-4" /> {creating ? 'Creating match…' : problemSource === 'ai' ? 'Generate Challenge & Open Match' : 'Open Match'}
             </button>
             <button type="button" onClick={() => setShowCreateForm(false)} className={btnSecondary}>
               Cancel
@@ -1115,7 +1192,14 @@ export const ArenaMatchRoom = ({
 
                   <h3 className={`text-base font-semibold ${textPrimary}`}>{m.title}</h3>
                   <p className={`text-xs ${textSecondary}`}>
-                    Problem: <strong className={textPrimary}>{m.problem.title}</strong> ({m.problem.difficulty}) ·{' '}
+                    {m.problem.revealed ? (
+                      <>
+                        Problem: <strong className={textPrimary}>{m.problem.title}</strong> ({m.problem.difficulty})
+                      </>
+                    ) : (
+                      <>Problem: hidden until start ({m.problem.difficulty})</>
+                    )}{' '}
+                    ·{' '}
                     {Math.round(m.durationSeconds / 60)}m · Languages: {m.allowedLanguages.join(', ')}
                   </p>
 

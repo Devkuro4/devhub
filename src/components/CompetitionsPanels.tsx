@@ -238,7 +238,7 @@ export const ArenaChallengesPanel = ({
                             </span>
                             <span className={`block ${textSecondary}`}>
                               Entrypoint: <code className="font-mono">{linkedProb.entryPoint}</code> ·{' '}
-                              {linkedProb.testCases.length} automated tests
+                              {linkedProb.totalTestsCount ?? linkedProb.testCases.length} automated tests
                             </span>
                           </div>
                           <select

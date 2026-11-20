@@ -127,16 +127,9 @@ process.stdin.on('end', () => {
     const payload = JSON.parse(rawInput);
     const { code, entryPoint, tests } = payload;
     const stdoutLogs = [];
-    const fmtVal = (v) => {
-      try {
-        if (typeof v === 'string') return v;
-        return JSON.stringify(v);
-      } catch {
-        return String(v);
-      }
-    };
+    // 0 and -0 are the same answer; NaN equals NaN.
     const deepEqual = (a, b) => {
-      if (Object.is(a, b)) return true;
+      if (a === b || Object.is(a, b)) return true;
       if (typeof a !== typeof b || a === null || b === null) return false;
       if (Array.isArray(a) !== Array.isArray(b)) return false;
       if (Array.isArray(a)) {
@@ -158,34 +151,26 @@ process.stdin.on('end', () => {
       return false;
     };
 
+    // The context gets its OWN built-ins (Array, Object, Math, ...). Passing host objects in would let submitted code
+    // reach the host Function constructor (e.g. Object.constructor('return process')()) and forge results.
+    // The only host function is a log bridge that is called with plain strings and is captured in a closure.
     const sandbox = Object.create(null);
-    sandbox.console = {
-      log: (...args) => { if (stdoutLogs.length < 60) stdoutLogs.push(args.map(fmtVal).join(' ')); },
-      warn: (...args) => { if (stdoutLogs.length < 60) stdoutLogs.push('[warn] ' + args.map(fmtVal).join(' ')); },
-      error: (...args) => { if (stdoutLogs.length < 60) stdoutLogs.push('[error] ' + args.map(fmtVal).join(' ')); },
+    sandbox.__hostLog = (line) => {
+      if (stdoutLogs.length < 60) stdoutLogs.push(String(line).slice(0, 500));
     };
-    sandbox.Math = Math;
-    sandbox.JSON = JSON;
-    sandbox.Array = Array;
-    sandbox.Object = Object;
-    sandbox.String = String;
-    sandbox.Number = Number;
-    sandbox.Boolean = Boolean;
-    sandbox.Map = Map;
-    sandbox.Set = Set;
-    sandbox.RegExp = RegExp;
-    sandbox.Date = Date;
-    sandbox.Error = Error;
-    sandbox.TypeError = TypeError;
-    sandbox.RangeError = RangeError;
-    sandbox.parseInt = parseInt;
-    sandbox.parseFloat = parseFloat;
-    sandbox.isNaN = isNaN;
-    sandbox.isFinite = isFinite;
-    sandbox.Infinity = Infinity;
-    sandbox.NaN = NaN;
-
     const ctx = vm.createContext(sandbox);
+    vm.runInContext(
+      '(function (hostLog) {' +
+      '  var fmt = function (v) { try { return typeof v === "string" ? v : JSON.stringify(v); } catch (e) { return String(v); } };' +
+      '  var mk = function (prefix) { return function () { hostLog(prefix + Array.prototype.map.call(arguments, fmt).join(" ")); }; };' +
+      '  globalThis.console = { log: mk(""), warn: mk("[warn] "), error: mk("[error] ") };' +
+      '  var S = JSON.stringify, P = JSON.parse, A = Function.prototype.apply;' +
+      '  globalThis.__run = function (f, argsJson) { return S(A.call(f, null, P(argsJson))); };' +
+      '})(__hostLog); delete globalThis.__hostLog;',
+      ctx,
+      { timeout: 500 }
+    );
+
     const wrappedCode = code + '\\n;typeof ' + entryPoint + ' === "function" ? ' + entryPoint + ' : null;';
     const fn = vm.runInContext(wrappedCode, ctx, { timeout: 800, displayErrors: true });
     if (typeof fn !== 'function') {
@@ -202,30 +187,34 @@ process.stdin.on('end', () => {
     for (const tc of tests) {
       const tStart = Date.now();
       try {
-        const argsCopy = JSON.parse(JSON.stringify(tc.args));
-        ctx.__args = argsCopy;
+        // Arguments go in as a JSON string and the answer comes back as a JSON string, so no host-realm
+        // object is ever handed to submitted code and results compare the same way as the expected values.
         ctx.__fn = fn;
-        const actual = vm.runInContext('__fn.apply(null, __args)', ctx, { timeout: 900, displayErrors: true });
+        ctx.__argsJson = JSON.stringify(tc.args);
+        const actualJson = vm.runInContext('__run(__fn, __argsJson)', ctx, { timeout: 900, displayErrors: true });
         const runtimeMs = Math.max(1, Date.now() - tStart);
-        const passed = deepEqual(actual, tc.expected);
+        const actual = typeof actualJson === 'string' ? JSON.parse(actualJson) : undefined;
+        const passed = typeof actualJson === 'string' && deepEqual(actual, tc.expected);
         results.push({
           testId: tc.id,
           label: tc.label || tc.id,
           hidden: Boolean(tc.hidden),
           passed,
-          actual: tc.hidden ? (passed ? '[passed]' : '[mismatch]') : fmtVal(actual),
-          expected: tc.hidden ? '[hidden]' : fmtVal(tc.expected),
+          actual: tc.hidden ? (passed ? '[passed]' : '[mismatch]') : (typeof actualJson === 'string' ? actualJson : 'undefined'),
+          expected: tc.hidden ? '[hidden]' : JSON.stringify(tc.expected),
           runtimeMs,
         });
       } catch (err) {
         const runtimeMs = Math.max(1, Date.now() - tStart);
+        let message;
+        try { message = err && err.message ? String(err.message) : String(err); } catch (e2) { message = 'Runtime error'; }
         results.push({
           testId: tc.id,
           label: tc.label || tc.id,
           hidden: Boolean(tc.hidden),
           passed: false,
-          error: err && err.message ? err.message : String(err),
-          expected: tc.hidden ? '[hidden]' : fmtVal(tc.expected),
+          error: message.slice(0, 500),
+          expected: tc.hidden ? '[hidden]' : JSON.stringify(tc.expected),
           runtimeMs,
         });
       }
@@ -283,6 +272,31 @@ def _audit_hook(event, args):
             raise PermissionError(f"Module '{mod}' is blocked in the coding arena sandbox")
 
 sys.addaudithook(_audit_hook)
+
+_dumps = json.dumps
+
+def _norm(x):
+    # Tuples are lists and sets are sorted lists as far as the tests are concerned.
+    if isinstance(x, (list, tuple)):
+        return [_norm(i) for i in x]
+    if isinstance(x, (set, frozenset)):
+        items = [_norm(i) for i in x]
+        try:
+            return sorted(items)
+        except Exception:
+            return items
+    if isinstance(x, dict):
+        return {k: _norm(v) for k, v in x.items()}
+    return x
+
+def _show(x):
+    try:
+        return _dumps(_norm(x))
+    except Exception:
+        try:
+            return repr(x)[:500]
+        except Exception:
+            return '<unprintable>'
 
 def _timeout_handler(signum, frame):
     raise TimeoutError("Test execution exceeded 1s limit")
@@ -344,6 +358,7 @@ for tc in tests:
         signal.alarm(0)
         elapsed = max(1, int((time.monotonic() - t0) * 1000))
         expected = tc.get("expected")
+        actual = _norm(actual)
         passed = (actual == expected) and (type(actual) is type(expected) or not (isinstance(actual, bool) ^ isinstance(expected, bool)))
         hidden = bool(tc.get("hidden", False))
         results.append({
@@ -351,8 +366,8 @@ for tc in tests:
             "label": tc.get("label") or tc.get("id"),
             "hidden": hidden,
             "passed": bool(passed),
-            "actual": ("[passed]" if passed else "[mismatch]") if hidden else json.dumps(actual),
-            "expected": "[hidden]" if hidden else json.dumps(expected),
+            "actual": ("[passed]" if passed else "[mismatch]") if hidden else _show(actual),
+            "expected": "[hidden]" if hidden else _show(expected),
             "runtimeMs": elapsed
         })
     except Exception as exc:
@@ -365,7 +380,7 @@ for tc in tests:
             "hidden": hidden,
             "passed": False,
             "error": f"{type(exc).__name__}: {exc}",
-            "expected": "[hidden]" if hidden else json.dumps(tc.get("expected")),
+            "expected": "[hidden]" if hidden else _show(tc.get("expected")),
             "runtimeMs": elapsed
         })
 

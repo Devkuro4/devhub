@@ -82,7 +82,7 @@ export function generateArenaProblemApi(
   actor: ArenaActorRef,
   input: { topic: string; difficulty: 'Beginner' | 'Intermediate' | 'Advanced' }
 ) {
-  return apiReq<{ problem: ArenaProblem }>('POST', '/api/arena/generate-problem', actor, input);
+  return apiReq<{ problemId: string; difficulty: ArenaProblem['difficulty'] }>('POST', '/api/arena/generate-problem', actor, input);
 }
 
 export function createArenaMatchApi(
@@ -92,7 +92,9 @@ export function createArenaMatchApi(
     format: ArenaMatchFormat;
     teamSize?: number;
     scoringType: ArenaScoringType;
+    /** A problem id, or 'random' to let the server pick a built-in problem of the given difficulty. */
     problemId: string;
+    difficulty?: 'Beginner' | 'Intermediate' | 'Advanced';
     allowedLanguages: ArenaLanguage[];
     durationSeconds: number;
   }

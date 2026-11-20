@@ -160,10 +160,19 @@ export const ARENA_PROBLEMS: ArenaProblem[] = [
     timeLimitSeconds: 600,
     scoringRule: 'Efficiently handle timestamp queries without exceeding timeout on larger arrays.',
     description:
-      'Given sorted request timestamps in milliseconds `timestamps` and a window size `windowMs`, return an array where index `i` holds how many requests occurred within `[timestamps[i] - windowMs, timestamps[i]]` inclusive.',
-    constraints: ['timestamps is sorted ascending', '0 <= timestamps.length <= 20,000'],
+      'Given sorted request timestamps in milliseconds `timestamps` and a window size `windowMs`, return an array where index `i` holds how many requests were made in the window ending at request `i`: count every request at an index `j <= i` (including request `i` itself) whose timestamp is within `[timestamps[i] - windowMs, timestamps[i]]` inclusive. Requests that appear later in the array are never counted, even if they share the same timestamp.',
+    constraints: [
+      'timestamps is sorted ascending',
+      '0 <= timestamps.length <= 20,000',
+      'Only requests at indices j <= i count toward index i',
+    ],
     examples: [
       { input: 'timestamps = [100, 200, 1200, 1250], windowMs = 300', output: '[1, 2, 1, 2]' },
+      {
+        input: 'timestamps = [500, 500, 500], windowMs = 100',
+        output: '[1, 2, 3]',
+        explanation: 'Each request only counts itself and the earlier requests, so the third 500 sees all three.',
+      },
     ],
     entryPoint: 'solve',
     starterCode: {

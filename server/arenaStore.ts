@@ -32,7 +32,8 @@ import { getSandboxStatus, runIsolatedTests } from './sandboxRunner.ts';
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
 const STORE_PATH = path.join(DATA_DIR, 'arena-store.json');
-const RECONNECT_GRACE_MS = 45_000;
+// How long a team may be completely absent before the other side can claim the win (overridable for tests).
+const RECONNECT_GRACE_MS = Number(process.env.ARENA_RECONNECT_GRACE_MS) > 0 ? Number(process.env.ARENA_RECONNECT_GRACE_MS) : 45_000;
 
 interface InternalArenaTeam {
   teamId: string;
@@ -146,6 +147,39 @@ function loadStore(): PersistedArenaStore {
 
 let store: PersistedArenaStore = loadStore();
 
+// Sockets don't survive a restart, but the saved "connected" flags do. Start everyone as disconnected;
+// players who are really still around flip back to connected as soon as their WebSocket reconnects.
+function resetPresenceOnBoot() {
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  for (const m of store.matches) {
+    if (m.status === 'completed' || m.status === 'forfeited' || m.status === 'cancelled') continue;
+    for (const p of m.participants) {
+      p.connected = false;
+      p.disconnectedAtMs = nowMs;
+      p.lastSeenAt = nowIso;
+    }
+  }
+}
+resetPresenceOnBoot();
+
+// Who has a live socket watching which match, even before they've joined it. Without this, someone who opens a room
+// and THEN joins would be marked disconnected until they re-subscribed.
+const watchers = new Set<string>();
+const watchKey = (userId: string, matchId: string) => `${userId}|${matchId}`;
+
+// Any authenticated REST action (run, submit, ready, ...) proves the player is still there, even if their socket is blocked.
+function touchParticipant(match: InternalArenaMatch, userId: string) {
+  const p = match.participants.find((x) => x.userId === userId);
+  if (p) p.lastSeenAt = new Date().toISOString();
+}
+
+// When did this participant last give a sign of life? Connected players are "now".
+function absentSinceMs(p: ArenaParticipant): number {
+  if (p.connected) return Number.POSITIVE_INFINITY;
+  return Math.max(p.disconnectedAtMs || 0, Date.parse(p.lastSeenAt) || 0);
+}
+
 function saveStore() {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -157,19 +191,71 @@ function saveStore() {
   }
 }
 
-function getProblemById(problemId: string): ArenaProblem {
-  return store.customProblems.find((p) => p.id === problemId) || ARENA_PROBLEMS.find((p) => p.id === problemId) || ARENA_PROBLEMS[0];
+function findProblem(problemId: string): ArenaProblem | undefined {
+  return store.customProblems.find((p) => p.id === problemId) || ARENA_PROBLEMS.find((p) => p.id === problemId);
 }
 
+// Lenient lookup used for matches/challenges that already exist (legacy data may point at a missing problem).
+// New matches must go through findProblem so an unknown id is rejected instead of silently becoming Two Sum.
+function getProblemById(problemId: string): ArenaProblem {
+  return findProblem(problemId) || ARENA_PROBLEMS[0];
+}
+
+const MAX_CUSTOM_PROBLEMS = 100;
+
 export function registerCustomArenaProblem(problem: ArenaProblem): ArenaProblem {
-  store.customProblems = [problem, ...store.customProblems.filter((p) => p.id !== problem.id)].slice(0, 100);
+  // Never evict a problem that a stored match still points at, otherwise that match silently turns into Two Sum.
+  const inUse = new Set<string>([
+    ...store.matches.map((m) => m.problemId),
+    ...store.challenges.map((c) => c.problemId || ''),
+  ]);
+  const others = store.customProblems.filter((p) => p.id !== problem.id);
+  const kept: ArenaProblem[] = [];
+  let free = MAX_CUSTOM_PROBLEMS - 1;
+  for (const p of others) {
+    if (inUse.has(p.id)) kept.push(p);
+    else if (free > 0) {
+      kept.push(p);
+      free -= 1;
+    }
+  }
+  store.customProblems = [problem, ...kept];
   saveStore();
   return problem;
+}
+
+// A problem stays secret until the match has actually started.
+function isProblemRevealed(match: InternalArenaMatch): boolean {
+  return match.startedAtMs !== null && match.startedAtMs !== undefined;
+}
+
+// What a client may know about a problem: no hidden tests, and no expected values for them.
+function toClientProblem(problem: ArenaProblem): ArenaProblem {
+  return {
+    ...problem,
+    starterCode: { ...problem.starterCode },
+    constraints: [...problem.constraints],
+    examples: [...problem.examples],
+    testCases: problem.testCases.filter((t) => !t.hidden),
+    totalTestsCount: problem.testCases.length,
+  };
+}
+
+function pickBuiltInProblem(difficulty?: string): ArenaProblem {
+  const wanted = ['Beginner', 'Intermediate', 'Advanced'].includes(String(difficulty)) ? String(difficulty) : null;
+  const pool = wanted ? ARENA_PROBLEMS.filter((p) => p.difficulty === wanted) : ARENA_PROBLEMS;
+  const base = pool.length ? pool : ARENA_PROBLEMS;
+  // Prefer problems that are not published as a daily/weekly challenge, so nobody has seen the statement already.
+  const challengeIds = new Set(store.challenges.map((c) => c.problemId).filter(Boolean));
+  const fresh = base.filter((p) => !challengeIds.has(p.id));
+  const choices = fresh.length ? fresh : base;
+  return choices[Math.floor(Math.random() * choices.length)];
 }
 
 // Strict privacy filter: NEVER expose another team's private workspace (code or private team chat).
 export function sanitizeMatchForUser(match: InternalArenaMatch, viewerUserId?: string): ArenaMatchView {
   const problem = getProblemById(match.problemId);
+  const revealed = isProblemRevealed(match);
   const teams: Record<string, ArenaTeamView> = {};
   for (const [teamId, t] of Object.entries(match.teams)) {
     const isMember = Boolean(viewerUserId && t.memberIds.includes(viewerUserId));
@@ -190,6 +276,7 @@ export function sanitizeMatchForUser(match: InternalArenaMatch, viewerUserId?: s
               activeLanguage: t.privateState.activeLanguage,
               codeByLanguage: { ...t.privateState.codeByLanguage },
               lastEditedBy: t.privateState.lastEditedBy,
+              lastEditedById: t.privateState.lastEditedById,
               lastEditedAt: t.privateState.lastEditedAt,
               teamChat: [...t.privateState.teamChat],
               lastRun: t.privateState.lastRun || null,
@@ -205,23 +292,43 @@ export function sanitizeMatchForUser(match: InternalArenaMatch, viewerUserId?: s
     format: match.format,
     teamSize: match.teamSize,
     scoringType: match.scoringType,
-    problemId: match.problemId,
-    problem: {
-      id: problem.id,
-      title: problem.title,
-      difficulty: problem.difficulty,
-      category: problem.category,
-      timeLimitSeconds: problem.timeLimitSeconds,
-      scoringRule: problem.scoringRule,
-      description: problem.description,
-      constraints: [...problem.constraints],
-      examples: [...problem.examples],
-      entryPoint: problem.entryPoint,
-      starterCode: { ...problem.starterCode },
-      visibleTests: problem.testCases.filter((tc) => !tc.hidden),
-      totalTestsCount: problem.testCases.length,
-      hiddenTestsCount: problem.testCases.filter((tc) => tc.hidden).length,
-    },
+    problemId: revealed ? match.problemId : '',
+    problem: revealed
+      ? {
+          id: problem.id,
+          title: problem.title,
+          difficulty: problem.difficulty,
+          category: problem.category,
+          timeLimitSeconds: problem.timeLimitSeconds,
+          scoringRule: problem.scoringRule,
+          description: problem.description,
+          constraints: [...problem.constraints],
+          examples: [...problem.examples],
+          entryPoint: problem.entryPoint,
+          starterCode: { ...problem.starterCode },
+          visibleTests: problem.testCases.filter((tc) => !tc.hidden),
+          totalTestsCount: problem.testCases.length,
+          hiddenTestsCount: problem.testCases.filter((tc) => tc.hidden).length,
+          revealed: true,
+        }
+      : {
+          // Withheld until the match starts: only generic facts about the match are shared.
+          id: 'hidden',
+          title: '',
+          difficulty: problem.difficulty,
+          category: '',
+          timeLimitSeconds: problem.timeLimitSeconds,
+          scoringRule: '',
+          description: '',
+          constraints: [],
+          examples: [],
+          entryPoint: '',
+          starterCode: { javascript: '', typescript: '', python: '' },
+          visibleTests: [],
+          totalTestsCount: problem.testCases.length,
+          hiddenTestsCount: problem.testCases.filter((tc) => tc.hidden).length,
+          revealed: false,
+        },
     allowedLanguages: [...match.allowedLanguages],
     durationSeconds: match.durationSeconds,
     status: match.status,
@@ -260,7 +367,8 @@ function recordMatchHistory(match: InternalArenaMatch) {
   store.history = store.history.slice(0, 120);
 }
 
-function settleMatchOnTimeout(match: InternalArenaMatch, now: number) {
+function settleMatchOnTimeout(match: InternalArenaMatch, now: number, cause: 'timeout' | 'all_passed' = 'timeout') {
+  const endedBy = cause === 'timeout' ? 'Time expired' : 'All teams passed every test';
   const teamList = Object.values(match.teams);
   // Sort by highest bestScore, then earliest lastSubmissionAtMs
   const scoredTeams = [...teamList].sort((a, b) => {
@@ -278,22 +386,36 @@ function settleMatchOnTimeout(match: InternalArenaMatch, now: number) {
 
   if (!top || top.bestScore <= 0) {
     match.winnerTeamId = null;
-    match.winReason = 'Time expired with no passing test submissions (Draw).';
+    match.winReason = `${endedBy} with no passing test submissions (Draw).`;
   } else if (
     second &&
     second.bestScore === top.bestScore &&
     second.lastSubmissionAtMs === top.lastSubmissionAtMs
   ) {
     match.winnerTeamId = null;
-    match.winReason = `Time expired — exact tie at ${top.bestScore} points (Draw).`;
+    match.winReason = `${endedBy} — exact tie at ${top.bestScore} points (Draw).`;
   } else {
     match.winnerTeamId = top.teamId;
     match.winReason =
       second && second.bestScore === top.bestScore
         ? `${top.label} won on faster tie-breaker timestamp at ${top.bestScore} pts.`
-        : `${top.label} won on time with ${top.bestScore} pts (${top.passedCount}/${top.totalCount} tests passed).`;
+        : cause === 'timeout'
+          ? `${top.label} won on time with ${top.bestScore} pts (${top.passedCount}/${top.totalCount} tests passed).`
+          : `${top.label} won with the higher score of ${top.bestScore} pts (${top.passedCount}/${top.totalCount} tests passed).`;
   }
   recordMatchHistory(match);
+}
+
+// Team editors start empty so the starter code (function signature) can't give the problem away before the match starts.
+function seedStarterCode(match: InternalArenaMatch) {
+  const problem = getProblemById(match.problemId);
+  for (const team of Object.values(match.teams)) {
+    for (const lang of ['javascript', 'typescript', 'python'] as ArenaLanguage[]) {
+      if (!String(team.privateState.codeByLanguage[lang] || '').trim()) {
+        team.privateState.codeByLanguage[lang] = problem.starterCode[lang] || '';
+      }
+    }
+  }
 }
 
 // Re-evaluated cleanly by server timer & before reads/mutations
@@ -306,6 +428,7 @@ export function checkArenaTimers(): string[] {
       m.status = 'active';
       m.startedAtMs = now;
       m.endsAtMs = now + m.durationSeconds * 1000;
+      seedStarterCode(m);
       changedIds.push(m.id);
     } else if (m.status === 'active' && m.endsAtMs && now >= m.endsAtMs) {
       settleMatchOnTimeout(m, now);
@@ -340,14 +463,18 @@ export function createArenaMatch(
     teamSize?: number;
     scoringType?: ArenaScoringType;
     problemId?: string;
+    difficulty?: string;
     allowedLanguages?: ArenaLanguage[];
     durationSeconds?: number;
   }
-): ArenaMatchView {
+): ArenaMatchView | { error: string; status: number } {
   const format: ArenaMatchFormat = input.format === '2v2' ? '2v2' : '1v1';
   const teamSize = format === '2v2' ? Math.max(2, Math.min(4, Number(input.teamSize) || 2)) : 1;
   const scoringType: ArenaScoringType = input.scoringType === 'scored' ? 'scored' : 'speed';
-  const problem = getProblemById(String(input.problemId || ''));
+  const requestedProblemId = String(input.problemId || '').trim();
+  const problem =
+    !requestedProblemId || requestedProblemId === 'random' ? pickBuiltInProblem(input.difficulty) : findProblem(requestedProblemId);
+  if (!problem) return { error: 'That problem no longer exists. Pick another one or generate a new problem.', status: 400 };
   const allowedLanguages: ArenaLanguage[] =
     Array.isArray(input.allowedLanguages) && input.allowedLanguages.length > 0
       ? input.allowedLanguages.filter((l): l is ArenaLanguage => ['javascript', 'typescript', 'python'].includes(l))
@@ -369,11 +496,7 @@ export function createArenaMatch(
     forfeited: false,
     privateState: {
       activeLanguage: defaultLang,
-      codeByLanguage: {
-        javascript: problem.starterCode.javascript,
-        typescript: problem.starterCode.typescript,
-        python: problem.starterCode.python,
-      },
+      codeByLanguage: { javascript: '', typescript: '', python: '' },
       teamChat: [],
       lastRun: null,
     },
@@ -381,7 +504,8 @@ export function createArenaMatch(
 
   const match: InternalArenaMatch = {
     id: uid('match'),
-    title: String(input.title || '').trim().slice(0, 80) || `${problem.title} (${format} ${scoringType === 'speed' ? 'Speed Duel' : 'Scored'})`,
+    // Default title must not name the problem: the statement stays hidden until the match starts.
+    title: String(input.title || '').trim().slice(0, 80) || `${format} ${scoringType === 'speed' ? 'Speed Duel' : 'Scored Duel'} · ${problem.difficulty}`,
     format,
     teamSize,
     scoringType,
@@ -403,8 +527,9 @@ export function createArenaMatch(
         name: actor.userName,
         teamId: 'team-a',
         ready: false,
-        connected: true,
-        disconnectedAtMs: null,
+        // Not "connected" until their WebSocket actually subscribes to the match (see setArenaPresence).
+        connected: false,
+        disconnectedAtMs: Date.now(),
         lastSeenAt: new Date().toISOString(),
         forfeited: false,
       },
@@ -454,8 +579,6 @@ export function joinArenaMatch(
 
   const existing = match.participants.find((p) => p.userId === actor.userId);
   if (existing) {
-    existing.connected = true;
-    existing.disconnectedAtMs = null;
     existing.lastSeenAt = new Date().toISOString();
     saveStore();
     emit({ type: 'arena:match_updated', matchId });
@@ -493,8 +616,8 @@ export function joinArenaMatch(
     name: actor.userName,
     teamId: targetTeamId,
     ready: false,
-    connected: true,
-    disconnectedAtMs: null,
+    connected: watchers.has(watchKey(actor.userId, matchId)),
+    disconnectedAtMs: watchers.has(watchKey(actor.userId, matchId)) ? null : Date.now(),
     lastSeenAt: new Date().toISOString(),
     forfeited: false,
   });
@@ -533,6 +656,10 @@ export function setArenaPresence(userId: string, matchId: string | null, connect
   const nowIso = new Date().toISOString();
   const nowMs = Date.now();
   let changed = false;
+  if (matchId) {
+    if (connected) watchers.add(watchKey(userId, matchId));
+    else watchers.delete(watchKey(userId, matchId));
+  }
   for (const m of store.matches) {
     if (matchId && m.id !== matchId) continue;
     const p = m.participants.find((x) => x.userId === userId);
@@ -571,6 +698,7 @@ export function updateTeamWorkspace(
     const lang = patch.language && match.allowedLanguages.includes(patch.language) ? patch.language : team.privateState.activeLanguage;
     team.privateState.codeByLanguage[lang] = patch.code.slice(0, 64 * 1024);
     team.privateState.lastEditedBy = actor.userName;
+    team.privateState.lastEditedById = actor.userId;
     team.privateState.lastEditedAt = new Date().toISOString();
   }
   saveStore();
@@ -613,6 +741,7 @@ export async function runMatchSampleTests(
   if (!participant) return { error: 'You are not a participant in this match.', status: 403 };
   if (!match.allowedLanguages.includes(input.language)) return { error: 'Language is not enabled for this match.', status: 400 };
 
+  touchParticipant(match, actor.userId);
   const team = match.teams[participant.teamId];
   const problem = getProblemById(match.problemId);
   const visibleTests = problem.testCases.filter((t) => !t.hidden);
@@ -657,6 +786,7 @@ export function submitMatchSolution(
         return { error: 'Selected language is not permitted in this match.', status: 400 };
       }
 
+      touchParticipant(match, actor.userId);
       const team = match.teams[participant.teamId];
       const problem = getProblemById(match.problemId);
       team.privateState.activeLanguage = input.language;
@@ -668,6 +798,12 @@ export function submitMatchSolution(
         entryPoint: problem.entryPoint,
         tests: problem.testCases,
       });
+
+      // The sandbox run is async: the match may have ended (timer, forfeit, cancel, or another submission) while we waited.
+      checkArenaTimers();
+      if (match.status !== 'active') {
+        return { error: 'The match ended while your solution was being tested, so this submission was not counted.', status: 409 };
+      }
 
       // Calculate score fairly against the server arrival timestamp
       const remainingMs = Math.max(0, (match.endsAtMs || submittedAtMs) - submittedAtMs);
@@ -718,7 +854,7 @@ export function submitMatchSolution(
         } else if (match.scoringType === 'scored') {
           const allTeamsAllPassed = Object.values(match.teams).every((t) => t.memberIds.length > 0 && t.allPassed);
           if (allTeamsAllPassed) {
-            settleMatchOnTimeout(match, submittedAtMs);
+            settleMatchOnTimeout(match, submittedAtMs, 'all_passed');
           }
         }
       }
@@ -779,9 +915,9 @@ export function claimDisconnectForfeit(
 
   const now = Date.now();
   const opponentParticipants = match.participants.filter((p) => p.teamId === opponentTeam.teamId);
+  // Absent = no live socket AND no REST activity for the whole grace window. Players who never opened a socket count too.
   const allDisconnectedPastGrace =
-    opponentParticipants.length > 0 &&
-    opponentParticipants.every((p) => !p.connected && p.disconnectedAtMs && now - p.disconnectedAtMs >= RECONNECT_GRACE_MS);
+    opponentParticipants.length > 0 && opponentParticipants.every((p) => now - absentSinceMs(p) >= RECONNECT_GRACE_MS);
 
   if (!allDisconnectedPastGrace) {
     return {
@@ -812,7 +948,11 @@ export function cancelArenaMatch(
   if (!isCreator && !actor.isAdmin) {
     return { error: 'Only the match creator or an admin can cancel this match.', status: 403 };
   }
-  if (!actor.isAdmin && (match.status === 'active' || match.status === 'completed' || match.status === 'forfeited')) {
+  // A finished match is final for everyone, admins included: cancelling would erase the recorded winner.
+  if (match.status === 'completed' || match.status === 'forfeited' || match.status === 'cancelled') {
+    return { error: 'This match has already finished and can no longer be cancelled.', status: 409 };
+  }
+  if (!actor.isAdmin && match.status === 'active') {
     return { error: 'Use Forfeit once a match is active.', status: 409 };
   }
   match.status = 'cancelled';
@@ -1398,11 +1538,18 @@ export function getCompetitionXpAwardsForUser(userId: string): CompetitionXpAwar
   return { duelWins, duelParticipations, challengesSolved, bountiesApproved, buildOffResults, potwWins };
 }
 
+// Only problems published as daily/weekly challenges are sent to clients (and never their hidden tests),
+// so the bootstrap payload can't be used to read ahead at a duel problem.
+function getClientProblems(): ArenaProblem[] {
+  const ids = new Set(store.challenges.map((c) => c.problemId).filter(Boolean));
+  return [...store.customProblems, ...ARENA_PROBLEMS].filter((p) => ids.has(p.id)).map(toClientProblem);
+}
+
 export function getArenaBootstrap(viewerUserId?: string) {
   checkArenaTimers();
   return {
     sandbox: getSandboxStatus(),
-    problems: [...store.customProblems, ...ARENA_PROBLEMS],
+    problems: getClientProblems(),
     matches: listArenaMatches(viewerUserId),
     challenges: store.challenges,
     buildOffs: store.buildOffs,

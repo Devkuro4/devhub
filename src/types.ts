@@ -871,6 +871,8 @@ export interface ArenaProblem {
   entryPoint: string;
   starterCode: Record<ArenaLanguage, string>;
   testCases: ArenaTestCase[];
+  /** Set on client-facing copies, where testCases only holds the visible tests. */
+  totalTestsCount?: number;
 }
 
 export interface SandboxTestResult {
@@ -952,6 +954,7 @@ export interface ArenaTeamPrivateState {
   activeLanguage: ArenaLanguage;
   codeByLanguage: Record<ArenaLanguage, string>;
   lastEditedBy?: string;
+  lastEditedById?: string;
   lastEditedAt?: string;
   teamChat: ArenaTeamChatMessage[];
   lastRun?: SandboxExecutionResult | null;
@@ -983,6 +986,8 @@ export interface ArenaMatchView {
     visibleTests: ArenaTestCase[];
     totalTestsCount: number;
     hiddenTestsCount: number;
+    /** false until the match has started; the statement, tests and starter code are withheld until then. */
+    revealed: boolean;
   };
   allowedLanguages: ArenaLanguage[];
   durationSeconds: number;
