@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   __setClientFactoryForTests,
   __setSleepForTests,
+  __resetPacerForTests,
   classifyError,
   conformToSchema,
   generateJson,
@@ -36,6 +37,9 @@ beforeEach(() => {
   process.env.GEMINI_API_KEY = 'test-key-not-real';
   process.env.GEMINI_MAX_RETRIES = '2';
   process.env.GEMINI_TIMEOUT_MS = '1000';
+  process.env.GEMINI_MAX_RPM = '0';
+  delete process.env.GEMINI_FALLBACK_MODEL;
+  __resetPacerForTests();
   delete process.env.GEMINI_MODEL;
   __setSleepForTests(async () => {});
   __setClientFactoryForTests(() => ({
@@ -345,4 +349,59 @@ test('admin status/settings are Gemini-only', () => {
 
 test('the API key never appears in any status payload', () => {
   assert.equal(JSON.stringify(ai.getAiStatus()).includes('test-key-not-real'), false);
+});
+
+// ---------------------------------------------------------------- free-tier protection
+test('429 with Google Search on: the retry drops search (its own quota) and succeeds', async () => {
+  handler = (req) => {
+    if (req.config.tools) throw apiError(429, 'grounding quota exceeded');
+    return reply('answer without search');
+  };
+  const r = await generateText({ model: 'gemini-3.8-flash', systemInstruction: '', prompt: 'p', useSearch: true });
+  assert.equal(r.text, 'answer without search');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].model, 'gemini-3.8-flash');
+});
+
+test('429 on the main model: switches to the lighter fallback model and reports which model answered', async () => {
+  handler = (req) => {
+    if (req.model === 'gemini-3.8-flash') throw apiError(429, 'quota for this model');
+    return reply('from fallback');
+  };
+  const r = await generateText({ model: 'gemini-3.8-flash', systemInstruction: '', prompt: 'p' });
+  assert.equal(r.model, 'gemini-3.5-flash-lite');
+  assert.equal(calls.length, 2);
+  handler = (req) => {
+    if (req.model === 'gemini-3.8-flash') throw apiError(429, 'quota for this model');
+    return reply('{"title":"T"}');
+  };
+  const j = await generateJson<any>({ model: 'gemini-3.8-flash', systemInstruction: '', prompt: 'p', schema });
+  assert.equal(j.model, 'gemini-3.5-flash-lite');
+});
+
+test('a daily-quota 429 is not hammered with retries when there is nothing to fall back to', async () => {
+  process.env.GEMINI_FALLBACK_MODEL = 'off';
+  handler = () => {
+    throw apiError(429, 'Quota exceeded for metric generate_content_free_tier_requests, limit: 250, PerDay');
+  };
+  await assert.rejects(generateText({ model: 'gemini-3.8-flash', systemInstruction: '', prompt: 'p' }), (e: any) => e.code === 'rate_limit');
+  assert.equal(calls.length, 1);
+});
+
+test('request pacing keeps bursts under GEMINI_MAX_RPM without calling Google', async () => {
+  process.env.GEMINI_MAX_RPM = '2';
+  __resetPacerForTests();
+  await generateText({ model: 'm', systemInstruction: '', prompt: 'a' });
+  await generateText({ model: 'm', systemInstruction: '', prompt: 'b' });
+  await assert.rejects(generateText({ model: 'm', systemInstruction: '', prompt: 'c' }), (e: any) => e.code === 'rate_limit');
+  assert.equal(calls.length, 2, 'the third request was held back locally');
+});
+
+test('admin error log shows Google\'s reason; members see only the friendly message', async () => {
+  process.env.GEMINI_FALLBACK_MODEL = 'off';
+  handler = () => {
+    throw apiError(429, 'Quota exceeded, limit: 5 per minute');
+  };
+  await assert.rejects(ai.testAiConnection('diag-user'), (e: any) => !/limit: 5/.test(e.message));
+  assert.match(ai.getAiStatus().stats.errors[0].message, /limit: 5 per minute/);
 });

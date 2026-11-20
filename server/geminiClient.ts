@@ -43,6 +43,14 @@ export function getGeminiApiKey(): string | null {
 }
 
 const timeoutMs = () => intFromEnv("GEMINI_TIMEOUT_MS", 45_000, 1_000, 120_000);
+/** Lighter model used when the main model hits its rate limit / quota. Set to "off" to disable. */
+export function getFallbackModel(): string | null {
+  const raw = String(process.env.GEMINI_FALLBACK_MODEL ?? 'gemini-3.5-flash-lite').trim().replace(/^['"]|['"]$/g, '');
+  if (!raw || raw.toLowerCase() === 'off') return null;
+  return isValidModelName(raw) ? raw : null;
+}
+/** Requests per minute this server will send to Gemini (keeps free-tier keys under their per-minute cap). 0 = unlimited. */
+const maxRpm = () => intFromEnv('GEMINI_MAX_RPM', 8, 0, 1000);
 const maxRetries = () => intFromEnv('GEMINI_MAX_RETRIES', 2, 0, 4);
 
 // ---------------------------------------------------------------------------
@@ -136,7 +144,9 @@ export function classifyError(err: unknown): AiProviderError {
     return new AiProviderError('aborted', raw, 499);
   }
   if (status === 429 || /RESOURCE_EXHAUSTED|rate.?limit|quota/i.test(text)) {
-    return new AiProviderError('rate_limit', raw, 429, retryAfterMs);
+    const rl = new AiProviderError('rate_limit', raw, 429, retryAfterMs);
+    (rl as any).daily = /PerDay|per day|daily/i.test(text);
+    return rl;
   }
   if (status === 401 || status === 403 || /API_KEY_INVALID|PERMISSION_DENIED|UNAUTHENTICATED|API key not valid/i.test(text)) {
     return new AiProviderError('auth', raw, status === 403 ? 403 : 401);
@@ -412,8 +422,54 @@ function buildConfig(opts: BaseOptions, signal: AbortSignal, extra: Record<strin
   };
 }
 
+// Paces requests so a free-tier key (low per-minute cap) is not pushed into 429s by bursts.
+// Each request reserves the next free slot in a 60-second window; if the wait would be long, fail fast.
+const slotTimes: number[] = [];
+const MAX_PACING_WAIT_MS = 20_000;
+async function acquireSlot(): Promise<void> {
+  const rpm = maxRpm();
+  if (!rpm) return;
+  const now = Date.now();
+  while (slotTimes.length && slotTimes[0] < now - 60_000) slotTimes.shift();
+  const earliest = slotTimes.length >= rpm ? slotTimes[slotTimes.length - rpm] + 60_000 : now;
+  const slot = Math.max(now, earliest);
+  if (slot - now > MAX_PACING_WAIT_MS) {
+    throw new AiProviderError('rate_limit', 'local request pacing: too many AI requests in the last minute', 429);
+  }
+  slotTimes.push(slot);
+  if (slot > now) await sleepImpl(slot - now);
+}
+/** Tests only. */
+export function __resetPacerForTests() {
+  slotTimes.length = 0;
+}
+
+interface RunState {
+  model: string;
+  searchEnabled: boolean;
+}
+/** After a rate limit: first drop Google Search (it has its own quota), then switch to the fallback model. */
+function degrade(state: RunState): boolean {
+  if (state.searchEnabled) {
+    state.searchEnabled = false;
+    return true;
+  }
+  const fb = getFallbackModel();
+  if (fb && state.model !== fb) {
+    state.model = fb;
+    return true;
+  }
+  return false;
+}
+/** Whether waiting and trying the same request again could plausibly help. */
+function worthRetrying(e: AiProviderError): boolean {
+  if (!e.retryable) return false;
+  if (e.code === 'rate_limit' && ((e as any).daily || (e.retryAfterMs ?? 0) > MAX_PACING_WAIT_MS)) return false;
+  return true;
+}
+
 /** Run `attempt` with bounded retries for transient provider failures. */
-async function retrying<T>(attempt: (n: number) => Promise<T>, outer?: AbortSignal): Promise<T> {
+async function retrying<T>(attempt: (n: number) => Promise<T>, outer?: AbortSignal, state?: RunState): Promise<T> {
   const limit = maxRetries();
   let last: AiProviderError | null = null;
   for (let n = 0; n <= limit; n++) {
@@ -421,7 +477,12 @@ async function retrying<T>(attempt: (n: number) => Promise<T>, outer?: AbortSign
       return await attempt(n);
     } catch (err) {
       last = classifyError(err);
-      if (!last.retryable || n === limit || outer?.aborted) throw last;
+      if (n === limit || outer?.aborted) throw last;
+      if (last.code === 'rate_limit' && state && degrade(state)) {
+        await sleepImpl(400);
+        continue;
+      }
+      if (!worthRetrying(last)) throw last;
       await sleepImpl(backoffMs(n, last));
     }
   }
@@ -432,21 +493,24 @@ export async function generateText(
   opts: BaseOptions & { useSearch?: boolean }
 ): Promise<TextResult> {
   const ai = getClient();
-  let searchEnabled = Boolean(opts.useSearch);
+  const state: RunState = { model: opts.model, searchEnabled: Boolean(opts.useSearch) };
   return retrying(async () => {
+    await acquireSlot();
+    const usedModel = state.model;
+    const searchOn = state.searchEnabled;
     try {
       return await withTimeout(
         async (signal) => {
           const response: any = await ai.models.generateContent({
-            model: opts.model,
+            model: usedModel,
             contents: opts.prompt,
-            config: buildConfig(opts, signal, searchEnabled ? { tools: [{ googleSearch: {} }] } : {}),
+            config: buildConfig(opts, signal, searchOn ? { tools: [{ googleSearch: {} }] } : {}),
           });
           const text = readText(response);
           return {
             text,
-            model: opts.model,
-            sources: searchEnabled ? extractSources(response) : [],
+            model: usedModel,
+            sources: searchOn ? extractSources(response) : [],
             totalTokens: Number(response?.usageMetadata?.totalTokenCount) || null,
           } satisfies TextResult;
         },
@@ -456,13 +520,13 @@ export async function generateText(
     } catch (err) {
       const e = classifyError(err);
       // If the grounding tool itself is rejected, answer without it rather than failing the member.
-      if (e.code === 'bad_request' && searchEnabled) {
-        searchEnabled = false;
+      if (e.code === 'bad_request' && searchOn) {
+        state.searchEnabled = false;
         throw new AiProviderError('unavailable', 'search tool rejected; retrying without it', 503);
       }
       throw e;
     }
-  }, opts.signal);
+  }, opts.signal, state);
 }
 
 export async function generateJson<T>(
@@ -474,14 +538,17 @@ export async function generateJson<T>(
 ): Promise<{ data: T; model: string; totalTokens: number | null }> {
   const ai = getClient();
   const geminiSchema = toGeminiSchema(opts.schema);
+  const state: RunState = { model: opts.model, searchEnabled: false };
   let malformedRetries = 0;
   const MAX_MALFORMED_RETRIES = 1;
   return retrying(async () => {
+    await acquireSlot();
+    const usedModel = state.model;
     try {
       return await withTimeout(
         async (signal) => {
           const response: any = await ai.models.generateContent({
-            model: opts.model,
+            model: usedModel,
             contents: opts.prompt,
             config: buildConfig(opts, signal, { responseMimeType: 'application/json', responseSchema: geminiSchema }),
           });
@@ -496,7 +563,7 @@ export async function generateJson<T>(
               throw malformed(e?.message || 'failed validation');
             }
           }
-          return { data: data as T, model: opts.model, totalTokens: Number(response?.usageMetadata?.totalTokenCount) || null };
+          return { data: data as T, model: usedModel, totalTokens: Number(response?.usageMetadata?.totalTokenCount) || null };
         },
         timeoutMs(),
         opts.signal
@@ -514,7 +581,7 @@ export async function generateJson<T>(
       }
       throw e;
     }
-  }, opts.signal);
+  }, opts.signal, state);
 }
 
 export type StreamEvent =
@@ -528,8 +595,10 @@ export type StreamEvent =
 export async function* streamText(opts: BaseOptions & { useSearch?: boolean }): AsyncGenerator<StreamEvent> {
   const ai = getClient();
   const limit = maxRetries();
-  let searchEnabled = Boolean(opts.useSearch);
+  const state: RunState = { model: opts.model, searchEnabled: Boolean(opts.useSearch) };
   for (let n = 0; n <= limit; n++) {
+    const usedModel = state.model;
+    const searchOn = state.searchEnabled;
     let started = false;
     let full = '';
     let sources: GroundingSource[] = [];
@@ -558,11 +627,12 @@ export async function* streamText(opts: BaseOptions & { useSearch?: boolean }): 
         }
       };
 
+      await acquireSlot();
       const stream: AsyncIterable<any> = await nextWithTimeout(
         ai.models.generateContentStream({
-          model: opts.model,
+          model: usedModel,
           contents: opts.prompt,
-          config: buildConfig(opts, controller.signal, searchEnabled ? { tools: [{ googleSearch: {} }] } : {}),
+          config: buildConfig(opts, controller.signal, searchOn ? { tools: [{ googleSearch: {} }] } : {}),
         }) as Promise<AsyncIterable<any>>
       );
       const iterator = stream[Symbol.asyncIterator]();
@@ -594,16 +664,21 @@ export async function* streamText(opts: BaseOptions & { useSearch?: boolean }): 
         if (blockReason || BLOCKED_FINISH.has(finishReason)) throw new AiProviderError('blocked', `${blockReason} ${finishReason}`, 422);
         throw new AiProviderError('empty', `finishReason=${finishReason}`, 502);
       }
-      yield { type: 'done', text: finalText, model: opts.model, sources: searchEnabled ? sources : [], totalTokens: tokens };
+      yield { type: 'done', text: finalText, model: usedModel, sources: searchOn ? sources : [], totalTokens: tokens };
       return;
     } catch (err) {
       let e = classifyError(err);
       if (opts.signal?.aborted) e = new AiProviderError('aborted', 'cancelled by caller', 499);
-      if (e.code === 'bad_request' && searchEnabled && !started) {
-        searchEnabled = false;
+      if (e.code === 'bad_request' && searchOn && !started) {
+        state.searchEnabled = false;
         e = new AiProviderError('unavailable', 'search tool rejected; retrying without it', 503);
       }
-      if (started || !e.retryable || n === limit) throw e;
+      if (started || n === limit) throw e;
+      if (e.code === 'rate_limit' && degrade(state)) {
+        await sleepImpl(400);
+        continue;
+      }
+      if (!worthRetrying(e)) throw e;
       await sleepImpl(backoffMs(n, e));
     } finally {
       opts.signal?.removeEventListener('abort', onOuterAbort);

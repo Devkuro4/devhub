@@ -99,6 +99,10 @@ By default anyone who finds the link can create an account. Pick one:
 - **Gemini's own limits** apply to your key. If many people use the mentor at once and you see "busy" messages, check your
   Gemini API quota and billing tier in Google AI Studio. Dev Hub already retries short rate limits and outages
   automatically (up to `GEMINI_MAX_RETRIES`, default 2) before showing a message.
+- **Gemini free tier:** it works, but its per-minute and per-day request caps are low and differ per model. Dev Hub paces
+  itself to `GEMINI_MAX_RPM` (default 8) and, on a rate limit, drops live web search and then switches to
+  `GEMINI_FALLBACK_MODEL`. If many members use it, enable billing on the Google project and raise `GEMINI_MAX_RPM`.
+  The real Google error text appears in Admin Console, AI Settings, in the error list.
 - **Moving from Groq?** Delete `GROQ_API_KEY` from Render. It is no longer read. Then add `GEMINI_API_KEY` and redeploy.
 - **Supabase free projects pause** after a week without activity, and the free plan has no backups you should rely on.
   Check your plan's backup options once the team is using it daily.

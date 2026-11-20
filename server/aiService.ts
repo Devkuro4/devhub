@@ -166,7 +166,10 @@ function formatAiError(err: any, operation: string): AiServiceError {
   console.error(`[ai] ${operation} failed (${e.code}${e.status ? ` ${e.status}` : ''})${detail ? `: ${detail}` : ''}`);
   const httpStatus = e.code === 'rate_limit' ? 429 : e.code === 'timeout' ? 504 : e.code === 'unavailable' ? 503 : e.code === 'blocked' ? 422 : 500;
   const message = e.code === 'model_unavailable' ? `The AI model "${runtimeSettings.model}" is not available. Ask an admin to pick another model.` : e.message;
-  return new AiServiceError(message, httpStatus);
+  const err2 = new AiServiceError(message, httpStatus);
+  // Admin-only diagnostics: Google's own wording (never contains keys or prompts).
+  (err2 as any).detail = detail ? String(detail).slice(0, 200) : '';
+  return err2;
 }
 
 /** HTTP status a route should use for an error thrown by this module. */
@@ -210,7 +213,7 @@ async function runTextOperation(
       return { text: result.text, model: result.model, latencyMs, sources: result.sources };
     } catch (err: any) {
       const clean = formatAiError(err, operation);
-      recordError(operation, clean.message);
+      recordError(operation, (clean as any).detail ? `${clean.message} [${(clean as any).detail}]` : clean.message);
       throw clean;
     }
   });
@@ -242,7 +245,7 @@ async function runJsonOperation<T>(
       return { data: result.data, model: result.model, latencyMs };
     } catch (err: any) {
       const clean = formatAiError(err, operation);
-      recordError(operation, clean.message);
+      recordError(operation, (clean as any).detail ? `${clean.message} [${(clean as any).detail}]` : clean.message);
       throw clean;
     }
   });
@@ -281,7 +284,7 @@ async function* runTextStream(
   } catch (err: any) {
     const clean = formatAiError(err, operation);
     // A browser that simply closed the tab is not an error worth surfacing in the admin log.
-    if (!options?.signal?.aborted) recordError(operation, clean.message);
+    if (!options?.signal?.aborted) recordError(operation, (clean as any).detail ? `${clean.message} [${(clean as any).detail}]` : clean.message);
     throw clean;
   }
 }

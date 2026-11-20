@@ -30,6 +30,7 @@ function startServer(userId = 'e2e-user') {
 function setup(streamImpl: (req: any, n: number) => Promise<AsyncIterable<any>>) {
   process.env.GEMINI_API_KEY = 'test-key-not-real';
   process.env.GEMINI_TIMEOUT_MS = '1000';
+  process.env.GEMINI_MAX_RPM = '0';
   __setSleepForTests(async () => {});
   const seen: any[] = [];
   __setClientFactoryForTests(() => ({ models: { generateContentStream: async (r: any) => { seen.push(r); return streamImpl(r, seen.length); } } }));
