@@ -106,9 +106,8 @@ export const ArenaMatchRoom = ({
   const [creating, setCreating] = useState(false);
   const [format, setFormat] = useState<ArenaMatchFormat>('1v1');
   const [scoringType, setScoringType] = useState<ArenaScoringType>('speed');
-  const [problemSource, setProblemSource] = useState<'builtin' | 'ai'>('builtin');
   const [battleTopic, setBattleTopic] = useState('');
-  const [battleDifficulty, setBattleDifficulty] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
+  const [battleDifficulty, setBattleDifficulty] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
   const [allowedLangs, setAllowedLangs] = useState<ArenaLanguage[]>(['javascript', 'typescript', 'python']);
   const [durationSeconds, setDurationSeconds] = useState<number>(420);
   const [customTitle, setCustomTitle] = useState('');
@@ -217,21 +216,19 @@ export const ArenaMatchRoom = ({
   const handleCreateMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const requestedTopic = battleTopic.trim();
-    if (problemSource === 'ai' && requestedTopic.length < 2) {
-      onNotify('Type a topic with at least 2 characters.', 'error');
+    if (requestedTopic.length === 1) {
+      onNotify('Type at least 2 characters for a topic, or leave it empty for a random one.', 'error');
       return;
     }
     setCreating(true);
     try {
-      let problemId = 'random';
-      if (problemSource === 'ai') {
-        try {
-          const generated = await generateArenaProblemApi(actor, { topic: requestedTopic, difficulty: battleDifficulty });
-          problemId = generated.problemId;
-        } catch (genErr: any) {
-          onNotify(`${genErr?.message || 'Could not generate a challenge.'} Switch to "Built-in problem" to start a duel without AI.`, 'error');
-          return;
-        }
+      let problemId = '';
+      try {
+        const generated = await generateArenaProblemApi(actor, { topic: requestedTopic, difficulty: battleDifficulty });
+        problemId = generated.problemId;
+      } catch (genErr: any) {
+        onNotify(`${genErr?.message || 'Could not generate a challenge.'} Please try again in a moment.`, 'error');
+        return;
       }
       const res = await createArenaMatchApi(actor, {
         title: customTitle.trim() || undefined,
@@ -1038,38 +1035,12 @@ export const ArenaMatchRoom = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <span className={`block text-xs font-medium ${textSecondary}`}>Problem source</span>
-            <div className="flex flex-wrap gap-2">
-              {([
-                ['builtin', 'Built-in problem (random, no AI needed)'],
-                ['ai', 'Generate with AI (type a topic)'],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={problemSource === value}
-                  onClick={() => setProblemSource(value)}
-                  className={`px-4 min-h-[44px] rounded-full text-sm font-medium border cursor-pointer ${
-                    problemSource === value
-                      ? 'bg-[var(--accent-600)] text-white border-[var(--accent-600)]'
-                      : `${borderClass} ${textPrimary} bg-[var(--surface-elevated)]`
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className={`text-xs ${textSecondary}`}>The problem is picked when you create the match and stays hidden from everyone, including you, until it starts.</p>
-          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {problemSource === 'ai' && (
             <div className="space-y-1.5">
-              <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-topic">Your topic <span className="font-normal opacity-75">(type any programming topic)</span></label>
-              <input id="arena-battle-topic" name="topic" type="text" required={problemSource === 'ai'} minLength={2} maxLength={120} autoComplete="off" value={battleTopic} onChange={(e) => setBattleTopic(e.target.value)} placeholder="Type a topic, e.g. recursion in JavaScript" className={inputClass} aria-describedby="arena-battle-topic-help" />
-              <p id="arena-battle-topic-help" className={`text-xs ${textSecondary}`}>You choose the topic by typing it here—there is no preset topic list. Groq will generate a new challenge based on exactly what you enter. <span className="tabular-nums">{battleTopic.length}/120</span></p>
+              <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-topic">Topic <span className="font-normal opacity-75">(optional, leave empty for a random AI question)</span></label>
+              <input id="arena-battle-topic" name="topic" type="text" minLength={2} maxLength={120} autoComplete="off" value={battleTopic} onChange={(e) => setBattleTopic(e.target.value)} placeholder="Optional, e.g. loops in Python" className={inputClass} aria-describedby="arena-battle-topic-help" />
+              <p id="arena-battle-topic-help" className={`text-xs ${textSecondary}`}>Every duel question is written fresh by AI for the difficulty you pick, from your topic or a random one. The question stays hidden until the match starts. <span className="tabular-nums">{battleTopic.length}/120</span></p>
             </div>
-            )}
             <div className="space-y-1.5">
               <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-difficulty">Difficulty</label>
               <select id="arena-battle-difficulty" value={battleDifficulty} onChange={(e) => setBattleDifficulty(e.target.value as typeof battleDifficulty)} className={inputClass}>
@@ -1116,8 +1087,8 @@ export const ArenaMatchRoom = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={creating || (problemSource === 'ai' && battleTopic.trim().length < 2)} className={btnPrimary}>
-              <Sparkles className="w-4 h-4" /> {creating ? 'Creating match…' : problemSource === 'ai' ? 'Generate Challenge & Open Match' : 'Open Match'}
+            <button type="submit" disabled={creating} className={btnPrimary}>
+              <Sparkles className="w-4 h-4" /> {creating ? 'Generating question…' : 'Generate Question & Open Match'}
             </button>
             <button type="button" onClick={() => setShowCreateForm(false)} className={btnSecondary}>
               Cancel

@@ -472,8 +472,11 @@ export function createArenaMatch(
   const teamSize = format === '2v2' ? Math.max(2, Math.min(4, Number(input.teamSize) || 2)) : 1;
   const scoringType: ArenaScoringType = input.scoringType === 'scored' ? 'scored' : 'speed';
   const requestedProblemId = String(input.problemId || '').trim();
-  const problem =
-    !requestedProblemId || requestedProblemId === 'random' ? pickBuiltInProblem(input.difficulty) : findProblem(requestedProblemId);
+  // Duels use AI-generated problems only: the client generates one first and passes its id.
+  if (!requestedProblemId || requestedProblemId === 'random') {
+    return { error: 'Generate an AI challenge first. Duels no longer use the built-in question bank.', status: 400 };
+  }
+  const problem = findProblem(requestedProblemId);
   if (!problem) return { error: 'That problem no longer exists. Pick another one or generate a new problem.', status: 400 };
   const allowedLanguages: ArenaLanguage[] =
     Array.isArray(input.allowedLanguages) && input.allowedLanguages.length > 0

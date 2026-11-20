@@ -92,7 +92,7 @@ export function createArenaMatchApi(
     format: ArenaMatchFormat;
     teamSize?: number;
     scoringType: ArenaScoringType;
-    /** A problem id, or 'random' to let the server pick a built-in problem of the given difficulty. */
+    /** The id of an AI-generated problem (from generateArenaProblemApi). */
     problemId: string;
     difficulty?: 'Beginner' | 'Intermediate' | 'Advanced';
     allowedLanguages: ArenaLanguage[];

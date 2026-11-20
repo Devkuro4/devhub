@@ -5,6 +5,11 @@ import { runIsolatedTests } from '../server/sandboxRunner.ts';
 
 // A known-good reference solution for every built-in problem. If a test case or description is wrong, this fails.
 const REFERENCE: Record<string, string> = {
+  'prob-largest-number': `function solve(nums) { return Math.max(...nums); }`,
+  'prob-reverse-string': `function solve(s) { return s.split('').reverse().join(''); }`,
+  'prob-count-evens': `function solve(nums) { return nums.filter((n) => n % 2 === 0).length; }`,
+  'prob-fizzbuzz': `function solve(n) { if (n % 15 === 0) return 'FizzBuzz'; if (n % 3 === 0) return 'Fizz'; if (n % 5 === 0) return 'Buzz'; return String(n); }`,
+  'prob-double-list': `function solve(nums) { return nums.map((n) => n * 2); }`,
   'prob-sum-list': `function solve(nums) { return nums.reduce((a, b) => a + b, 0); }`,
   'prob-count-vowels': `function solve(s) { return (s.match(/[aeiou]/gi) || []).length; }`,
   'prob-is-palindrome': `function solve(s) { const t = s.toLowerCase(); return t === t.split('').reverse().join(''); }`,

@@ -73,10 +73,9 @@ test('problem stays hidden until the match starts, then is revealed', async () =
   assert.ok('error' in late, 'submissions after the match ended must be rejected');
 });
 
-test('random built-in problem needs no AI, and unknown problem ids are rejected', () => {
-  const random = mustBeView(store.createArenaMatch(alice, { problemId: 'random', difficulty: 'Beginner' }));
-  assert.equal(random.problem.revealed, false);
-  assert.equal(random.problem.difficulty, 'Beginner');
+test('duels never fall back to the question bank, and unknown problem ids are rejected', () => {
+  const random = store.createArenaMatch(alice, { problemId: 'random', difficulty: 'Beginner' });
+  assert.ok('error' in random && random.status === 400, 'random/empty must not pick a built-in problem');
   const bad = store.createArenaMatch(alice, { problemId: 'ai-does-not-exist' });
   assert.ok('error' in bad && bad.status === 400);
 });
