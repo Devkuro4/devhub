@@ -28,13 +28,17 @@ import {
   reviewBountyApi,
   selectPotwWinnerApi,
   upsertSeasonApi,
+  updateArenaCompetitionApi,
+  deleteArenaCompetitionApi,
   type ArenaActorRef,
   type ArenaBootstrapResponse,
 } from '../lib/arenaClient';
 import type { CommunityEvent, CommunityPost, ContentReport, ModerationState, QuizItem } from '../types';
+import { apiPublishAnnouncement, apiUpdatePost, apiDeletePost, apiModeratePost } from '../lib/communityClient';
 
 export type AdminSubTab =
   | 'admin-dashboard'
+  | 'admin-announcements'
   | 'admin-members'
   | 'admin-support'
   | 'admin-activities'
@@ -121,6 +125,10 @@ export const AdminSection = ({
   // Announcement draft
   const [annTitle, setAnnTitle] = useState('');
   const [annBody, setAnnBody] = useState('');
+  const [annCategory, setAnnCategory] = useState('General announcements');
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
+  const [annSaving, setAnnSaving] = useState(false);
+
 
   // Quick Quiz Creator
   const [quizTitle, setQuizTitle] = useState('');
@@ -214,6 +222,28 @@ export const AdminSection = ({
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!annTitle.trim() || !annBody.trim()) return;
+    setAnnSaving(true);
+    try {
+    if (editingAnnouncementId) {
+      await apiUpdatePost(adminActor, editingAnnouncementId, {
+        title: annTitle.trim(), content: annBody.trim(), tags: [annCategory],
+      });
+      onNotify('Announcement updated.');
+    } else {
+      await apiPublishAnnouncement(adminActor, {
+        title: annTitle.trim(), content: annBody.trim(), category: annCategory,
+      });
+      onNotify('Announcement published to all members.');
+    }
+    setAnnTitle('');
+    setAnnBody('');
+    setEditingAnnouncementId(null);
+    // Refresh the shared community state from the server so member views stay in sync.
+    window.dispatchEvent(new CustomEvent('devhub:community-refresh'));
+    } catch (err: any) {
+      onNotify(err?.message || 'Could not save announcement.', 'error');
+    } finally { setAnnSaving(false); }
+    return;
     if (onCreateAnnouncement) {
       await onCreateAnnouncement(annTitle.trim(), annBody.trim());
     } else {
@@ -278,6 +308,7 @@ export const AdminSection = ({
 
   const adminTabs: { id: AdminSubTab; label: string; badge?: number }[] = [
     { id: 'admin-dashboard', label: 'Overview' },
+    { id: 'admin-announcements', label: 'Announcements' },
     { id: 'admin-members', label: 'Members', badge: teamRoster.length },
     { id: 'admin-support', label: 'Moderation & Help', badge: openHelp.length + openReports.length },
     { id: 'admin-activities', label: 'Activities & Competitions', badge: quizzes.length },
@@ -300,6 +331,51 @@ export const AdminSection = ({
       />
 
       <SectionTabs tabs={adminTabs} active={subTab} onChange={setSubTab} />
+
+      {/* ANNOUNCEMENT MANAGEMENT */}
+      {subTab === 'admin-announcements' && (
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-5">
+          <form onSubmit={handleCreateAnnouncement} className={`${cardClass} p-5 space-y-4`}>
+            <div>
+              <h2 className={`font-display text-xl ${textPrimary}`}>{editingAnnouncementId ? 'Edit announcement' : 'Create announcement'}</h2>
+              <p className={`text-xs mt-1 ${textSecondary}`}>Published announcements are shared with members through the community feed.</p>
+            </div>
+            <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="Announcement title" maxLength={180} required className={inputClass} />
+            <select value={annCategory} onChange={(e) => setAnnCategory(e.target.value)} className={inputClass}>
+              {['General announcements','Daily challenges','Weekly challenges','Bounties','Build-offs','Code Duels','Platform updates and notices'].map((c) => <option key={c}>{c}</option>)}
+            </select>
+            <textarea value={annBody} onChange={(e) => setAnnBody(e.target.value)} placeholder="Write the announcement..." maxLength={5000} rows={7} required className={`${inputClass} resize-y`} />
+            <div className="flex gap-2">
+              <button type="submit" disabled={annSaving} className={btnPrimary}>{annSaving ? 'Saving…' : editingAnnouncementId ? 'Save changes' : 'Publish announcement'}</button>
+              {editingAnnouncementId && <button type="button" className={btnSecondary} onClick={() => { setEditingAnnouncementId(null); setAnnTitle(''); setAnnBody(''); }}>Cancel</button>}
+            </div>
+            <p className={`text-[11px] ${textSecondary}`}>Scheduling is not currently implemented in this project; announcements publish immediately.</p>
+          </form>
+          <section className={`${cardClass} p-5 space-y-3`}>
+            <div className="flex items-center justify-between">
+              <h2 className={`font-display text-xl ${textPrimary}`}>Published announcements</h2>
+              <Badge variant="neutral">{announcements.length}</Badge>
+            </div>
+            {announcements.length === 0 ? <p className={`text-sm ${textSecondary}`}>No announcements have been created.</p> : announcements.map((item) => (
+              <article key={item.id} className={`rounded-xl border ${borderClass} p-4 space-y-2`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className={`font-semibold ${textPrimary}`}>{item.title}</h3>
+                    <p className={`text-[11px] ${textSecondary}`}>{item.tags?.[0] || 'General announcements'} · {item.createdAt ? new Date(item.createdAt).toLocaleString() : item.timestamp}</p>
+                  </div>
+                  <Badge variant={item.hidden ? 'warning' : 'success'}>{item.hidden ? 'Unpublished' : 'Published'}</Badge>
+                </div>
+                <p className={`text-sm whitespace-pre-wrap ${textSecondary}`}>{item.content}</p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" className={btnSecondary} onClick={() => { setEditingAnnouncementId(item.id); setAnnTitle(item.title); setAnnBody(item.content); setAnnCategory(item.tags?.[0] || 'General announcements'); }}>Edit</button>
+                  <button type="button" className={btnSecondary} onClick={async () => { try { await apiModeratePost(adminActor, item.id, { hidden: !item.hidden }); window.dispatchEvent(new CustomEvent('devhub:community-refresh')); onNotify(item.hidden ? 'Announcement published.' : 'Announcement unpublished.'); } catch (e: any) { onNotify(e?.message || 'Could not change publishing status.', 'error'); } }}>{item.hidden ? 'Publish' : 'Unpublish'}</button>
+                  <button type="button" className="text-xs text-[var(--danger-ink)] hover:underline" onClick={async () => { if (!window.confirm('Delete this announcement permanently?')) return; try { await apiDeletePost(adminActor, item.id); window.dispatchEvent(new CustomEvent('devhub:community-refresh')); onNotify('Announcement deleted.'); } catch (e: any) { onNotify(e?.message || 'Could not delete announcement.', 'error'); } }}>Delete</button>
+                </div>
+              </article>
+            ))}
+          </section>
+        </div>
+      )}
 
       {/* 1. OVERVIEW */}
       {subTab === 'admin-dashboard' && (
@@ -736,6 +812,23 @@ export const AdminSection = ({
                 <p className={`text-sm ${textSecondary}`}>
                   Launch challenges, bounties, and build-offs, moderate live arena matches, and judge official submissions.
                 </p>
+              </div>
+
+              <div className={`${cardClass} p-5 space-y-4`}>
+                <div className="flex items-center justify-between gap-3"><h3 className={`font-semibold ${textPrimary}`}>Manage published competitions</h3><span className={`text-xs ${textSecondary}`}>Live records and real participation</span></div>
+                {[...(arenaBootstrap.challenges || []).map((x) => ({ ...x, _kind: 'challenge' as const, _label: x.cadence === 'daily' ? 'Daily challenge' : 'Weekly challenge', _count: x.submissions?.length || 0 })),
+                  ...(arenaBootstrap.bounties || []).map((x) => ({ ...x, _kind: 'bounty' as const, _label: 'Bounty', _count: x.submissions?.length || 0 })),
+                  ...(arenaBootstrap.buildOffs || []).map((x) => ({ ...x, _kind: 'buildoff' as const, _label: 'Build-Off', _count: x.entries?.length || 0 }))].map((item) => (
+                  <div key={`${item._kind}-${item.id}`} className={`flex flex-col md:flex-row md:items-center justify-between gap-3 border-t ${borderClass} pt-3`}>
+                    <div className="min-w-0"><div className={`text-sm font-medium ${textPrimary}`}>{item.title}</div><div className={`text-xs ${textSecondary}`}>{item._label} · {('status' in item ? item.status : undefined) || 'Published'} · {item._count} participation record(s)</div></div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={btnSecondary} onClick={async () => { const title = window.prompt('Competition title', item.title); if (title === null) return; const description = window.prompt('Description / requirements', item.description || ''); if (description === null) return; try { await updateArenaCompetitionApi(adminActor, item._kind, item.id, { title, description }); onRefreshArena?.(); onNotify('Competition updated.'); } catch (e: any) { onNotify(e?.message || 'Could not update competition.', 'error'); } }}>Edit details</button>
+                      <button type="button" className={btnSecondary} onClick={async () => { const status = item._kind === 'challenge' ? (('status' in item && item.status === 'Closed') ? 'Open' : 'Closed') : (('status' in item && item.status === 'Completed') ? 'Open' : 'Completed'); try { await updateArenaCompetitionApi(adminActor, item._kind, item.id, { status }); onRefreshArena?.(); onNotify(`Competition ${status.toLowerCase()}.`); } catch (e: any) { onNotify(e?.message || 'Could not change status.', 'error'); } }}>{item._kind === 'challenge' ? (('status' in item && item.status === 'Closed') ? 'Reopen' : 'Close') : (('status' in item && item.status === 'Completed') ? 'Reopen' : 'Close')}</button>
+                      <button type="button" className="text-xs text-[var(--danger-ink)] hover:underline" onClick={async () => { if (!window.confirm('Delete this competition? Records with participation cannot be deleted.')) return; try { await deleteArenaCompetitionApi(adminActor, item._kind, item.id); onRefreshArena?.(); onNotify('Competition deleted.'); } catch (e: any) { onNotify(e?.message || 'Could not delete competition.', 'error'); } }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+                {!(arenaBootstrap.challenges?.length || arenaBootstrap.bounties?.length || arenaBootstrap.buildOffs?.length) && <p className={`text-sm ${textSecondary}`}>No competition records yet.</p>}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

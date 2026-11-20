@@ -971,6 +971,67 @@ export function cancelArenaMatch(
 // ============================================================================
 // CHALLENGES (DAILY & WEEKLY), TEAM BUILD-OFFS, POTW, BOUNTIES & SEASONS
 // ============================================================================
+/** Admin-only API callers may update competition metadata/status without replacing participant data. */
+export function updateArenaCompetition(kind: 'challenge' | 'bounty' | 'buildoff', id: string, patch: Record<string, unknown>) {
+  const item: any = kind === 'challenge' ? store.challenges.find((x) => x.id === id)
+    : kind === 'bounty' ? store.bounties.find((x) => x.id === id)
+    : store.buildOffs.find((x) => x.id === id);
+  if (!item) return { error: 'Competition not found.', status: 404 } as const;
+  const textFields = kind === 'challenge'
+    ? ['title', 'category', 'deadline', 'description']
+    : kind === 'bounty' ? ['title', 'category', 'description'] : ['title', 'theme', 'description', 'deadline'];
+  for (const key of textFields) {
+    if (patch[key] !== undefined) {
+      const value = String(patch[key]).trim();
+      if (!value || value.length > (key === 'description' ? 10000 : 180)) return { error: `Invalid ${key}.`, status: 400 } as const;
+      item[key] = value;
+    }
+  }
+  for (const dateField of ['startDate', 'deadline']) {
+    if (patch[dateField] === undefined) continue;
+    const value = String(patch[dateField]);
+    if (value && !/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(value)) return { error: `Invalid ${dateField}.`, status: 400 } as const;
+    item[dateField] = value || undefined;
+  }
+  if (patch.xpReward !== undefined) {
+    const xp = Number(patch.xpReward);
+    if (!Number.isInteger(xp) || xp < 0 || xp > 10000) return { error: 'Reward must be a whole number between 0 and 10000.', status: 400 } as const;
+    item.xpReward = xp;
+  }
+  if (kind === 'challenge' && patch.cadence !== undefined) {
+    if (!['daily', 'weekly'].includes(String(patch.cadence))) return { error: 'Invalid challenge cadence.', status: 400 } as const;
+    item.cadence = patch.cadence;
+  }
+  if (kind === 'bounty' && patch.status !== undefined) {
+    if (!['Open', 'Claimed', 'In Review', 'Completed'].includes(String(patch.status))) return { error: 'Invalid bounty status.', status: 400 } as const;
+    item.status = patch.status;
+  }
+  if (kind === 'buildoff' && patch.status !== undefined) {
+    if (!['Open', 'Judging', 'Completed'].includes(String(patch.status))) return { error: 'Invalid Build-Off status.', status: 400 } as const;
+    item.status = patch.status;
+  }
+  if (kind === 'challenge' && patch.status !== undefined) {
+    if (!['Open', 'Closed'].includes(String(patch.status))) return { error: 'Invalid challenge status.', status: 400 } as const;
+    item.status = patch.status;
+  }
+  saveStore();
+  emit({ type: 'arena:competitions_sync' });
+  return { item } as const;
+}
+
+export function deleteArenaCompetition(kind: 'challenge' | 'bounty' | 'buildoff', id: string) {
+  const list: any[] = kind === 'challenge' ? store.challenges : kind === 'bounty' ? store.bounties : store.buildOffs;
+  const index = list.findIndex((x) => x.id === id);
+  if (index < 0) return { error: 'Competition not found.', status: 404 } as const;
+  if ((list[index].submissions?.length || list[index].entries?.length || 0) > 0) {
+    return { error: 'This competition has participation records. Close it instead to preserve submissions and judging history.', status: 409 } as const;
+  }
+  list.splice(index, 1);
+  saveStore();
+  emit({ type: 'arena:competitions_sync' });
+  return { ok: true } as const;
+}
+
 export function createArenaChallenge(
   actor: { userId: string; userName: string; isAdmin: boolean },
   input: {
@@ -980,6 +1041,7 @@ export function createArenaChallenge(
     category: string;
     difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
     deadline: string;
+    startDate?: string;
     xpReward: number;
     problemId?: string;
     description: string;
@@ -989,11 +1051,13 @@ export function createArenaChallenge(
   const item: ArenaChallengeItem = {
     id: uid('ac'),
     cadence: input.cadence === 'daily' ? 'daily' : 'weekly',
+    status: 'Open',
     kind: input.kind === 'code' ? 'code' : 'build',
     title: String(input.title || '').trim(),
     category: String(input.category || 'Algorithms').trim(),
     difficulty: (['Beginner', 'Intermediate', 'Advanced'].includes(input.difficulty) ? input.difficulty : 'Beginner') as any,
     deadline: String(input.deadline || (input.cadence === 'daily' ? 'Resets Daily' : 'Sunday 23:59')).trim(),
+    startDate: input.startDate || undefined,
     xpReward: Math.max(15, Math.min(300, Number(input.xpReward) || 50)),
     problemId: input.kind === 'code' ? getProblemById(String(input.problemId || '')).id : undefined,
     description: String(input.description || '').trim(),
@@ -1015,6 +1079,8 @@ export async function submitArenaChallenge(
 ): Promise<{ challenge: ArenaChallengeItem; execution?: SandboxExecutionResult } | { error: string; status: number }> {
   const ch = store.challenges.find((c) => c.id === challengeId);
   if (!ch) return { error: 'Challenge not found.', status: 404 };
+  if (ch.status === 'Closed') return { error: 'This challenge is closed.', status: 409 };
+  if (ch.startDate && Date.parse(ch.startDate) > Date.now()) return { error: 'This challenge has not started yet.', status: 409 };
 
   let execution: SandboxExecutionResult | undefined;
   let status: ArenaChallengeSubmission['status'] = 'Submitted';
@@ -1092,6 +1158,7 @@ export function createTeamBuildOff(input: {
   teamSizeMin?: number;
   teamSizeMax?: number;
   deadline: string;
+  startDate?: string;
   xpReward?: number;
 }): TeamBuildOff {
   const item: TeamBuildOff = {
@@ -1102,6 +1169,7 @@ export function createTeamBuildOff(input: {
     teamSizeMin: Math.max(2, Number(input.teamSizeMin) || 2),
     teamSizeMax: Math.max(2, Math.min(6, Number(input.teamSizeMax) || 3)),
     deadline: String(input.deadline || '').trim() || 'Upcoming Sunday',
+    startDate: input.startDate || undefined,
     xpReward: Math.max(50, Math.min(400, Number(input.xpReward) || 150)),
     status: 'Open',
     entries: [],
@@ -1269,6 +1337,8 @@ export function createBounty(input: {
   category: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   description: string;
+  startDate?: string;
+  deadline?: string;
   acceptanceCriteria: string[];
   xpReward: number;
 }): BountyItem {
@@ -1278,6 +1348,8 @@ export function createBounty(input: {
     category: String(input.category || 'Engineering').trim(),
     difficulty: (['Beginner', 'Intermediate', 'Advanced'].includes(input.difficulty) ? input.difficulty : 'Beginner') as any,
     description: String(input.description || '').trim(),
+    startDate: input.startDate || undefined,
+    deadline: input.deadline || undefined,
     acceptanceCriteria: Array.isArray(input.acceptanceCriteria) ? input.acceptanceCriteria.filter(Boolean).slice(0, 6) : [],
     xpReward: Math.max(25, Math.min(400, Number(input.xpReward) || 90)),
     status: 'Open',

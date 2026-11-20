@@ -261,3 +261,11 @@ export function apiDeleteChatMessage(actor: CommunityActorRef, roomId: string, m
     reason ? { reason } : undefined
   );
 }
+
+
+// Admin announcement actions. The server enforces admin permissions for these operations.
+export function apiPublishAnnouncement(actor: CommunityActorRef, input: { title: string; content: string; category: string; tags?: string[] }) {
+  return apiReq<{ post: CommunityPost }>('POST', '/api/community/posts', actor, {
+    ...input, category: 'Announcement', tags: [input.category, ...(input.tags || [])], pinned: true,
+  });
+}

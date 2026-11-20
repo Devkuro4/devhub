@@ -133,7 +133,7 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
     const userName = typeof demoName === 'string' && demoName.trim() ? decodeURIComponent(demoName.trim()).slice(0, 80) : 'Member';
     res.locals.userId = userId;
     res.locals.userName = userName;
-    res.locals.isAdmin = !IS_PROD && (localAdminChecker ? localAdminChecker(userId) : userId.startsWith('admin:') || userId === 'tm-5');
+    res.locals.isAdmin = !IS_PROD && (localAdminChecker ? localAdminChecker(userId) : false);
     return next();
   }
 

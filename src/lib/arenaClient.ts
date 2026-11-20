@@ -74,6 +74,14 @@ export function fetchArenaBootstrap(actor: ArenaActorRef) {
   return apiReq<ArenaBootstrapResponse>('GET', '/api/arena/bootstrap', actor);
 }
 
+export function updateArenaCompetitionApi(actor: ArenaActorRef, kind: 'challenge' | 'bounty' | 'buildoff', id: string, patch: Record<string, unknown>) {
+  return apiReq<{ competition: any }>('PATCH', `/api/arena/competitions/${kind}/${encodeURIComponent(id)}`, actor, patch);
+}
+
+export function deleteArenaCompetitionApi(actor: ArenaActorRef, kind: 'challenge' | 'bounty' | 'buildoff', id: string) {
+  return apiReq<{ ok: true }>('DELETE', `/api/arena/competitions/${kind}/${encodeURIComponent(id)}`, actor);
+}
+
 export function fetchArenaMatches(actor: ArenaActorRef) {
   return apiReq<{ matches: ArenaMatchView[]; serverNowMs: number }>('GET', '/api/arena/matches', actor);
 }

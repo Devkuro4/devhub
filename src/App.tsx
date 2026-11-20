@@ -1224,6 +1224,12 @@ export default function App() {
     loadArenaBootstrap();
   }, [user?.id, user?.email, loadCommunityBootstrap, loadArenaBootstrap]);
 
+  useEffect(() => {
+    const refresh = () => { void loadCommunityBootstrap(true); };
+    window.addEventListener('devhub:community-refresh', refresh);
+    return () => window.removeEventListener('devhub:community-refresh', refresh);
+  }, [loadCommunityBootstrap]);
+
   // Live WebSocket client for Coding Arena & Competitions
   useEffect(() => {
     if (!user) {

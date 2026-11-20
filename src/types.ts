@@ -1026,11 +1026,13 @@ export interface ArenaChallengeSubmission {
 export interface ArenaChallengeItem {
   id: string;
   cadence: 'daily' | 'weekly';
+  status?: 'Open' | 'Closed';
   kind: 'code' | 'build';
   title: string;
   category: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   deadline: string;
+  startDate?: string;
   xpReward: number;
   problemId?: string;
   description: string;
@@ -1062,6 +1064,7 @@ export interface TeamBuildOff {
   teamSizeMin: number;
   teamSizeMax: number;
   deadline: string;
+  startDate?: string;
   xpReward: number;
   status: 'Open' | 'Judging' | 'Completed';
   entries: TeamBuildOffEntry[];
@@ -1102,6 +1105,8 @@ export interface BountyItem {
   category: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   description: string;
+  startDate?: string;
+  deadline?: string;
   acceptanceCriteria: string[];
   xpReward: number;
   status: 'Open' | 'Claimed' | 'In Review' | 'Completed';

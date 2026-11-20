@@ -85,6 +85,8 @@ import {
   registerCustomArenaProblem,
   createBounty,
   createTeamBuildOff,
+  updateArenaCompetition,
+  deleteArenaCompetition,
   forfeitArenaMatch,
   getArenaBootstrap,
   getArenaMatchForUser,
@@ -419,7 +421,7 @@ app.post('/api/community/session', (req, res) => {
   if (!AUTH_ENABLED && wantAdmin && expectedCode && adminCode !== expectedCode) {
     return res.status(403).json({ error: 'Invalid team lead code.' });
   }
-  const allowDemoAdmin = !AUTH_ENABLED && !isProd && wantAdmin && (!expectedCode || adminCode === expectedCode);
+  const allowDemoAdmin = !AUTH_ENABLED && !isProd && wantAdmin && Boolean(expectedCode) && adminCode === expectedCode;
   const profile = registerOrUpdateMemberProfile({
     id: userId,
     name,
@@ -715,12 +717,30 @@ app.post('/api/arena/matches/:id/cancel', (req, res) => {
   res.json(out);
 });
 
+// Administrator competition metadata and lifecycle controls. All mutations are role-checked here.
+app.patch('/api/arena/competitions/:kind/:id', requireAdmin, (req, res) => {
+  const kind = req.params.kind;
+  if (!['challenge', 'bounty', 'buildoff'].includes(kind)) return res.status(400).json({ error: 'Unknown competition type.' });
+  const out = updateArenaCompetition(kind as any, req.params.id, req.body || {});
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json({ competition: out.item });
+});
+
+app.delete('/api/arena/competitions/:kind/:id', requireAdmin, (req, res) => {
+  const kind = req.params.kind;
+  if (!['challenge', 'bounty', 'buildoff'].includes(kind)) return res.status(400).json({ error: 'Unknown competition type.' });
+  const out = deleteArenaCompetition(kind as any, req.params.id);
+  if ('error' in out) return res.status(out.status).json({ error: out.error });
+  res.json(out);
+});
+
 // Challenges (Daily & Weekly)
 app.post('/api/arena/challenges', requireAdmin, (req, res) => {
   const body = req.body || {};
   if (!String(body.title || '').trim()) {
     return res.status(400).json({ error: 'Challenge title is required.' });
   }
+  if (body.startDate && (!/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(String(body.startDate)) || Number.isNaN(Date.parse(String(body.startDate))))) return res.status(400).json({ error: 'A valid start date is required.' });
   const challenge = createArenaChallenge(actorOf(res), {
     cadence: body.cadence === 'daily' ? 'daily' : 'weekly',
     kind: body.kind === 'code' ? 'code' : 'build',
@@ -728,6 +748,7 @@ app.post('/api/arena/challenges', requireAdmin, (req, res) => {
     category: String(body.category || 'Algorithms'),
     difficulty: body.difficulty || 'Beginner',
     deadline: String(body.deadline || ''),
+    startDate: body.startDate ? String(body.startDate) : undefined,
     xpReward: Number(body.xpReward) || 50,
     problemId: body.problemId,
     description: String(body.description || ''),
@@ -760,6 +781,7 @@ app.post('/api/arena/challenges/:id/submissions/:subId/judge', requireAdmin, (re
 app.post('/api/arena/build-offs', requireAdmin, (req, res) => {
   const body = req.body || {};
   if (!String(body.title || '').trim()) return res.status(400).json({ error: 'Build-Off title is required.' });
+  if (body.startDate && (!/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(String(body.startDate)) || Number.isNaN(Date.parse(String(body.startDate))))) return res.status(400).json({ error: 'A valid start date is required.' });
   const buildOff = createTeamBuildOff({
     title: String(body.title),
     theme: String(body.theme || 'Full-Stack'),
@@ -767,6 +789,7 @@ app.post('/api/arena/build-offs', requireAdmin, (req, res) => {
     teamSizeMin: Number(body.teamSizeMin) || 2,
     teamSizeMax: Number(body.teamSizeMax) || 3,
     deadline: String(body.deadline || 'Sunday'),
+    startDate: body.startDate ? String(body.startDate) : undefined,
     xpReward: Number(body.xpReward) || 150,
   });
   res.status(201).json({ buildOff });
@@ -817,11 +840,15 @@ app.post('/api/arena/potw/:id/select-winner', requireAdmin, (req, res) => {
 app.post('/api/arena/bounties', requireAdmin, (req, res) => {
   const body = req.body || {};
   if (!String(body.title || '').trim()) return res.status(400).json({ error: 'Bounty title is required.' });
+  if (body.startDate && (!/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(String(body.startDate)) || Number.isNaN(Date.parse(String(body.startDate))))) return res.status(400).json({ error: 'A valid start date is required.' });
+  if (body.deadline && (!/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(String(body.deadline)) || Number.isNaN(Date.parse(String(body.deadline))))) return res.status(400).json({ error: 'A valid deadline is required.' });
   const bounty = createBounty({
     title: String(body.title),
     category: String(body.category || 'Engineering'),
     difficulty: body.difficulty || 'Beginner',
     description: String(body.description || ''),
+    startDate: body.startDate ? String(body.startDate) : undefined,
+    deadline: body.deadline ? String(body.deadline) : undefined,
     acceptanceCriteria: Array.isArray(body.acceptanceCriteria) ? body.acceptanceCriteria : [],
     xpReward: Number(body.xpReward) || 90,
   });

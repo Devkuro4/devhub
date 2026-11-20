@@ -193,8 +193,7 @@ export function isUserAdmin(userId: string): boolean {
   const profile = store.memberProfiles[userId];
   if (profile?.role === 'Community Admin') return true;
   const rosterHit = store.teamRoster.find((m) => m.id === userId);
-  if (rosterHit?.role === 'Community Admin') return true;
-  return userId === 'tm-5' || userId === 'admin' || userId.startsWith('admin:');
+  return rosterHit?.role === 'Community Admin';
 }
 
 export function getMemberRole(userId: string): string {
@@ -203,7 +202,6 @@ export function getMemberRole(userId: string): string {
   if (profile?.role) return profile.role;
   const rosterHit = store.teamRoster.find((m) => m.id === userId);
   if (rosterHit?.role) return rosterHit.role;
-  if (userId.startsWith('admin:') || userId === 'admin') return 'Community Admin';
   return 'Member';
 }
 

@@ -80,7 +80,7 @@ export const ArenaChallengesPanel = ({
 
   const myUserId = actor.userId || 'local-member';
   const filtered = useMemo(
-    () => (filter === 'all' ? challenges : challenges.filter((c) => c.cadence === filter)),
+    () => (filter === 'all' ? challenges : challenges.filter((c) => c.cadence === filter)).filter((c) => c.status !== 'Closed'),
     [challenges, filter]
   );
 
