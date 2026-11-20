@@ -149,7 +149,6 @@ export const AdminSection = ({
   const [bountyCategory, setBountyCategory] = useState('Frontend');
   const [bountyXp, setBountyXp] = useState(90);
   const [bountyDesc, setBountyDesc] = useState('');
-  const [bountyDeadline, setBountyDeadline] = useState('');
 
   const [boTitle, setBoTitle] = useState('');
   const [boTheme, setBoTheme] = useState('Developer Tooling');
@@ -807,11 +806,9 @@ export const AdminSection = ({
                         description: bountyDesc.trim() || bountyTitle.trim(),
                         acceptanceCriteria: ['Verified working solution linked cleanly'],
                         xpReward: bountyXp,
-                        deadline: bountyDeadline || undefined,
                       });
                       setBountyTitle('');
                       setBountyDesc('');
-                      setBountyDeadline('');
                       onRefreshArena?.();
                       onNotify('Published Bounty.');
                     } catch (err: any) {
@@ -828,7 +825,6 @@ export const AdminSection = ({
                     <input value={bountyCategory} onChange={(e) => setBountyCategory(e.target.value)} placeholder="Category" className={inputClass} />
                     <input type="number" min={25} max={400} value={bountyXp} onChange={(e) => setBountyXp(Number(e.target.value))} placeholder="XP" className={inputClass} />
                   </div>
-                  <input type="date" value={bountyDeadline} onChange={(e) => setBountyDeadline(e.target.value)} className={inputClass} aria-label="Bounty deadline" />
                   <textarea rows={3} value={bountyDesc} onChange={(e) => setBountyDesc(e.target.value)} placeholder="Problem scope and acceptance criteria" className={inputClass} />
                   <button type="submit" className={btnPrimary}>Publish Bounty</button>
                 </form>

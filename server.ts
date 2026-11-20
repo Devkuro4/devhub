@@ -20,6 +20,7 @@ import {
   testAiConnection,
   updateAiSettings,
   evaluateShortAnswer,
+  generateArenaProblem,
   explainMaterialExcerpt,
   aiErrorStatus,
 } from './server/aiService.ts';
@@ -81,6 +82,7 @@ import {
   claimOrReleaseBounty,
   createArenaChallenge,
   createArenaMatch,
+  registerCustomArenaProblem,
   createBounty,
   createTeamBuildOff,
   forfeitArenaMatch,
@@ -97,8 +99,6 @@ import {
   selectPotwWinner,
   setArenaParticipantReady,
   submitArenaChallenge,
-  sanitizeChallengeForViewer,
-  sanitizeBountyForViewer,
   submitBountyProof,
   submitMatchSolution,
   togglePotwVote,
@@ -106,8 +106,6 @@ import {
 } from './server/arenaStore.ts';
 import { setupArenaServer } from './server/arenaServer.ts';
 import { getSandboxStatus } from './server/sandboxRunner.ts';
-import { generateJson, getConfiguredModel } from './server/groqClient.ts';
-import { registerGeneratedArenaProblem } from './server/arenaStore.ts';
 
 setLocalAdminChecker(isUserAdmin);
 
@@ -617,73 +615,26 @@ app.get('/api/arena/sandbox-status', (_req, res) => {
   res.json(getSandboxStatus());
 });
 
-// Groq creates a structured coding prompt and server-only grading cases. The browser receives
-// requirements/examples/starter code only; hidden inputs and expected outputs never leave server.
-const duelGenerationAttempts = new Map<string, number[]>();
-const generatedDuelSchema = {
-  type: 'object',
-  required: ['title', 'category', 'difficulty', 'timeLimitSeconds', 'description', 'constraints', 'examples', 'entryPoint', 'starterCode', 'testCases'],
-  properties: {
-    title: { type: 'string' }, category: { type: 'string' }, difficulty: { type: 'string' },
-    timeLimitSeconds: { type: 'number' }, description: { type: 'string' },
-    constraints: { type: 'array', items: { type: 'string' } },
-    examples: { type: 'array', items: { type: 'object', required: ['input', 'output'], properties: { input: { type: 'string' }, output: { type: 'string' }, explanation: { type: 'string' } } } },
-    entryPoint: { type: 'string' },
-    starterCode: { type: 'object', required: ['javascript', 'typescript', 'python'], properties: { javascript: { type: 'string' }, typescript: { type: 'string' }, python: { type: 'string' } } },
-    testCases: { type: 'array', items: { type: 'object', required: ['args', 'expected', 'hidden'], properties: { args: { type: 'array' }, expected: {}, hidden: { type: 'boolean' } } } },
-  },
-};
-
-app.post('/api/arena/duel-challenges/generate', async (req, res) => {
-  const actor = actorOf(res);
-  const now = Date.now();
-  const recent = (duelGenerationAttempts.get(actor.userId) || []).filter((at) => now - at < 60_000);
-  if (recent.length >= 3) return res.status(429).json({ error: 'You can generate up to 3 AI duel challenges per minute. Please wait before trying again.' });
-  recent.push(now);
-  duelGenerationAttempts.set(actor.userId, recent);
-  const topic = String(req.body?.topic || 'Algorithms').trim().slice(0, 80);
-  const language = ['javascript', 'typescript', 'python'].includes(String(req.body?.language)) ? String(req.body.language) : 'javascript';
-  const difficulty = ['Beginner', 'Intermediate', 'Advanced'].includes(String(req.body?.difficulty)) ? String(req.body.difficulty) : 'Beginner';
-  try {
-    const generated = await generateJson<any>({
-      model: getConfiguredModel(),
-      systemInstruction: 'You are a rigorous programming contest author. Produce original, deterministic function-based coding problems. All test cases must be valid JSON values. Include at least 3 visible and 5 hidden edge-case tests. Keep the function entry point consistent across all three starter-code languages. Never include solutions in descriptions, examples, or starter code. Return JSON only.',
-      prompt: `Create one ${difficulty} programming challenge about ${topic}. Target language preference: ${language}. Use a single function named solve. Ensure examples and tests are consistent with the stated requirements. Hidden tests must cover meaningful edge cases. timeLimitSeconds must be between 180 and 1800.`,
-      schema: generatedDuelSchema,
-      validate: (raw) => {
-        const d = raw as any;
-        const tests = Array.isArray(d.testCases) ? d.testCases : [];
-        if (typeof d.title !== 'string' || d.title.length < 5 || typeof d.description !== 'string' || d.description.length < 30) throw new Error('Challenge description is incomplete.');
-        if (!Array.isArray(d.constraints) || d.constraints.length < 1 || !Array.isArray(d.examples) || d.examples.length < 1) throw new Error('Challenge requirements or examples are missing.');
-        if (!d.starterCode || !['javascript','typescript','python'].every((l) => typeof d.starterCode[l] === 'string' && d.starterCode[l].length < 12000)) throw new Error('Starter code is invalid.');
-        if (tests.length < 8 || tests.length > 30 || tests.filter((t: any) => t.hidden).length < 5 || tests.some((t: any) => !Array.isArray(t.args) || t.args.length > 12 || typeof t.hidden !== 'boolean' || !('expected' in t) || JSON.stringify(t).length > 5000)) throw new Error('The generated grading suite is incomplete or too large.');
-        if (!tests.some((t: any) => !t.hidden)) throw new Error('At least one visible test is required.');
-        const entryPoint = String(d.entryPoint || 'solve').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || 'solve';
-        return {
-          title: d.title.slice(0, 100), category: topic, difficulty,
-          timeLimitSeconds: Math.max(180, Math.min(1800, Math.round(Number(d.timeLimitSeconds) || 600))),
-          scoringRule: 'Score is calculated exclusively by the server from isolated visible and hidden test execution.',
-          description: d.description.slice(0, 5000), constraints: d.constraints.slice(0, 12).map((x: any) => String(x).slice(0, 300)),
-          examples: d.examples.slice(0, 5).map((x: any) => ({ input: String(x.input).slice(0, 500), output: String(x.output).slice(0, 500), explanation: x.explanation ? String(x.explanation).slice(0, 300) : undefined })),
-          entryPoint: 'solve', starterCode: d.starterCode,
-          testCases: tests.map((t: any, i: number) => ({ id: `case-${i + 1}`, label: t.hidden ? `Hidden case ${i + 1}` : `Example case ${i + 1}`, args: t.args, expected: t.expected, hidden: t.hidden })),
-        };
-      },
-    });
-    const problem = registerGeneratedArenaProblem(generated.data);
-    res.status(201).json({ problem: { ...problem, testCases: problem.testCases.filter((t) => !t.hidden) }, model: generated.model });
-  } catch (error: any) {
-    res.status(error?.status || 503).json({ error: error?.message || 'Could not generate a duel challenge. Please try again.' });
-  }
-});
-
 app.get('/api/arena/bootstrap', (req, res) => {
-  const actor = actorOf(res);
-  res.json(getArenaBootstrap(actor.userId, actor.isAdmin));
+  res.json(getArenaBootstrap(getUserId(req, res)));
 });
 
 app.get('/api/arena/matches', (req, res) => {
   res.json({ matches: listArenaMatches(getUserId(req, res)), serverNowMs: Date.now() });
+});
+
+app.post('/api/arena/generate-problem', async (req, res) => {
+  try {
+    const actor = actorOf(res);
+    const problem = await generateArenaProblem(actor.userId, {
+      topic: String(req.body?.topic || ''),
+      difficulty: req.body?.difficulty,
+    });
+    registerCustomArenaProblem(problem);
+    res.status(201).json({ problem });
+  } catch (err: any) {
+    res.status(aiErrorStatus(err)).json({ error: err?.message || 'Could not generate a coding challenge.' });
+  }
 });
 
 app.post('/api/arena/matches', (req, res) => {
@@ -788,7 +739,7 @@ app.post('/api/arena/challenges/:id/submit', async (req, res) => {
     const actor = actorOf(res);
     const out = await submitArenaChallenge(req.params.id, { userId: actor.userId, userName: actor.userName }, req.body || {});
     if ('error' in out) return res.status(out.status).json({ error: out.error });
-    res.json({ ...out, challenge: sanitizeChallengeForViewer(out.challenge, actor.userId, actor.isAdmin) });
+    res.json(out);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Could not evaluate challenge submission.' });
   }
@@ -871,7 +822,6 @@ app.post('/api/arena/bounties', requireAdmin, (req, res) => {
     description: String(body.description || ''),
     acceptanceCriteria: Array.isArray(body.acceptanceCriteria) ? body.acceptanceCriteria : [],
     xpReward: Number(body.xpReward) || 90,
-    deadline: String(body.deadline || ''),
   });
   res.status(201).json({ bounty });
 });
@@ -881,7 +831,7 @@ app.post('/api/arena/bounties/:id/claim', (req, res) => {
   const action = req.body?.action === 'release' ? 'release' : 'claim';
   const out = claimOrReleaseBounty(req.params.id, { userId: actor.userId, userName: actor.userName }, action);
   if ('error' in out) return res.status(out.status).json({ error: out.error });
-  res.json({ ...out, bounty: sanitizeBountyForViewer(out.bounty, actor.userId, actor.isAdmin) });
+  res.json(out);
 });
 
 app.post('/api/arena/bounties/:id/submit', (req, res) => {
@@ -892,7 +842,7 @@ app.post('/api/arena/bounties/:id/submit', (req, res) => {
     notes: String(req.body?.notes || ''),
   });
   if ('error' in out) return res.status(out.status).json({ error: out.error });
-  res.json({ ...out, bounty: sanitizeBountyForViewer(out.bounty, actor.userId, actor.isAdmin) });
+  res.json(out);
 });
 
 app.post('/api/arena/bounties/:id/review', requireAdmin, (req, res) => {

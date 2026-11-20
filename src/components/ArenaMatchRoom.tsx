@@ -27,8 +27,8 @@ import {
   cancelArenaMatchApi,
   claimDisconnectWinApi,
   createArenaMatchApi,
+  generateArenaProblemApi,
   forfeitArenaMatchApi,
-  generateDuelChallengeApi,
   joinArenaMatchApi,
   runMatchTestsApi,
   setArenaReadyApi,
@@ -104,21 +104,10 @@ export const ArenaMatchRoom = ({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [lobbyFilter, setLobbyFilter] = useState<'all' | 'open' | 'finished'>('all');
   const [creating, setCreating] = useState(false);
-  const [generatingChallenge, setGeneratingChallenge] = useState(false);
-  const [generatedProblem, setGeneratedProblem] = useState<ArenaProblem | null>(null);
-  const [generationLanguage, setGenerationLanguage] = useState<ArenaLanguage>('javascript');
   const [format, setFormat] = useState<ArenaMatchFormat>('1v1');
   const [scoringType, setScoringType] = useState<ArenaScoringType>('speed');
-  const [problemId, setProblemId] = useState<string>(problems[0]?.id || 'prob-two-sum');
-  const [problemTopic, setProblemTopic] = useState('All topics');
-  const [problemDifficulty, setProblemDifficulty] = useState<'All levels' | 'Beginner' | 'Intermediate' | 'Advanced'>('All levels');
-  const availableProblems = useMemo(() => generatedProblem && !problems.some((p) => p.id === generatedProblem.id) ? [generatedProblem, ...problems] : problems, [problems, generatedProblem]);
-  const problemTopics = useMemo(() => ['All topics', ...Array.from(new Set(availableProblems.map((problem) => problem.category))).sort()], [availableProblems]);
-  const filteredProblems = useMemo(() => availableProblems.filter((problem) =>
-    (problemTopic === 'All topics' || problem.category === problemTopic) &&
-    (problemDifficulty === 'All levels' || problem.difficulty === problemDifficulty)
-  ), [availableProblems, problemTopic, problemDifficulty]);
-  const selectedProblemId = filteredProblems.some((problem) => problem.id === problemId) ? problemId : (filteredProblems[0]?.id || '');
+  const [battleTopic, setBattleTopic] = useState('');
+  const [battleDifficulty, setBattleDifficulty] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [allowedLangs, setAllowedLangs] = useState<ArenaLanguage[]>(['javascript', 'typescript', 'python']);
   const [durationSeconds, setDurationSeconds] = useState<number>(420);
   const [customTitle, setCustomTitle] = useState('');
@@ -216,43 +205,27 @@ export const ArenaMatchRoom = ({
     });
   };
 
-  const handleGenerateChallenge = async () => {
-    setGeneratingChallenge(true);
-    try {
-      const topic = problemTopic === 'All topics' ? 'Algorithms and problem solving' : problemTopic;
-      const difficulty = problemDifficulty === 'All levels' ? 'Beginner' : problemDifficulty;
-      const result = await generateDuelChallengeApi(actor, { topic, difficulty, language: generationLanguage });
-      setGeneratedProblem(result.problem);
-      setProblemId(result.problem.id);
-      setProblemTopic(result.problem.category);
-      setProblemDifficulty(result.problem.difficulty);
-      setDurationSeconds(result.problem.timeLimitSeconds);
-      onMatchesChanged();
-      onNotify(`Generated: ${result.problem.title}`);
-    } catch (err: any) {
-      onNotify(err?.message || 'Could not generate a challenge. Check Groq configuration.', 'error');
-    } finally {
-      setGeneratingChallenge(false);
-    }
-  };
-
   const handleCreateMatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    const requestedTopic = battleTopic.trim();
+    if (requestedTopic.length < 2) {
+      onNotify('Type a topic with at least 2 characters.', 'error');
+      return;
+    }
     setCreating(true);
     try {
-      if (!selectedProblemId) {
-        throw new Error('Choose a problem that matches your selected topic and difficulty.');
-      }
+      const generated = await generateArenaProblemApi(actor, { topic: requestedTopic, difficulty: battleDifficulty });
       const res = await createArenaMatchApi(actor, {
         title: customTitle.trim() || undefined,
         format,
         teamSize: format === '2v2' ? 2 : 1,
         scoringType,
-        problemId: selectedProblemId,
+        problemId: generated.problem.id,
         allowedLanguages: allowedLangs,
         durationSeconds,
       });
       setCustomTitle('');
+      setBattleTopic('');
       setShowCreateForm(false);
       onMatchesChanged();
       onSelectMatch(res.match.id);
@@ -1010,44 +983,26 @@ export const ArenaMatchRoom = ({
                 <option value={420}>7 minutes</option>
                 <option value={600}>10 minutes</option>
                 <option value={900}>15 minutes</option>
-                <option value={1800}>30 minutes</option>
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className={`block text-xs font-medium ${textSecondary}`}>Topic</label>
-              <select value={problemTopic} onChange={(e) => setProblemTopic(e.target.value)} className={inputClass}>
-                {problemTopics.map((topic) => <option key={topic} value={topic}>{topic}</option>)}
-              </select>
+              <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-topic">Your topic <span className="font-normal opacity-75">(type any programming topic)</span></label>
+              <input id="arena-battle-topic" name="topic" type="text" required minLength={2} maxLength={120} autoComplete="off" value={battleTopic} onChange={(e) => setBattleTopic(e.target.value)} placeholder="Type a topic, e.g. recursion in JavaScript" className={inputClass} aria-describedby="arena-battle-topic-help" />
+              <p id="arena-battle-topic-help" className={`text-xs ${textSecondary}`}>You choose the topic by typing it here—there is no preset topic list. Groq will generate a new challenge based on exactly what you enter. <span className="tabular-nums">{battleTopic.length}/120</span></p>
             </div>
             <div className="space-y-1.5">
-              <label className={`block text-xs font-medium ${textSecondary}`}>Difficulty</label>
-              <select value={problemDifficulty} onChange={(e) => setProblemDifficulty(e.target.value as typeof problemDifficulty)} className={inputClass}>
-                {(['All levels', 'Beginner', 'Intermediate', 'Advanced'] as const).map((level) => <option key={level} value={level}>{level}</option>)}
+              <label className={`block text-xs font-medium ${textSecondary}`} htmlFor="arena-battle-difficulty">Difficulty</label>
+              <select id="arena-battle-difficulty" value={battleDifficulty} onChange={(e) => setBattleDifficulty(e.target.value as typeof battleDifficulty)} className={inputClass}>
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
               </select>
             </div>
-            <div className="space-y-1.5">
-              <label className={`block text-xs font-medium ${textSecondary}`}>Shared Problem</label>
-              <select value={selectedProblemId} onChange={(e) => setProblemId(e.target.value)} className={inputClass} disabled={!filteredProblems.length}>
-                {filteredProblems.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
-              {!filteredProblems.length && <p className={`text-xs ${textSecondary}`}>No problems match these filters.</p>}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <select value={generationLanguage} onChange={(e) => setGenerationLanguage(e.target.value as ArenaLanguage)} className={inputClass} aria-label="Generated challenge language">
-                  <option value="javascript">JavaScript</option><option value="typescript">TypeScript</option><option value="python">Python</option>
-                </select>
-                <button type="button" onClick={handleGenerateChallenge} disabled={generatingChallenge} className={btnSecondary}>
-                  <Sparkles className="w-4 h-4" /> {generatingChallenge ? 'Generating…' : 'Generate with Groq'}
-                </button>
-              </div>
-              <p className={`mt-1 text-xs ${textSecondary}`}>AI challenges are saved to the Arena. Hidden grading cases stay on the server.</p>
-            </div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className={`block text-xs font-medium ${textSecondary}`}>Custom Match Title (Optional)</label>
               <input
@@ -1084,8 +1039,8 @@ export const ArenaMatchRoom = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={creating} className={btnPrimary}>
-              {creating ? 'Creating Match…' : 'Open Match Room'}
+            <button type="submit" disabled={creating || battleTopic.trim().length < 2} className={btnPrimary}>
+              <Sparkles className="w-4 h-4" /> {creating ? 'Generating challenge…' : 'Generate Challenge & Open Match'}
             </button>
             <button type="button" onClick={() => setShowCreateForm(false)} className={btnSecondary}>
               Cancel
