@@ -78,6 +78,10 @@ export function fetchArenaMatches(actor: ArenaActorRef) {
   return apiReq<{ matches: ArenaMatchView[]; serverNowMs: number }>('GET', '/api/arena/matches', actor);
 }
 
+export function generateDuelChallengeApi(actor: ArenaActorRef, input: { topic: string; difficulty: 'Beginner' | 'Intermediate' | 'Advanced'; language: ArenaLanguage }) {
+  return apiReq<{ problem: ArenaProblem; model: string }>('POST', '/api/arena/duel-challenges/generate', actor, input);
+}
+
 export function createArenaMatchApi(
   actor: ArenaActorRef,
   input: {
@@ -258,6 +262,7 @@ export function createBountyApi(
     description: string;
     acceptanceCriteria: string[];
     xpReward: number;
+    deadline?: string;
   }
 ) {
   return apiReq<{ bounty: BountyItem }>('POST', '/api/arena/bounties', actor, input);

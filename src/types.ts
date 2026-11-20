@@ -1099,6 +1099,7 @@ export interface BountyItem {
   description: string;
   acceptanceCriteria: string[];
   xpReward: number;
+  deadline?: string;
   status: 'Open' | 'Claimed' | 'In Review' | 'Completed';
   claimedById?: string;
   claimedByName?: string;

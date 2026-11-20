@@ -799,6 +799,7 @@ export const BountyBoardPanel = ({
                     </div>
                     <h3 className={`text-lg font-semibold ${textPrimary}`}>{b.title}</h3>
                     <p className={`text-sm ${textSecondary}`}>{b.description}</p>
+                    {b.deadline && <p className={`text-xs ${textSecondary}`}>Deadline: {new Date(`${b.deadline}T23:59:59`).toLocaleDateString()}</p>}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">

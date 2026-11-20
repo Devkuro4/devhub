@@ -74,6 +74,7 @@ interface InternalArenaMatch {
 
 interface PersistedArenaStore {
   matches: InternalArenaMatch[];
+  generatedProblems: ArenaProblem[];
   challenges: ArenaChallengeItem[];
   buildOffs: TeamBuildOff[];
   potwNominations: ProjectOfTheWeekNomination[];
@@ -113,6 +114,7 @@ function uid(prefix: string): string {
 function createInitialStore(): PersistedArenaStore {
   return {
     matches: [],
+    generatedProblems: [],
     challenges: INITIAL_ARENA_CHALLENGES.map((c) => ({ ...c, submissions: [...(c.submissions || [])] })),
     buildOffs: INITIAL_TEAM_BUILD_OFFS.map((b) => ({ ...b, entries: [...(b.entries || [])] })),
     potwNominations: [],
@@ -129,6 +131,7 @@ function loadStore(): PersistedArenaStore {
     const parsed = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
     return {
       matches: Array.isArray(parsed.matches) ? parsed.matches : [],
+      generatedProblems: Array.isArray(parsed.generatedProblems) ? parsed.generatedProblems : [],
       challenges: Array.isArray(parsed.challenges) && parsed.challenges.length ? parsed.challenges : base.challenges,
       buildOffs: Array.isArray(parsed.buildOffs) && parsed.buildOffs.length ? parsed.buildOffs : base.buildOffs,
       potwNominations: Array.isArray(parsed.potwNominations) ? parsed.potwNominations : [],
@@ -155,8 +158,20 @@ function saveStore() {
 }
 
 function getProblemById(problemId: string): ArenaProblem {
-  return ARENA_PROBLEMS.find((p) => p.id === problemId) || ARENA_PROBLEMS[0];
+  return [...ARENA_PROBLEMS, ...store.generatedProblems].find((p) => p.id === problemId) || ARENA_PROBLEMS[0];
 }
+
+/** Register a validated Groq-generated problem. Hidden tests remain in the server store and are
+ * omitted by sanitizeMatchForUser. IDs are server-assigned to prevent client-side substitution. */
+export function registerGeneratedArenaProblem(problem: Omit<ArenaProblem, 'id'>): ArenaProblem {
+  const saved: ArenaProblem = { ...problem, id: uid('ai-problem') };
+  store.generatedProblems.unshift(saved);
+  store.generatedProblems = store.generatedProblems.slice(0, 40);
+  saveStore();
+  emit({ type: 'arena:competitions_sync' });
+  return saved;
+}
+
 
 // Strict privacy filter: NEVER expose another team's private workspace (code or private team chat).
 export function sanitizeMatchForUser(match: InternalArenaMatch, viewerUserId?: string): ArenaMatchView {
@@ -863,6 +878,10 @@ export async function submitArenaChallenge(
 ): Promise<{ challenge: ArenaChallengeItem; execution?: SandboxExecutionResult } | { error: string; status: number }> {
   const ch = store.challenges.find((c) => c.id === challengeId);
   if (!ch) return { error: 'Challenge not found.', status: 404 };
+  const priorSubmission = ch.submissions.find((submission) => submission.userId === actor.userId);
+  if (priorSubmission?.status === 'Verified') {
+    return { error: 'Your solution is already verified. Verified results are locked to prevent duplicate scoring.', status: 409 };
+  }
 
   let execution: SandboxExecutionResult | undefined;
   let status: ArenaChallengeSubmission['status'] = 'Submitted';
@@ -1021,6 +1040,7 @@ export function judgeBuildOff(
   entry.judgeFeedback = String(input.judgeFeedback || '').trim();
 
   if (input.declareWinner) {
+    if (bo.status === 'Completed' && bo.winnerEntryId) return { error: 'This Build-Off already has an official winner.', status: 409 };
     bo.entries.forEach((e) => {
       e.isWinner = e.id === entry.id;
     });
@@ -1094,6 +1114,7 @@ export function selectPotwWinner(
 ): { nomination: ProjectOfTheWeekNomination } | { error: string; status: number } {
   const nom = store.potwNominations.find((n) => n.id === nominationId);
   if (!nom) return { error: 'Project nomination not found.', status: 404 };
+  if (nom.isWinner) return { error: 'This project has already been selected as the winner.', status: 409 };
   nom.isWinner = true;
   nom.judgeNote = String(judgeNote || '').trim() || 'Selected by Community Admin judging panel.';
   store.history.unshift({
@@ -1119,6 +1140,7 @@ export function createBounty(input: {
   description: string;
   acceptanceCriteria: string[];
   xpReward: number;
+  deadline?: string;
 }): BountyItem {
   const item: BountyItem = {
     id: uid('bounty'),
@@ -1128,6 +1150,7 @@ export function createBounty(input: {
     description: String(input.description || '').trim(),
     acceptanceCriteria: Array.isArray(input.acceptanceCriteria) ? input.acceptanceCriteria.filter(Boolean).slice(0, 6) : [],
     xpReward: Math.max(25, Math.min(400, Number(input.xpReward) || 90)),
+    deadline: String(input.deadline || '').trim() || undefined,
     status: 'Open',
     submissions: [],
     createdAt: new Date().toISOString(),
@@ -1173,6 +1196,9 @@ export function submitBountyProof(
   const b = store.bounties.find((x) => x.id === bountyId);
   if (!b) return { error: 'Bounty not found.', status: 404 };
   if (b.status === 'Completed') return { error: 'Bounty is already completed.', status: 409 };
+  if (b.submissions.some((submission) => submission.claimantId === actor.userId && submission.status === 'Pending Review')) {
+    return { error: 'Your submission is already awaiting review.', status: 409 };
+  }
   if (b.claimedById && b.claimedById !== actor.userId) {
     return { error: `Claimed by ${b.claimedByName}.`, status: 409 };
   }
@@ -1202,6 +1228,8 @@ export function reviewBountySubmission(
   if (!b) return { error: 'Bounty not found.', status: 404 };
   const sub = b.submissions.find((s) => s.id === submissionId);
   if (!sub) return { error: 'Submission not found.', status: 404 };
+  if (sub.status === 'Approved' || b.status === 'Completed') return { error: 'This bounty has already been approved.', status: 409 };
+  if (sub.status !== 'Pending Review') return { error: 'Only pending bounty submissions can be reviewed.', status: 409 };
 
   sub.status = input.status;
   sub.judgeNote = String(input.judgeNote || '').trim() || undefined;
@@ -1389,16 +1417,36 @@ export function getCompetitionXpAwardsForUser(userId: string): CompetitionXpAwar
   return { duelWins, duelParticipations, challengesSolved, bountiesApproved, buildOffResults, potwWins };
 }
 
-export function getArenaBootstrap(viewerUserId?: string) {
+/** Keep private submission details visible only to their owner and competition admins. */
+export function sanitizeChallengeForViewer(challenge: ArenaChallengeItem, viewerUserId: string, isAdmin = false): ArenaChallengeItem {
+  return {
+    ...challenge,
+    submissions: isAdmin
+      ? challenge.submissions.map((submission) => ({ ...submission }))
+      : challenge.submissions.filter((submission) => submission.userId === viewerUserId).map((submission) => ({ ...submission })),
+  };
+}
+
+export function sanitizeBountyForViewer(bounty: BountyItem, viewerUserId: string, isAdmin = false): BountyItem {
+  return {
+    ...bounty,
+    submissions: isAdmin
+      ? bounty.submissions.map((submission) => ({ ...submission }))
+      : bounty.submissions.filter((submission) => submission.claimantId === viewerUserId).map((submission) => ({ ...submission })),
+  };
+}
+
+export function getArenaBootstrap(viewerUserId?: string, isAdmin = false) {
   checkArenaTimers();
+  const viewerId = viewerUserId || '';
   return {
     sandbox: getSandboxStatus(),
-    problems: ARENA_PROBLEMS,
+    problems: [...store.generatedProblems, ...ARENA_PROBLEMS].map((p) => ({ ...p, testCases: p.testCases.filter((tc) => !tc.hidden) })),
     matches: listArenaMatches(viewerUserId),
-    challenges: store.challenges,
+    challenges: store.challenges.map((challenge) => sanitizeChallengeForViewer(challenge, viewerId, isAdmin)),
     buildOffs: store.buildOffs,
     potwNominations: store.potwNominations,
-    bounties: store.bounties,
+    bounties: store.bounties.map((bounty) => sanitizeBountyForViewer(bounty, viewerId, isAdmin)),
     seasons: store.seasons,
     seasonStandings: computeSeasonStandings(),
     history: store.history,

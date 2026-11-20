@@ -28,6 +28,7 @@ import {
   claimDisconnectWinApi,
   createArenaMatchApi,
   forfeitArenaMatchApi,
+  generateDuelChallengeApi,
   joinArenaMatchApi,
   runMatchTestsApi,
   setArenaReadyApi,
@@ -103,9 +104,21 @@ export const ArenaMatchRoom = ({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [lobbyFilter, setLobbyFilter] = useState<'all' | 'open' | 'finished'>('all');
   const [creating, setCreating] = useState(false);
+  const [generatingChallenge, setGeneratingChallenge] = useState(false);
+  const [generatedProblem, setGeneratedProblem] = useState<ArenaProblem | null>(null);
+  const [generationLanguage, setGenerationLanguage] = useState<ArenaLanguage>('javascript');
   const [format, setFormat] = useState<ArenaMatchFormat>('1v1');
   const [scoringType, setScoringType] = useState<ArenaScoringType>('speed');
   const [problemId, setProblemId] = useState<string>(problems[0]?.id || 'prob-two-sum');
+  const [problemTopic, setProblemTopic] = useState('All topics');
+  const [problemDifficulty, setProblemDifficulty] = useState<'All levels' | 'Beginner' | 'Intermediate' | 'Advanced'>('All levels');
+  const availableProblems = useMemo(() => generatedProblem && !problems.some((p) => p.id === generatedProblem.id) ? [generatedProblem, ...problems] : problems, [problems, generatedProblem]);
+  const problemTopics = useMemo(() => ['All topics', ...Array.from(new Set(availableProblems.map((problem) => problem.category))).sort()], [availableProblems]);
+  const filteredProblems = useMemo(() => availableProblems.filter((problem) =>
+    (problemTopic === 'All topics' || problem.category === problemTopic) &&
+    (problemDifficulty === 'All levels' || problem.difficulty === problemDifficulty)
+  ), [availableProblems, problemTopic, problemDifficulty]);
+  const selectedProblemId = filteredProblems.some((problem) => problem.id === problemId) ? problemId : (filteredProblems[0]?.id || '');
   const [allowedLangs, setAllowedLangs] = useState<ArenaLanguage[]>(['javascript', 'typescript', 'python']);
   const [durationSeconds, setDurationSeconds] = useState<number>(420);
   const [customTitle, setCustomTitle] = useState('');
@@ -203,16 +216,39 @@ export const ArenaMatchRoom = ({
     });
   };
 
+  const handleGenerateChallenge = async () => {
+    setGeneratingChallenge(true);
+    try {
+      const topic = problemTopic === 'All topics' ? 'Algorithms and problem solving' : problemTopic;
+      const difficulty = problemDifficulty === 'All levels' ? 'Beginner' : problemDifficulty;
+      const result = await generateDuelChallengeApi(actor, { topic, difficulty, language: generationLanguage });
+      setGeneratedProblem(result.problem);
+      setProblemId(result.problem.id);
+      setProblemTopic(result.problem.category);
+      setProblemDifficulty(result.problem.difficulty);
+      setDurationSeconds(result.problem.timeLimitSeconds);
+      onMatchesChanged();
+      onNotify(`Generated: ${result.problem.title}`);
+    } catch (err: any) {
+      onNotify(err?.message || 'Could not generate a challenge. Check Groq configuration.', 'error');
+    } finally {
+      setGeneratingChallenge(false);
+    }
+  };
+
   const handleCreateMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
     try {
+      if (!selectedProblemId) {
+        throw new Error('Choose a problem that matches your selected topic and difficulty.');
+      }
       const res = await createArenaMatchApi(actor, {
         title: customTitle.trim() || undefined,
         format,
         teamSize: format === '2v2' ? 2 : 1,
         scoringType,
-        problemId,
+        problemId: selectedProblemId,
         allowedLanguages: allowedLangs,
         durationSeconds,
       });
@@ -974,20 +1010,43 @@ export const ArenaMatchRoom = ({
                 <option value={420}>7 minutes</option>
                 <option value={600}>10 minutes</option>
                 <option value={900}>15 minutes</option>
+                <option value={1800}>30 minutes</option>
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <label className={`block text-xs font-medium ${textSecondary}`}>Topic</label>
+              <select value={problemTopic} onChange={(e) => setProblemTopic(e.target.value)} className={inputClass}>
+                {problemTopics.map((topic) => <option key={topic} value={topic}>{topic}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className={`block text-xs font-medium ${textSecondary}`}>Difficulty</label>
+              <select value={problemDifficulty} onChange={(e) => setProblemDifficulty(e.target.value as typeof problemDifficulty)} className={inputClass}>
+                {(['All levels', 'Beginner', 'Intermediate', 'Advanced'] as const).map((level) => <option key={level} value={level}>{level}</option>)}
+              </select>
+            </div>
             <div className="space-y-1.5">
               <label className={`block text-xs font-medium ${textSecondary}`}>Shared Problem</label>
-              <select value={problemId} onChange={(e) => setProblemId(e.target.value)} className={inputClass}>
-                {problems.map((p) => (
+              <select value={selectedProblemId} onChange={(e) => setProblemId(e.target.value)} className={inputClass} disabled={!filteredProblems.length}>
+                {filteredProblems.map((p) => (
                   <option key={p.id} value={p.id}>
-                    [{p.difficulty}] {p.title} ({p.category})
+                    {p.title}
                   </option>
                 ))}
               </select>
+              {!filteredProblems.length && <p className={`text-xs ${textSecondary}`}>No problems match these filters.</p>}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <select value={generationLanguage} onChange={(e) => setGenerationLanguage(e.target.value as ArenaLanguage)} className={inputClass} aria-label="Generated challenge language">
+                  <option value="javascript">JavaScript</option><option value="typescript">TypeScript</option><option value="python">Python</option>
+                </select>
+                <button type="button" onClick={handleGenerateChallenge} disabled={generatingChallenge} className={btnSecondary}>
+                  <Sparkles className="w-4 h-4" /> {generatingChallenge ? 'Generating…' : 'Generate with Groq'}
+                </button>
+              </div>
+              <p className={`mt-1 text-xs ${textSecondary}`}>AI challenges are saved to the Arena. Hidden grading cases stay on the server.</p>
             </div>
             <div className="space-y-1.5">
               <label className={`block text-xs font-medium ${textSecondary}`}>Custom Match Title (Optional)</label>
