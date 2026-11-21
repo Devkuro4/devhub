@@ -350,7 +350,6 @@ export const CommunitySection = ({
 
   // Help Desk & Member directory state
   const [helpSearch, setHelpSearch] = useState('');
-  const [memberSearch, setMemberSearch] = useState('');
   const [helpGoal, setHelpGoal] = useState(savedHelpDraft?.helpGoal || '');
   const [helpTried, setHelpTried] = useState(savedHelpDraft?.helpTried || '');
   const [helpCode, setHelpCode] = useState(savedHelpDraft?.helpCode || '');
