@@ -3,6 +3,7 @@ import {
   BookOpen,
   Bot,
   Calendar,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Code2,
@@ -261,6 +262,7 @@ export const HomeDashboard = ({
   // --- search + filter over courses
   const [query, setQuery] = useState('');
   const [unfinishedOnly, setUnfinishedOnly] = useState(false);
+  const [learningPlanOpen, setLearningPlanOpen] = useState(false);
   const rail = useRef<HTMLDivElement>(null);
   const q = query.trim().toLowerCase();
   const visibleCourses = courses.filter(
@@ -415,31 +417,53 @@ export const HomeDashboard = ({
         )}
 
         {!isBrandNewMember && (
-          <div data-tour="home-learning-path">
-            <PersonalPath
-              profile={profile}
-              onUpdateProfile={onUpdateProfile}
-              courses={courses}
-              learningPlans={learningPlans}
-              dailyTarget={dailyTarget}
-              allRoadmaps={allRoadmaps}
-              selectedRoadmap={selectedRoadmap}
-              onSelectRoadmap={onSelectRoadmap}
-              roadmapProgress={roadmapProgress}
-              quizAttempts={quizAttempts}
-              codeSubmissions={codeSubmissions}
-              weeklyProjects={weeklyProjects}
-              challenges={challenges}
-              personalMilestones={personalMilestones}
-              setPersonalMilestones={setPersonalMilestones}
-              startAction={startAction}
-              onStartLearning={onStartLearning}
-              onContinueCourse={onContinueCourse}
-              onPersonalize={onPersonalize}
-              onNavigate={onNavigate}
-              onNotify={onNotify}
-            />
-          </div>
+          <section data-tour="home-learning-path" className="soft-card overflow-hidden">
+            <button
+              type="button"
+              aria-expanded={learningPlanOpen}
+              aria-controls="dashboard-learning-plan"
+              onClick={() => setLearningPlanOpen((open) => !open)}
+              className="w-full min-h-[72px] px-5 sm:px-6 py-4 flex items-center justify-between gap-4 text-left cursor-pointer hover:bg-[var(--surface-subtle)] transition-colors"
+            >
+              <span className="min-w-0">
+                <span className={`block text-sm font-semibold ${textPrimary}`}>Your learning plan</span>
+                <span className={`block mt-1 text-xs sm:text-sm truncate ${textSecondary}`}>
+                  {selectedRoadmap.title} · {demonstratedCount} of {selectedRoadmap.topics.length} topics complete
+                </span>
+              </span>
+              <span className={`inline-flex items-center gap-2 text-sm font-medium shrink-0 ${textSecondary}`}>
+                <span className="hidden sm:inline">{learningPlanOpen ? 'Hide details' : 'View details'}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${learningPlanOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </span>
+            </button>
+            {learningPlanOpen && (
+              <div id="dashboard-learning-plan" className="border-t border-[var(--border-hairline)] px-4 sm:px-6 py-6">
+                <PersonalPath
+                  profile={profile}
+                  onUpdateProfile={onUpdateProfile}
+                  courses={courses}
+                  learningPlans={learningPlans}
+                  dailyTarget={dailyTarget}
+                  allRoadmaps={allRoadmaps}
+                  selectedRoadmap={selectedRoadmap}
+                  onSelectRoadmap={onSelectRoadmap}
+                  roadmapProgress={roadmapProgress}
+                  quizAttempts={quizAttempts}
+                  codeSubmissions={codeSubmissions}
+                  weeklyProjects={weeklyProjects}
+                  challenges={challenges}
+                  personalMilestones={personalMilestones}
+                  setPersonalMilestones={setPersonalMilestones}
+                  startAction={startAction}
+                  onStartLearning={onStartLearning}
+                  onContinueCourse={onContinueCourse}
+                  onPersonalize={onPersonalize}
+                  onNavigate={onNavigate}
+                  onNotify={onNotify}
+                />
+              </div>
+            )}
+          </section>
         )}
 
         {/* Three small stat cards */}
