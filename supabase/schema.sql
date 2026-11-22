@@ -27,9 +27,20 @@ create table if not exists public.shared_state (            -- community data: p
   updated_at timestamptz not null default now()
 );
 
+-- Server-owned durable state for competitions, messaging, moderation and imported learning data.
+-- The browser roles receive no access. The Node server uses SUPABASE_SERVICE_ROLE_KEY.
+create table if not exists public.server_state (
+  key text primary key,
+  value jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.member_state enable row level security;
 alter table public.shared_state enable row level security;
+alter table public.server_state enable row level security;
+
+revoke all on public.server_state from anon, authenticated;
 
 create or replace function public.is_admin() returns boolean
 language sql security definer stable set search_path = public as $$

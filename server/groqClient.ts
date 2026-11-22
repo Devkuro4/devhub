@@ -680,7 +680,9 @@ export async function* streamText(opts: BaseOptions & { useSearch?: boolean }): 
       let finishReason = '';
       let finished = false;
       while (!finished) {
-        const step = await nextWithTimeout(reader.read());
+        const step = await nextWithTimeout<ReadableStreamReadResult<Uint8Array>>(
+          reader.read() as Promise<ReadableStreamReadResult<Uint8Array>>
+        );
         if (step.done) break;
         buffer += decoder.decode(step.value, { stream: true });
         const { lines, rest } = takeLines(buffer);

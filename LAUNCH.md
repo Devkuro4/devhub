@@ -32,6 +32,7 @@ finish the steps below.
 | `GROQ_MODEL` | Optional. Defaults to `openai/gpt-oss-120b`. Any current Groq model ID works (see console.groq.com/docs/models) |
 | `VITE_SUPABASE_URL` | the Project URL |
 | `VITE_SUPABASE_ANON_KEY` | the anon / publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Required for durable server data.** Supabase service role key, server-side only. Keeps competitions, messages, moderation and imported learning data across host restarts |
 | `NODE_VERSION` | `22` |
 
 - [ ] **Manual Deploy, Clear build cache and deploy.** The two `VITE_` values are baked in at build time, so changing them
@@ -40,7 +41,7 @@ finish the steps below.
 
 ## 3. Check it is really live
 
-- [ ] Open `https://YOUR-SITE/api/health`. You should see `"loginCheck":"on"` and a `keyType` that says `ok` or
+- [ ] Open `https://YOUR-SITE/api/health`. You should see `"loginCheck":"on"`, `"durableState":"supabase"`, and a `keyType` that says `ok` or
       `legacy jwt`. If it says `off (demo mode)`, the Supabase variables did not reach the server. Re-check step 2.
 - [ ] The same page should show `"aiKey":"set"`. If it says `MISSING (set GROQ_API_KEY)`, add the key in Render and redeploy.
 - [ ] Live AI smoke test (the automated tests use a fake Groq, so this is the one real check): sign in as admin, open

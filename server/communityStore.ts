@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadDurableState, saveDurableState } from './durableState.ts';
 import { AUTH_ENABLED } from './auth.ts';
 import {
   INITIAL_HELP_REQUESTS,
@@ -153,7 +154,17 @@ function loadStore(): PersistedCommunityStore {
 
 let store: PersistedCommunityStore = loadStore();
 
+export async function hydrateCommunityStore() {
+  const remote = await loadDurableState<PersistedCommunityStore>('community');
+  if (!remote || !Array.isArray(remote.posts) || !Array.isArray(remote.chatRooms)) return;
+  store = { ...createInitialStore(), ...remote, chatMessages: remote.chatMessages || {} };
+  for (const room of store.chatRooms) {
+    if (!Array.isArray(store.chatMessages?.[room.id])) store.chatMessages[room.id] = [];
+  }
+}
+
 function saveStore() {
+  saveDurableState('community', store);
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const tmpPath = `${STORE_PATH}.tmp`;

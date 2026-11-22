@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadDurableState, saveDurableState } from './durableState.ts';
 import {
   ARENA_PROBLEMS,
   INITIAL_ARENA_CHALLENGES,
@@ -147,6 +148,13 @@ function loadStore(): PersistedArenaStore {
 
 let store: PersistedArenaStore = loadStore();
 
+export async function hydrateArenaStore() {
+  const remote = await loadDurableState<PersistedArenaStore>('arena');
+  if (!remote || !Array.isArray(remote.matches) || !Array.isArray(remote.challenges)) return;
+  store = { ...createInitialStore(), ...remote };
+  resetPresenceOnBoot();
+}
+
 // Sockets don't survive a restart, but the saved "connected" flags do. Start everyone as disconnected;
 // players who are really still around flip back to connected as soon as their WebSocket reconnects.
 function resetPresenceOnBoot() {
@@ -181,6 +189,7 @@ function absentSinceMs(p: ArenaParticipant): number {
 }
 
 function saveStore() {
+  saveDurableState('arena', store);
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const tmp = `${STORE_PATH}.tmp`;
@@ -1620,16 +1629,42 @@ function getClientProblems(): ArenaProblem[] {
   return [...store.customProblems, ...ARENA_PROBLEMS].filter((p) => ids.has(p.id)).map(toClientProblem);
 }
 
-export function getArenaBootstrap(viewerUserId?: string) {
+export function sanitizeChallengeForViewer(
+  challenge: ArenaChallengeItem,
+  viewerUserId?: string,
+  isAdmin = false
+): ArenaChallengeItem {
+  return {
+    ...challenge,
+    submissions: isAdmin
+      ? [...challenge.submissions]
+      : challenge.submissions.filter((submission) => submission.userId === viewerUserId),
+  };
+}
+
+export function sanitizeBountyForViewer(
+  bounty: BountyItem,
+  viewerUserId?: string,
+  isAdmin = false
+): BountyItem {
+  return {
+    ...bounty,
+    submissions: isAdmin
+      ? [...bounty.submissions]
+      : bounty.submissions.filter((submission) => submission.claimantId === viewerUserId),
+  };
+}
+
+export function getArenaBootstrap(viewerUserId?: string, isAdmin = false) {
   checkArenaTimers();
   return {
     sandbox: getSandboxStatus(),
     problems: getClientProblems(),
     matches: listArenaMatches(viewerUserId),
-    challenges: store.challenges,
+    challenges: store.challenges.map((challenge) => sanitizeChallengeForViewer(challenge, viewerUserId, isAdmin)),
     buildOffs: store.buildOffs,
     potwNominations: store.potwNominations,
-    bounties: store.bounties,
+    bounties: store.bounties.map((bounty) => sanitizeBountyForViewer(bounty, viewerUserId, isAdmin)),
     seasons: store.seasons,
     seasonStandings: computeSeasonStandings(),
     history: store.history,

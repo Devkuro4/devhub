@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadDurableState, saveDurableState } from './durableState.ts';
 import type {
   ActiveQuizSession,
   CodeSubmission,
@@ -67,6 +68,11 @@ function emptyOwnerState(): OwnerLearningState {
 
 let cachedStore: PersistedLearningStore | null = null;
 
+export async function hydrateLearningStore() {
+  const remote = await loadDurableState<PersistedLearningStore>('learning');
+  if (remote?.owners && typeof remote.owners === 'object') cachedStore = remote;
+}
+
 function loadStore(): PersistedLearningStore {
   if (cachedStore) return cachedStore;
   try {
@@ -86,6 +92,7 @@ function loadStore(): PersistedLearningStore {
 
 function saveStore(store: PersistedLearningStore) {
   cachedStore = store;
+  saveDurableState('learning', store);
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf8');

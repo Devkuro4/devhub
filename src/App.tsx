@@ -78,12 +78,12 @@ import {
 } from './components/ui';
 import { OnboardingWizard, type OnboardingResult } from './components/OnboardingWizard';
 import { normalizeOnboarding, resolveStartAction, type StartAction } from './lib/startLearning';
-import { HomeDashboard } from './components/HomeDashboard';
-import { CompeteSection } from './components/CompeteSection';
-import { RoadmapSection } from './components/RoadmapSection';
-import { LearningSection } from './components/LearningSection';
-import { ProjectsSection } from './components/ProjectsSection';
-import { CommunitySection } from './components/CommunitySection';
+const HomeDashboard = React.lazy(() => import('./components/HomeDashboard').then((module) => ({ default: module.HomeDashboard })));
+const CompeteSection = React.lazy(() => import('./components/CompeteSection').then((module) => ({ default: module.CompeteSection })));
+const RoadmapSection = React.lazy(() => import('./components/RoadmapSection').then((module) => ({ default: module.RoadmapSection })));
+const LearningSection = React.lazy(() => import('./components/LearningSection').then((module) => ({ default: module.LearningSection })));
+const ProjectsSection = React.lazy(() => import('./components/ProjectsSection').then((module) => ({ default: module.ProjectsSection })));
+const CommunitySection = React.lazy(() => import('./components/CommunitySection').then((module) => ({ default: module.CommunitySection })));
 import type { CommunityActionsProp } from './components/CommunitySection';
 import {
   MemberProfileModal,
@@ -92,8 +92,9 @@ import {
   type ReportDraftTarget,
 } from './components/CommunityModals';
 import { normalizeStore } from './lib/mentorChats';
-import { MentorSection, ProfileSection } from './components/MentorAndProfile';
-import { AdminSection } from './components/AdminSection';
+const MentorSection = React.lazy(() => import('./components/MentorAndProfile').then((module) => ({ default: module.MentorSection })));
+const ProfileSection = React.lazy(() => import('./components/MentorAndProfile').then((module) => ({ default: module.ProfileSection })));
+const AdminSection = React.lazy(() => import('./components/AdminSection').then((module) => ({ default: module.AdminSection })));
 import { StudyChatProvider, StudyGroupChatWidget, useStudyGroupChat } from './components/StudyGroupChat';
 import {
   apiAddComment,
@@ -2293,7 +2294,14 @@ export default function App() {
                     onSkipToHome={() => setShowOnboardingWizard(false)}
                   />
                 ) : (
-                  <>
+                  <React.Suspense
+                    fallback={(
+                      <div className="flex min-h-[40vh] items-center justify-center" role="status" aria-live="polite">
+                        <Loader2 className="h-6 w-6 animate-spin text-[var(--accent-600)]" aria-hidden="true" />
+                        <span className="sr-only">Loading this section</span>
+                      </div>
+                    )}
+                  >
                     {activeTab === 'dashboard' && (
                       <HomeDashboard
                         firstName={firstName}
@@ -2588,7 +2596,7 @@ export default function App() {
                         styles={styles}
                       />
                     )}
-                  </>
+                  </React.Suspense>
                 )}
               </motion.div>
             </main>

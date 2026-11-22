@@ -41,7 +41,7 @@ On Render:
 
 1. Push this folder to GitHub.
 2. Render, New, Blueprint, pick the repo. It reads `render.yaml`.
-3. Fill in the secrets: `GROQ_API_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+3. Fill in the secrets: `GROQ_API_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 4. After it deploys, copy the live URL into Supabase, Authentication, URL Configuration (Site URL and Redirect URLs).
 
 On Railway: New Project, Deploy from GitHub repo, pick the repo, add the same variables **before** the first

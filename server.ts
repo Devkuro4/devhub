@@ -37,6 +37,7 @@ import {
   getImportedMaterialFile,
   getImportedMaterialPack,
   getLearningState,
+  hydrateLearningStore,
   getSubmissionById,
   saveImportedMaterialPack,
   saveLearningState,
@@ -56,6 +57,7 @@ import {
   deleteOrHideChatMessage,
   deletePost,
   getCommunityBootstrap,
+  hydrateCommunityStore,
   getOrCreateDirectRoom,
   isUserAdmin,
   markAllNotificationsRead,
@@ -90,6 +92,7 @@ import {
   deleteArenaCompetition,
   forfeitArenaMatch,
   getArenaBootstrap,
+  hydrateArenaStore,
   getArenaMatchForUser,
   joinArenaMatch,
   judgeArenaChallengeSubmission,
@@ -109,6 +112,7 @@ import {
 } from './server/arenaStore.ts';
 import { setupArenaServer } from './server/arenaServer.ts';
 import { getSandboxStatus } from './server/sandboxRunner.ts';
+import { getDurableStateStatus } from './server/durableState.ts';
 
 setLocalAdminChecker(isUserAdmin);
 
@@ -153,7 +157,7 @@ app.use('/api', (req, res, next) => {
 
 // Lets hosts (Render, Railway...) check that the server is up.
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, aiKey: isAiConfigured() ? 'set' : 'MISSING (set GROQ_API_KEY)' });
+  res.json({ ok: true, loginCheck: AUTH_ENABLED ? 'on' : 'off (demo mode)', supabaseHost: SUPABASE_HOST, keyType: ANON_KEY_TYPE, durableState: getDurableStateStatus(), aiKey: isAiConfigured() ? 'set' : 'MISSING (set GROQ_API_KEY)' });
 });
 
 app.get('/devhub-source.zip', (_req, res) => {
@@ -625,7 +629,7 @@ app.get('/api/arena/sandbox-status', (_req, res) => {
 });
 
 app.get('/api/arena/bootstrap', (req, res) => {
-  res.json(getArenaBootstrap(getUserId(req, res)));
+  res.json(getArenaBootstrap(getUserId(req, res), Boolean(res.locals.isAdmin)));
 });
 
 app.get('/api/arena/matches', (req, res) => {
@@ -1169,6 +1173,7 @@ app.use('/api', (_req, res) => {
 // VITE DEV MIDDLEWARE OR PRODUCTION STATIC ASSETS
 // ============================================================================
 async function startServer() {
+  await Promise.all([hydrateLearningStore(), hydrateCommunityStore(), hydrateArenaStore()]);
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({

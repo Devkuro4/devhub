@@ -2,5 +2,5 @@
   "name": "Developer Growth Hub",
   "description": "Developer Growth Hub: learn, build and grow together as a developer community.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
