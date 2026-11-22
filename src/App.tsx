@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { supabase, CLOUD, DEMO_ALLOWED } from './lib/supabase';
 import { stripSeedFromPersonal, stripSeedFromShared } from './lib/seedCleanup';
+import { clearPreLaunchBrowserData } from './lib/launchReset';
 import { SetupRequired } from './components/SetupRequired';
 import { Landing } from './components/Landing';
 import { detectMemberMilestones } from './lib/milestones';
@@ -217,6 +218,7 @@ function CommunityDmAndNavBridge({
 export default function App() {
   const loadSaved = () => {
     try {
+      clearPreLaunchBrowserData(localStorage);
       const raw = localStorage.getItem(STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : null;
       return parsed && CLOUD ? { darkMode: parsed.darkMode, activeTab: parsed.activeTab } : parsed;
