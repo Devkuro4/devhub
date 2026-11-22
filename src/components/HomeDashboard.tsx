@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { PersonalPath } from './PersonalPath';
 import { startActionLabel, type StartAction } from '../lib/startLearning';
-import { ProgressBar, Sparkle } from './ui';
+import { ProgressBar } from './ui';
 import { DashboardMilestoneStrip } from './MilestoneBadges';
 import { IndependenceCard } from './IndependenceCard';
 import { HomeLevelCard } from './CompeteSection';
@@ -338,7 +338,7 @@ export const HomeDashboard = ({
   return (
     <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_340px]">
       {/* ------------------------------------------------------------ MAIN */}
-      <div data-tour="home-workspace" className="p-5 sm:p-8 xl:p-12 space-y-10 sm:space-y-12 min-w-0">
+      <div data-tour="home-workspace" className="p-5 sm:p-8 xl:p-10 space-y-8 sm:space-y-10 min-w-0">
         {/* Search */}
         <div className="flex items-center gap-3 sm:gap-4">
           <label className="relative flex-1 min-w-0">
@@ -349,7 +349,7 @@ export const HomeDashboard = ({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search your courses"
-              className="w-full !h-12 !pl-11 pr-4 !rounded-full text-sm !border-[var(--border-hairline)] bg-[var(--surface-elevated)] focus:!border-[var(--accent-600)]"
+              className="w-full !h-11 !pl-11 pr-4 !rounded-lg text-sm !border-[var(--border-hairline)] bg-[var(--surface-elevated)] focus:!border-[var(--accent-600)]"
             />
           </label>
           <button
@@ -357,7 +357,7 @@ export const HomeDashboard = ({
             aria-label="Show courses still in progress"
             aria-pressed={unfinishedOnly}
             onClick={() => setUnfinishedOnly((v) => !v)}
-            className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+            className={`w-11 h-11 rounded-lg border border-[var(--border-hairline)] flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
               unfinishedOnly ? 'bg-[var(--accent-50)] text-[var(--accent-700)]' : `${textSecondary} hover:bg-[var(--surface-subtle)]`
             }`}
           >
@@ -366,10 +366,7 @@ export const HomeDashboard = ({
         </div>
 
         {/* Banner */}
-        <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-8 sm:px-10 sm:py-12">
-          <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
-          <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
-          <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
+        <section className="product-banner px-6 py-8 sm:px-10 sm:py-10">
           <div className="relative max-w-xl">
             <p className="text-sm text-white/70">
               {isBrandNewMember ? 'Quick setup' : needsPath ? 'Your learning path' : `${latestCourse ? latestCourse.platform : selectedRoadmap.title} · about ${dailyTarget.estimatedMinutes} min left today`}
@@ -387,12 +384,10 @@ export const HomeDashboard = ({
             <button
               type="button"
               onClick={() => (isBrandNewMember ? onStartOnboarding() : needsPath ? onStartLearning() : onNavigate(nextActivity.tab))}
-              className="mt-6 inline-flex items-center gap-3 pl-5 pr-1.5 min-h-11 rounded-full bg-white text-[#0A0A0A] text-sm font-semibold cursor-pointer hover:bg-white/90 active:translate-y-px"
+              className="mt-6 inline-flex items-center gap-3 px-5 min-h-11 rounded-lg bg-white text-[#0A0A0A] text-sm font-semibold cursor-pointer hover:bg-white/90 active:translate-y-px"
             >
               {isBrandNewMember ? startActionLabel(startAction) : needsPath ? startActionLabel(startAction) : doneCount === 0 ? 'Start today' : 'Continue'}
-              <span className="w-8 h-8 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center">
-                <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-              </span>
+              <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
             </button>
           </div>
         </section>

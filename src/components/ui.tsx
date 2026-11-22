@@ -28,11 +28,11 @@ export const Sparkle = ({ className }: { className?: string }) => (
   </svg>
 );
 
-/** The Dev Hub logo mark: a black rounded square with the code brackets */
+/** The Dev Hub logo mark: a compact code tile with the product brackets. */
 export const LogoMark = ({ size = 40 }: { size?: number }) => (
   <span
     aria-hidden="true"
-    style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
+    style={{ width: size, height: size, borderRadius: Math.max(6, Math.round(size * 0.2)) }}
     className="bg-[var(--panel-deep)] text-white flex items-center justify-center shrink-0 dark:border dark:border-[var(--border-strong)]"
   >
     <svg viewBox="0 0 24 24" style={{ width: size * 0.5, height: size * 0.5 }} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -52,12 +52,12 @@ export const PageHeader = ({
   action?: React.ReactNode;
 }) => {
   return (
-    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 sm:gap-8 pb-2 sm:pb-3">
+    <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 lg:gap-8 pb-1 lg:pb-2 border-b border-[var(--border-hairline)]">
       <div className="space-y-3 max-w-2xl min-w-0">
         <h1 className="font-display text-[var(--ink-primary)]">{title}</h1>
         <p className="text-base leading-relaxed max-w-[62ch] text-[var(--ink-secondary)]">{description}</p>
       </div>
-      {action && <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 sm:shrink-0">{action}</div>}
+      {action && <div className="page-header-actions flex flex-wrap items-center gap-2.5 lg:gap-3 lg:shrink-0 pb-4 lg:pb-3">{action}</div>}
     </header>
   );
 };

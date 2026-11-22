@@ -16,7 +16,7 @@ import {
   Trophy,
   Zap,
 } from 'lucide-react';
-import { EmptyState, PageHeader, ProgressBar, SectionTabs, Sparkle } from './ui';
+import { EmptyState, PageHeader, ProgressBar, SectionTabs } from './ui';
 import { MilestoneIcon } from './MilestoneBadges';
 import { ArenaMatchRoom } from './ArenaMatchRoom';
 import {
@@ -256,10 +256,7 @@ export const CompeteSection = ({
       {/* ------------------------------------------------ OVERVIEW */}
       {subTab === 'compete' && (
         <div className="space-y-6">
-          <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-7 sm:px-10 sm:py-10">
-            <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
-            <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
-            <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
+          <section className="product-banner px-6 py-7 sm:px-10 sm:py-10">
             <div className="relative max-w-2xl space-y-4">
               <p className="text-sm text-white/70">Level {summary.level.index + 1} of {LEVELS.length}</p>
               <h2 className="text-white font-semibold !text-[1.75rem] sm:!text-[2rem] leading-tight">

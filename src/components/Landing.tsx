@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowRight, Play } from 'lucide-react';
-import { LogoMark, Sparkle, useSystemDark } from './ui';
+import { Play } from 'lucide-react';
+import { LogoMark, useSystemDark } from './ui';
 
 /* Public front door for visitors who are not signed in.
    One memorable thing: the path from beginner to independent developer draws itself once on load.
@@ -159,7 +159,7 @@ for (let i = 0; i <= items.length; i++) {
               role="radio"
               aria-checked={level === i}
               onClick={() => setLevel(i)}
-              className={`px-4 py-2.5 min-h-11 rounded-full text-sm font-medium border cursor-pointer transition-colors ${
+              className={`px-4 py-2.5 min-h-11 rounded-lg text-sm font-medium border cursor-pointer transition-colors ${
                 level === i
                   ? 'bg-[var(--accent-600)] border-[var(--accent-600)] text-[var(--on-spark)] font-semibold'
                   : 'border-[var(--border-strong)] text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)]'
@@ -189,27 +189,18 @@ const COMMUNITY = [
 
 export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: () => void }) => {
   const dark = useSystemDark();
-  const primary =
-    'inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-full bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-base font-semibold cursor-pointer transition-colors';
-  const secondary =
-    'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-[var(--border-strong)] text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] text-base font-medium cursor-pointer transition-colors';
   const wrap = 'max-w-6xl mx-auto px-5 sm:px-8 lg:px-12';
   const onBlack =
-    'inline-flex items-center gap-3 pl-6 pr-1.5 min-h-12 rounded-full bg-white text-[#0A0A0A] text-base font-semibold cursor-pointer hover:bg-white/90';
+    'inline-flex items-center gap-2.5 px-6 min-h-12 rounded-lg bg-white text-[#0A0A0A] text-base font-semibold cursor-pointer hover:bg-white/90';
   const onBlackGhost =
-    'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-white/30 text-white text-base font-medium cursor-pointer hover:bg-white/10';
-  const playDot = (
-    <span className="w-9 h-9 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center">
-      <Play className="w-4 h-4 fill-current" aria-hidden="true" />
-    </span>
-  );
+    'inline-flex items-center justify-center min-h-12 px-6 rounded-lg border border-white/25 text-white text-base font-medium cursor-pointer hover:bg-white/10';
 
   return (
     <div className={`hub-root ${dark ? 'dark' : ''} app-backdrop min-h-screen sm:p-6`}>
       <div className="app-frame min-h-[calc(100vh-3rem)]">
       <a href="#hero" className="skip-link">Skip to main content</a>
 
-      <header className="sticky top-0 z-30 border-b border-[var(--border-hairline)] bg-[var(--surface-bg)]/90 backdrop-blur sm:rounded-t-[28px]">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-hairline)] bg-[var(--surface-bg)]/94 backdrop-blur">
         <div className={`${wrap} h-[72px] flex items-center justify-between gap-4`}>
           <a href="#hero" className="flex items-center gap-3">
             <LogoMark size={36} />
@@ -221,10 +212,10 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
             <a href="#community" className="hover:text-[var(--ink-primary)]">Community</a>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
-            <button type="button" onClick={onSignIn} className="px-3 sm:px-4 min-h-11 text-[0.9375rem] font-medium text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] rounded-full cursor-pointer">
+            <button type="button" onClick={onSignIn} className="px-3 sm:px-4 min-h-11 text-[0.9375rem] font-medium text-[var(--ink-primary)] hover:bg-[var(--surface-subtle)] rounded-lg cursor-pointer">
               Sign in
             </button>
-            <button type="button" onClick={onJoin} className="px-4 sm:px-5 min-h-11 rounded-full bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-[0.9375rem] font-semibold cursor-pointer transition-colors whitespace-nowrap">
+            <button type="button" onClick={onJoin} className="px-4 sm:px-5 min-h-11 rounded-lg bg-[var(--accent-600)] hover:bg-[var(--accent-700)] text-[var(--on-spark)] text-[0.9375rem] font-semibold cursor-pointer transition-colors whitespace-nowrap">
               Join Dev Hub
             </button>
           </div>
@@ -234,10 +225,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
       <main id="hero">
         {/* Hero */}
         <section className={`${wrap} pt-8 sm:pt-12 pb-12 sm:pb-16`}>
-          <div className="relative overflow-hidden rounded-[24px] bg-[var(--panel-deep)] text-white px-7 py-14 sm:px-14 sm:py-24">
-            <Sparkle className="absolute -right-10 -bottom-16 w-[24rem] text-[#3B82F6] opacity-25" />
-            <Sparkle className="absolute right-40 top-10 w-28 text-[#3B82F6] opacity-30 hidden sm:block" />
-            <Sparkle className="absolute right-16 top-44 w-14 text-white opacity-10 hidden sm:block" />
+          <div className="product-banner px-7 py-14 sm:px-14 sm:py-20">
             <div className="relative max-w-3xl">
               <h1 className="!text-white !font-display !text-[clamp(2.25rem,1.5rem_+_3.8vw,4.25rem)] !leading-[1.05] !tracking-[-0.035em] font-semibold">
                 Stop following tutorials. Start building on your own.
@@ -247,7 +235,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={onJoin} className={onBlack}>
-                  Join Dev Hub {playDot}
+                  Join Dev Hub <Play className="w-4 h-4 fill-current" aria-hidden="true" />
                 </button>
                 <button type="button" onClick={onSignIn} className={onBlackGhost}>
                   Sign in
@@ -322,8 +310,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
 
         {/* Closing call */}
         <section className={`${wrap} pb-16 sm:pb-24`}>
-          <div className="relative overflow-hidden rounded-[24px] bg-[var(--panel-deep)] text-white px-7 py-14 sm:px-14 sm:py-16 grid gap-10 lg:grid-cols-12 items-center">
-            <Sparkle className="absolute -right-12 -bottom-20 w-80 text-[#3B82F6] opacity-25" />
+          <div className="product-banner px-7 py-14 sm:px-14 sm:py-16 grid gap-10 lg:grid-cols-12 items-center">
             <div className="relative lg:col-span-7 space-y-5">
               <h2 className="!text-white !text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">Ready to build something that is yours?</h2>
               <p className="text-lg text-white/75 leading-relaxed max-w-[50ch]">
@@ -331,7 +318,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
               </p>
               <div className="pt-3 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={onJoin} className={onBlack}>
-                  Join Dev Hub {playDot}
+                  Join Dev Hub <Play className="w-4 h-4 fill-current" aria-hidden="true" />
                 </button>
                 <button type="button" onClick={onSignIn} className={onBlackGhost}>
                   I already have an account
@@ -349,7 +336,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border-hairline)] sm:rounded-b-[28px]">
+      <footer className="border-t border-[var(--border-hairline)]">
         <div className={`${wrap} py-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-sm text-[var(--ink-muted)]`}>
           <div className="flex items-center gap-3">
             <LogoMark size={28} />
