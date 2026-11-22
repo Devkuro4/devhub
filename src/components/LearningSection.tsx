@@ -1022,7 +1022,7 @@ export const LearningSection = ({
   const completedPersonalMilestones = personalMilestones.filter((m) => m.status === 'Completed').length;
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack">
       <PageHeader
         title="My Learning"
         description="Work through your daily target step by step, manage external and downloaded courses, schedule study plans, and get feedback."

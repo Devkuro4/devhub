@@ -294,7 +294,7 @@ export const RoadmapSection = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack">
       <PageHeader
         title="My Learning Plan"
         description="Follow one stage at a time instead of everything at once. Mark topics you already know, save notes, or switch paths anytime."

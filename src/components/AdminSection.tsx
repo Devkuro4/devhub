@@ -318,7 +318,7 @@ export const AdminSection = ({
   const aiStats = aiStatus?.stats;
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack">
       <PageHeader
         title="Community Admin Console"
         description="Lightweight coordination for a small, growing beginner community. Member AI chats and personal notes always stay private."

@@ -1102,7 +1102,7 @@ export const CommunitySection = ({
     subTab === 'announcements' || subTab === 'challenges' ? 'community-home' : subTab;
 
   return (
-    <div data-tour="community-section" className="space-y-6">
+    <div data-tour="community-section" className="page-stack">
       <PageHeader
         title="Community"
         description="Learn together with friendly beginners and peers—chat live in study rooms, collaborate in study groups, ask questions, share guides, or join sessions."

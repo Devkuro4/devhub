@@ -246,7 +246,7 @@ export const CompeteSection = ({
     }`;
 
   return (
-    <div data-tour="compete-section" className="space-y-6">
+    <div data-tour="compete-section" className="page-stack">
       <PageHeader
         title="Compete"
         description="Practice with friendly coding duels, take on challenges, build with others, and track your progress."

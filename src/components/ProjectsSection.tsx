@@ -389,7 +389,7 @@ export const ProjectsSection = ({
     ) : undefined;
 
   return (
-    <div data-tour="projects-section" className="space-y-6">
+    <div data-tour="projects-section" className="page-stack">
       <PageHeader
         title="Projects"
         description="Turn what you learn into small real apps—practise solo weekly builds, collaborate in small groups, and celebrate finished work."

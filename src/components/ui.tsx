@@ -52,8 +52,8 @@ export const PageHeader = ({
   action?: React.ReactNode;
 }) => {
   return (
-    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-5 pb-1 sm:pb-2">
-      <div className="space-y-2.5 sm:space-y-4 max-w-2xl min-w-0">
+    <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 sm:gap-8 pb-2 sm:pb-3">
+      <div className="space-y-3 max-w-2xl min-w-0">
         <h1 className="font-display text-[var(--ink-primary)]">{title}</h1>
         <p className="text-base leading-relaxed max-w-[62ch] text-[var(--ink-secondary)]">{description}</p>
       </div>
@@ -103,7 +103,7 @@ export const SectionTabs = <T extends string>({
       ref={tabListRef}
       data-fade-start={edges.start || undefined}
       data-fade-end={edges.end || undefined}
-      className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)] snap-x overscroll-x-contain"
+      className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)] snap-x overscroll-x-contain"
     >
       {tabs.map((tab) => {
         const isActive = tab.id === active;
@@ -114,7 +114,7 @@ export const SectionTabs = <T extends string>({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
-            className={`relative px-3.5 sm:px-4 py-3 text-[0.9375rem] font-medium whitespace-nowrap shrink-0 snap-start cursor-pointer min-h-[48px] flex items-center gap-2 transition-colors ${
+            className={`relative px-4 sm:px-5 py-3.5 text-[0.9375rem] font-medium whitespace-nowrap shrink-0 snap-start cursor-pointer min-h-[52px] flex items-center gap-2 transition-colors ${
               isActive
                 ? 'text-[var(--ink-primary)] font-semibold'
                 : 'text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'

@@ -2281,7 +2281,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className={onDashboardHome ? 'w-full' : 'max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 py-6 sm:py-12 space-y-8 sm:space-y-10'}
+                className={onDashboardHome ? 'w-full' : 'max-w-[80rem] mx-auto px-5 sm:px-8 lg:px-12 xl:px-16 py-8 sm:py-12 lg:py-14 space-y-10 sm:space-y-12'}
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard

@@ -336,9 +336,9 @@ export const HomeDashboard = ({
   ];
 
   return (
-    <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_340px]">
       {/* ------------------------------------------------------------ MAIN */}
-      <div data-tour="home-workspace" className="p-4 sm:p-8 xl:p-10 space-y-8 sm:space-y-9 min-w-0">
+      <div data-tour="home-workspace" className="p-5 sm:p-8 xl:p-12 space-y-10 sm:space-y-12 min-w-0">
         {/* Search */}
         <div className="flex items-center gap-3 sm:gap-4">
           <label className="relative flex-1 min-w-0">
@@ -366,7 +366,7 @@ export const HomeDashboard = ({
         </div>
 
         {/* Banner */}
-        <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-7 sm:px-10 sm:py-10">
+        <section className="relative overflow-hidden rounded-[20px] bg-[var(--panel-deep)] text-white px-6 py-8 sm:px-10 sm:py-12">
           <Sparkle className="absolute -right-6 -bottom-10 w-52 text-[#3B82F6] opacity-25" />
           <Sparkle className="absolute right-28 top-6 w-20 text-[#3B82F6] opacity-30 hidden sm:block" />
           <Sparkle className="absolute right-12 top-28 w-12 text-white opacity-10 hidden sm:block" />
@@ -448,7 +448,7 @@ export const HomeDashboard = ({
         )}
 
         {/* Three small stat cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
           {statCards.map((c) => {
             const Icon = c.icon;
             return (
@@ -572,7 +572,7 @@ export const HomeDashboard = ({
           </div>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-7 items-start">
           <div className="space-y-6 min-w-0">
             <HomeLevelCard summary={gamification} onOpen={() => onNavigate('compete')} textPrimary={textPrimary} textSecondary={textSecondary} />
             <IndependenceCard summary={independence} styles={styles} onOpenMentor={() => onNavigate('ai-mentor')} />
@@ -584,7 +584,7 @@ export const HomeDashboard = ({
       </div>
 
       {/* ------------------------------------------------------ RIGHT PANEL */}
-      <aside aria-label="Your profile" className={`border-t xl:border-t-0 xl:border-l ${borderClass} p-5 sm:p-8 space-y-9 min-w-0`}>
+      <aside aria-label="Your profile" className={`border-t 2xl:border-t-0 2xl:border-l ${borderClass} p-6 sm:p-8 xl:p-10 2xl:p-8 grid gap-8 sm:grid-cols-2 xl:grid-cols-3 2xl:block 2xl:space-y-10 min-w-0`}>
         <section className="text-center">
           <h2 className={`!text-base text-left ${textPrimary}`}>Your profile</h2>
           <div className="relative w-32 h-32 mx-auto mt-6">

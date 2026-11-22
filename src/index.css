@@ -159,6 +159,28 @@ html {
 :where(.hub-root) :is(p, li) { text-wrap: pretty; }
 :where(.hub-root) p { max-width: 72ch; }
 
+/* Shared page rhythm. Major screens keep their existing sections and order while
+   gaining enough separation to scan one decision at a time. */
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.75rem, 2.4vw, 2.75rem);
+}
+
+/* A desktop sidebar leaves laptop-sized workspaces narrower than their viewport.
+   Stack the existing split panels until the content area is genuinely wide enough. */
+@media (min-width: 1024px) and (max-width: 1399px) {
+  .page-stack [class*="lg:grid-cols-12"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .page-stack [class*="lg:grid-cols-12"] > [class*="lg:col-span-"] {
+    grid-column: auto !important;
+  }
+  .page-stack [class*="lg:grid-cols-12"] > [class*="lg:sticky"] {
+    position: static !important;
+  }
+}
+
 /* Page atmosphere: one soft light from the top, nothing else */
 .studio-canvas { background-color: var(--canvas-bg); }
 .studio-sidebar { background-color: var(--surface-bg); border-color: var(--border-hairline); }
@@ -323,6 +345,7 @@ html, body { overflow-x: clip; }
 /* Phones: calmer density. Same look, more breathing room, no tiny tap targets. */
 @media (max-width: 639px) {
   .hub-root { font-size: 16px; }
+  .page-stack { gap: 1.5rem; }
   .studio-card, .soft-card { border-radius: 14px; }
   :where(.hub-root) h1 { font-size: 1.625rem; }
   :where(.hub-root) h2 { font-size: 1.25rem; }
