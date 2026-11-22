@@ -233,6 +233,7 @@ export default function App() {
     ADMIN_SITE ? 'admin-dashboard' : saved?.activeTab && saved.activeTab !== 'studio-3d' ? saved.activeTab : 'dashboard'
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mainContentRef = useRef<HTMLElement>(null);
   const [toastMessage, setToastMessage] = useState('');
   const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
   const [user, setUser] = useState<UserSession | null>(saved?.user ?? null);
@@ -1029,6 +1030,24 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
   }, [mobileMenuOpen]);
+
+  // Keep route changes predictable: close overlays, reset scroll, and move keyboard focus.
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      mainContentRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, showOnboardingWizard]);
+
+  useEffect(() => {
+    const closeDesktopMenu = () => {
+      if (window.innerWidth >= 1024) setMobileMenuOpen(false);
+    };
+    window.addEventListener('resize', closeDesktopMenu);
+    return () => window.removeEventListener('resize', closeDesktopMenu);
+  }, []);
 
   const mainNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, match: ['dashboard'], group: 'Workspace' },
@@ -2124,10 +2143,15 @@ export default function App() {
                 setShowOnboardingWizard(false);
                 setActiveTab(role === 'admin' ? 'admin-dashboard' : 'dashboard');
               }}
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer min-w-0"
             >
               <LogoMark size={32} />
-              <span className="font-display text-lg font-semibold">Dev Hub</span>
+              <span className="min-w-0 text-left">
+                <span className="block font-display text-base font-semibold leading-tight">Dev Hub</span>
+                <span className={`block text-[11px] leading-tight truncate ${textSecondary}`}>
+                  {breadcrumbParts.secondary || breadcrumbParts.primary}
+                </span>
+              </span>
             </button>
             <div className="flex items-center gap-1.5 sm:gap-2">
               <span
@@ -2162,12 +2186,13 @@ export default function App() {
                 compact
                 hasPausedTour={hasPausedTour}
                 onClick={() => setHelpDrawerOpen(true)}
+                className="hidden sm:inline-flex"
               />
               <button
                 type="button"
                 aria-label="Toggle dark mode"
                 onClick={() => setDarkMode((v) => !v)}
-                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`hidden sm:flex p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center`}
               >
                 {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
@@ -2175,6 +2200,7 @@ export default function App() {
                 type="button"
                 aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
                 aria-expanded={mobileMenuOpen}
+                aria-controls="mobile-navigation-menu"
                 onClick={() => setMobileMenuOpen((v) => !v)}
                 className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
@@ -2185,7 +2211,20 @@ export default function App() {
 
           {/* Mobile Drawer */}
           {mobileMenuOpen && (
-            <div className="mobile-drawer lg:hidden fixed inset-x-0 bottom-0 z-20 px-4 pt-4 space-y-2.5 overflow-y-auto overscroll-contain studio-canvas">
+            <>
+              <button
+                type="button"
+                aria-label="Close navigation menu"
+                onClick={() => setMobileMenuOpen(false)}
+                className="lg:hidden fixed inset-x-0 top-[var(--app-header-h)] bottom-[var(--app-mobile-nav-h)] z-[19] bg-black/45 backdrop-blur-[1px] cursor-default"
+              />
+              <div
+                id="mobile-navigation-menu"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Navigation menu"
+                className="mobile-drawer lg:hidden fixed left-auto right-0 bottom-0 z-20 w-[min(22rem,92vw)] px-4 pt-4 space-y-2.5 overflow-y-auto overscroll-contain studio-canvas border-l border-[var(--border-hairline)] shadow-2xl"
+              >
               {(role === 'admin' ? adminNav : mainNav).map((item) => {
                 const Icon = item.icon;
                 const active = item.match.includes(activeTab);
@@ -2235,12 +2274,31 @@ export default function App() {
               )}
               <button
                 type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setHelpDrawerOpen(true);
+                }}
+                className={`sm:hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
+              >
+                <Bot className="w-4 h-4" /> Help & guided tour
+              </button>
+              <button
+                type="button"
+                onClick={() => setDarkMode((v) => !v)}
+                className={`sm:hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
+              >
+                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {darkMode ? 'Light mode' : 'Dark mode'}
+              </button>
+              <button
+                type="button"
                 onClick={signOut}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} text-[var(--danger-ink)] cursor-pointer`}
               >
                 <LogOut className="w-4 h-4" /> Sign out
               </button>
-            </div>
+              </div>
+            </>
           )}
 
           {/* Main Workspace Container */}
@@ -2275,7 +2333,7 @@ export default function App() {
               </div>
             )}
 
-            <main id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "main-pad-mobile lg:pb-20" : "main-pad-mobile lg:pb-24"}`}>
+            <main ref={mainContentRef} id="main" tabIndex={-1} className={`flex-1 focus:outline-none ${onDashboardHome ? "main-pad-mobile lg:pb-20" : "main-pad-mobile lg:pb-24"}`}>
               <motion.div
                 key={showOnboardingWizard ? 'onboarding' : activeTab}
                 initial={{ opacity: 0, y: 6 }}
