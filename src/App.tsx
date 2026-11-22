@@ -1963,11 +1963,11 @@ export default function App() {
         openNotifRoomRequest={openNotifRoomRequest}
         onClearNotifRoom={() => setOpenNotifRoomRequest(null)}
       />
-      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-dvh app-backdrop lg:p-6 ${textPrimary}`}>
-        <div className="app-frame min-h-dvh lg:min-h-[calc(100vh-3rem)] flex flex-col lg:flex-row">
+      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-dvh app-backdrop lg:p-4 ${textPrimary}`}>
+        <div className="app-frame min-h-dvh lg:min-h-[calc(100vh-2rem)] flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop sidebar */}
-          <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-6 lg:self-start lg:h-[calc(100vh-3rem)] border-r studio-sidebar rounded-l-[28px]">
+          <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-2rem)] border-r studio-sidebar">
             <div className="sb-logo px-8 pt-8 pb-7">
               <button
                 type="button"
@@ -1997,7 +1997,7 @@ export default function App() {
                         setActiveTab(item.id);
                       }}
                       aria-current={active ? 'page' : undefined}
-                      className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] transition-colors cursor-pointer whitespace-nowrap ${
+                      className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-lg text-[0.9375rem] transition-colors cursor-pointer whitespace-nowrap ${
                         active ? 'nav-active font-semibold' : `${textSecondary} font-medium hover:text-[var(--ink-primary)]`
                       }`}
                     >
@@ -2083,7 +2083,7 @@ export default function App() {
                     setActiveTab('profile');
                   }}
                   aria-current={activeTab === 'profile' ? 'page' : undefined}
-                  className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] cursor-pointer whitespace-nowrap ${
+                  className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-lg text-[0.9375rem] cursor-pointer whitespace-nowrap ${
                     activeTab === 'profile' ? 'nav-active font-semibold' : `${textSecondary} font-medium hover:text-[var(--ink-primary)]`
                   }`}
                 >
@@ -2098,7 +2098,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setDarkMode((v) => !v)}
-                  className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] font-medium ${textSecondary} hover:text-[var(--ink-primary)] cursor-pointer whitespace-nowrap`}
+                  className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-lg text-[0.9375rem] font-medium ${textSecondary} hover:text-[var(--ink-primary)] cursor-pointer whitespace-nowrap`}
                 >
                   {darkMode ? <Sun className="w-[18px] h-[18px] shrink-0" aria-hidden="true" /> : <Moon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />}
                   <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
@@ -2106,7 +2106,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={signOut}
-                  className="w-full flex items-center gap-3 px-3 min-h-11 rounded-full text-[0.9375rem] font-medium text-[var(--danger-ink)] cursor-pointer whitespace-nowrap hover:bg-[var(--danger-bg)]"
+                  className="w-full flex items-center gap-3 px-3 min-h-11 rounded-lg text-[0.9375rem] font-medium text-[var(--danger-ink)] cursor-pointer whitespace-nowrap hover:bg-[var(--danger-bg)]"
                 >
                   <LogOut className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
                   <span>Sign out</span>
@@ -2247,7 +2247,7 @@ export default function App() {
           <div className="flex-1 flex flex-col min-w-0">
             {/* Breadcrumb bar (the home screen has its own search bar instead) */}
             {!onDashboardHome ? (
-              <header className={`hidden lg:flex sticky top-0 z-20 h-[72px] px-10 items-center justify-between gap-4 border-b ${borderClass} bg-[var(--surface-bg)]/90 backdrop-blur rounded-tr-[28px]`}>
+              <header className={`hidden lg:flex sticky top-0 z-20 h-[64px] px-10 items-center justify-between gap-4 border-b ${borderClass} bg-[var(--surface-bg)]/92 backdrop-blur`}>
                 <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
                   <span className={textSecondary}>Dev Hub</span>
                   <span className={textSecondary}>/</span>
@@ -2281,7 +2281,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className={onDashboardHome ? 'w-full' : 'max-w-[80rem] mx-auto px-5 sm:px-8 lg:px-12 xl:px-16 py-8 sm:py-12 lg:py-14 space-y-10 sm:space-y-12'}
+                className={onDashboardHome ? 'w-full' : 'max-w-[80rem] mx-auto px-5 sm:px-8 lg:px-10 xl:px-12 py-7 sm:py-10 lg:py-12 space-y-8 sm:space-y-10'}
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard
