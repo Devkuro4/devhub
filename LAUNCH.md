@@ -51,6 +51,12 @@ finish the steps below.
 
 ## 4. Make yourself the admin
 
+> **Fresh team launch:** if test accounts or genuine test activity must all be removed, first run
+> `supabase/reset_for_team_launch.sql` in the intended Supabase project. It deletes every account and
+> all application data, but preserves the schema, RLS rules, triggers, configuration, and source-owned
+> learning content. The script is blocked until you replace its confirmation value. A successful run
+> returns zero for all five data counts. Then continue below with a brand-new admin account.
+
 - [ ] Sign up on the live site with your own email.
 - [ ] In the Supabase SQL Editor run (use your email):
 

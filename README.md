@@ -60,7 +60,20 @@ Vercel only hosts the website, so the AI server runs separately on Railway.
 2. In Vercel, Settings, Environment Variables: add `VITE_API_URL` = your Render/Railway address (no trailing slash), plus `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then redeploy.
 3. In Supabase, keep your Vercel address as the Site URL.
 
-## 3b. Already live? Clear old sample data
+## 3b. Reset before inviting your team
+
+For a completely fresh launch—including deleting every test account, member progress record,
+community post, competition entry, message, and moderation record—run
+`supabase/reset_for_team_launch.sql` in the Supabase SQL Editor. The file is guarded: it will do
+nothing until you replace its confirmation value. Check the Supabase project name before arming it.
+
+The reset keeps the database structure, RLS policies, triggers, environment configuration, and
+the real learning/catalog content stored in source code. Afterward, create your admin account again.
+
+If you only need to remove the old pretend people and posts while keeping genuine member data, use
+`supabase/cleanup_sample_data.sql` instead.
+
+## 3c. Already live? Clear old sample data only
 
 Run `supabase/cleanup_sample_data.sql` once in the SQL Editor. It removes only the pretend sample people and posts, never real members' content.
 
