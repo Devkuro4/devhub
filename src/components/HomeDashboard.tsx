@@ -19,7 +19,7 @@ import {
   Users,
 } from 'lucide-react';
 import { PersonalPath } from './PersonalPath';
-import { startActionLabel, type StartAction } from '../lib/startLearning';
+import { type StartAction } from '../lib/startLearning';
 import { ProgressBar } from './ui';
 import { DashboardMilestoneStrip } from './MilestoneBadges';
 import { IndependenceCard } from './IndependenceCard';
@@ -171,11 +171,6 @@ export const HomeDashboard = ({
 
   const topicStatuses = selectedRoadmap.topics.map((t) => roadmapProgress[t.id]?.status || 'Not Started');
   const demonstratedCount = topicStatuses.filter((s) => s === 'Demonstrated' || s === 'Completed').length;
-  const currentStage =
-    selectedRoadmap.stages?.find((st) =>
-      st.topics.some((tp) => (roadmapProgress[tp.id]?.status || 'Not Started') !== 'Demonstrated')
-    ) || selectedRoadmap.stages?.[0];
-
   // Today's 4 clear learning steps (accurate topic matching)
   const hasLearnedTopic = dailyTarget.status !== 'Not Started' || codeSubmissions.some((s) => s.topic === dailyTarget.topic);
   const hasPractisedOrSubmitted = codeSubmissions.some((s) => s.topic === dailyTarget.topic);
@@ -243,21 +238,7 @@ export const HomeDashboard = ({
   const isBrandNewMember =
     startAction.kind === 'resume-onboarding' ||
     (startAction.kind === 'start-onboarding' && !latestCourse && codeSubmissions.length === 0 && dailyLogs.length === 0);
-  const needsPath = startAction.kind === 'add-path' || startAction.kind === 'next-path' || startAction.kind === 'choose-course';
   const showPersonalize = onboarded && !personalized && !isBrandNewMember;
-  const setupTitle = startAction.kind === 'resume-onboarding' ? 'Pick up your setup where you left off' : 'Set up your learning path';
-  const setupCopy =
-    startAction.kind === 'resume-onboarding'
-      ? 'Your answers are saved. Finish the last few steps and we’ll build your plan.'
-      : 'Tell us what you’re learning and how much time you have. We’ll build a step-by-step plan.';
-  const pathTitle =
-    startAction.kind === 'next-path' ? 'You finished your course. What’s next?' : startAction.kind === 'choose-course' ? 'Which course do you want to continue?' : 'Add what you’re learning';
-  const pathCopy =
-    startAction.kind === 'next-path'
-      ? 'Choose a new learning path and we’ll plan it around your progress so far.'
-      : startAction.kind === 'choose-course'
-        ? 'You have more than one active course. Pick one to open today’s session.'
-        : 'Add a course or pick a roadmap so your dashboard can show your next step.';
 
   // --- search + filter over courses
   const [query, setQuery] = useState('');
@@ -338,20 +319,27 @@ export const HomeDashboard = ({
   ];
 
   return (
-    <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_380px]">
       {/* ------------------------------------------------------------ MAIN */}
-      <div data-tour="home-workspace" className="p-5 sm:p-8 xl:p-10 space-y-8 sm:space-y-10 min-w-0">
-        {/* Search */}
-        <div className="flex items-center gap-3 sm:gap-4">
+      <div data-tour="home-workspace" className="p-5 sm:p-8 xl:p-10 2xl:p-12 space-y-9 sm:space-y-12 min-w-0">
+        {/* Welcome + search */}
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
+          <div>
+            <p className="text-sm font-semibold text-[var(--ink-muted)]">Your Dev Hub</p>
+            <h1 className="mt-1 !text-[2.1rem] sm:!text-[3rem] font-bold tracking-[-0.04em]">
+              Welcome back{firstName ? `, ${firstName}` : ''} <span aria-hidden="true">👋</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-4 xl:w-[min(100%,28rem)]">
           <label className="relative flex-1 min-w-0">
             <span className="sr-only">Search your courses</span>
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-muted)]" aria-hidden="true" />
+            <Search className="w-5 h-5 absolute left-5 top-1/2 -translate-y-1/2 text-[var(--ink-primary)]" aria-hidden="true" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your courses"
-              className="w-full !h-11 !pl-11 pr-4 !rounded-lg text-sm !border-[var(--border-hairline)] bg-[var(--surface-elevated)] focus:!border-[var(--accent-600)]"
+              placeholder="Search something"
+              className="w-full !h-14 !pl-14 pr-5 !rounded-full text-sm !border-transparent bg-[var(--surface-elevated)] focus:!border-[var(--ink-primary)]"
             />
           </label>
           <button
@@ -359,38 +347,64 @@ export const HomeDashboard = ({
             aria-label="Show courses still in progress"
             aria-pressed={unfinishedOnly}
             onClick={() => setUnfinishedOnly((v) => !v)}
-            className={`w-11 h-11 rounded-lg border border-[var(--border-hairline)] flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
-              unfinishedOnly ? 'bg-[var(--accent-50)] text-[var(--accent-700)]' : `${textSecondary} hover:bg-[var(--surface-subtle)]`
+            className={`w-14 h-14 rounded-full border-0 flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+              unfinishedOnly ? 'bg-[var(--ink-primary)] text-white' : `bg-[var(--surface-elevated)] ${textSecondary} hover:bg-[var(--pastel-aqua)]`
             }`}
           >
             <SlidersHorizontal className="w-5 h-5" aria-hidden="true" />
           </button>
+          </div>
         </div>
 
-        {/* Banner */}
-        <section className="product-banner px-6 py-8 sm:px-10 sm:py-10">
-          <div className="relative max-w-xl">
-            <p className="text-sm text-white/70">
-              {isBrandNewMember ? 'Quick setup' : needsPath ? 'Your learning path' : `${latestCourse ? latestCourse.platform : selectedRoadmap.title} · about ${dailyTarget.estimatedMinutes} min left today`}
-            </p>
-            <h1 className="mt-3 text-white font-semibold !text-[1.75rem] sm:!text-[2rem] leading-tight">
-              {isBrandNewMember ? setupTitle : needsPath ? pathTitle : nextActivity.label}
-            </h1>
-            <p className="mt-2 text-sm text-white/75">
-              {isBrandNewMember
-                ? setupCopy
-                : needsPath
-                  ? pathCopy
-                  : `${nextActivity.detail}${currentStage ? ` · ${currentStage.title}` : ''}`}
-            </p>
-            <button
-              type="button"
-              onClick={() => (isBrandNewMember ? onStartOnboarding() : needsPath ? onStartLearning() : onNavigate(nextActivity.tab))}
-              className="mt-6 inline-flex items-center gap-3 px-5 min-h-11 rounded-lg bg-white text-[#0A0A0A] text-sm font-semibold cursor-pointer hover:bg-white/90 active:translate-y-px"
-            >
-              {isBrandNewMember ? startActionLabel(startAction) : needsPath ? startActionLabel(startAction) : doneCount === 0 ? 'Start today' : 'Continue'}
-              <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-            </button>
+        {/* Today's activities */}
+        <section className="space-y-5" aria-labelledby="today-activities-h">
+          <div className="flex items-end justify-between gap-4">
+            <h2 id="today-activities-h" className="!text-[1.75rem] sm:!text-[2.15rem]">Your activities today <span className="text-[var(--ink-muted)]">({todayChecklist.length})</span></h2>
+            <span className={`hidden sm:block text-sm ${textSecondary}`}>{doneCount} completed</span>
+          </div>
+          <div className="grid md:grid-cols-2 gap-5">
+            {todayChecklist.slice(0, 2).map((item, index) => {
+              const ActivityIcon = index === 0 ? BookOpen : Code2;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onNavigate(item.tab)}
+                  className={`pastel-card ${index === 0 ? 'pastel-aqua' : 'pastel-pink'} min-h-[220px] p-6 sm:p-7 flex flex-col justify-between text-left cursor-pointer transition-transform hover:-translate-y-1`}
+                >
+                  <span className="flex items-start justify-between gap-4">
+                    <span className="w-12 h-12 rounded-full bg-white/80 flex items-center justify-center"><ActivityIcon className="w-5 h-5" /></span>
+                    <span className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-bold">{item.done ? 'Completed' : `${dailyTarget.estimatedMinutes} min`}</span>
+                  </span>
+                  <span className="flex items-end justify-between gap-4 mt-8">
+                    <span>
+                      <span className="block text-sm font-medium text-[var(--ink-secondary)] line-clamp-1">{item.detail}</span>
+                      <span className="block mt-1 text-xl sm:text-2xl font-bold">{item.label}</span>
+                    </span>
+                    <span className="round-action w-12 h-12 flex items-center justify-center shrink-0"><Play className="w-4 h-4 fill-current" /></span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-5" aria-labelledby="learning-progress-h">
+          <h2 id="learning-progress-h" className="!text-[1.75rem] sm:!text-[2.15rem]">Learning progress</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+            {statCards.map((c, index) => {
+              const Icon = c.icon;
+              const tone = ['pastel-aqua', 'pastel-yellow', 'pastel-lilac'][index];
+              return (
+                <button key={c.label} type="button" onClick={() => onNavigate(c.tab)} className={`pastel-card ${tone} min-h-[160px] p-5 sm:p-6 flex flex-col justify-between text-left cursor-pointer transition-transform hover:-translate-y-1`}>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold">{c.label}</span>
+                    <span className="round-action w-10 h-10 flex items-center justify-center"><Icon className="w-4 h-4" /></span>
+                  </span>
+                  <span className="text-2xl sm:text-3xl font-bold tabular-nums">{c.top}</span>
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -465,24 +479,6 @@ export const HomeDashboard = ({
             )}
           </section>
         )}
-
-        {/* Three small stat cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-          {statCards.map((c) => {
-            const Icon = c.icon;
-            return (
-              <button key={c.label} type="button" onClick={() => onNavigate(c.tab)} className="soft-card soft-card-interactive px-5 py-4 flex items-center gap-4 text-left">
-                <span className="w-11 h-11 rounded-full bg-[var(--accent-50)] text-[var(--accent-700)] flex items-center justify-center shrink-0">
-                  <Icon className="w-5 h-5" aria-hidden="true" />
-                </span>
-                <span className="min-w-0">
-                  <span className={`block text-xs tabular-nums ${textSecondary}`}>{c.top}</span>
-                  <span className={`block text-sm font-semibold truncate ${textPrimary}`}>{c.label}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
 
         {/* Continue learning */}
         <section aria-labelledby="continue-h" className="space-y-4">
@@ -603,25 +599,61 @@ export const HomeDashboard = ({
       </div>
 
       {/* ------------------------------------------------------ RIGHT PANEL */}
-      <aside aria-label="Your profile" className={`border-t 2xl:border-t-0 2xl:border-l ${borderClass} p-6 sm:p-8 xl:p-10 2xl:p-8 grid gap-8 sm:grid-cols-2 2xl:block 2xl:space-y-10 min-w-0`}>
-        <section className="text-center">
-          <h2 className={`!text-base text-left ${textPrimary}`}>Your profile</h2>
+      <aside aria-label="Schedule and profile" className={`border-t 2xl:border-t-0 2xl:border-l ${borderClass} bg-[var(--surface-elevated)]/45 p-6 sm:p-8 xl:p-10 2xl:p-8 grid gap-8 sm:grid-cols-2 2xl:block 2xl:space-y-10 min-w-0`}>
+        <section className="space-y-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="!text-[1.65rem]">Your schedule</h2>
+            <button type="button" onClick={() => onNavigate('events')} className="w-10 h-10 rounded-full bg-[var(--surface-elevated)] flex items-center justify-center cursor-pointer hover:bg-[var(--pastel-aqua)]" aria-label="Open all events">
+              <Calendar className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="pastel-card pastel-aqua p-5 sm:p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--ink-secondary)]">Coming up</p>
+            {presentations.length > 0 ? (
+              <ul className="mt-4 space-y-3">
+                {presentations.slice(0, 3).map((event) => (
+                  <li key={event.id}>
+                    <button type="button" onClick={() => onNavigate('events')} className="w-full bg-white/75 rounded-2xl p-4 flex items-center gap-3 text-left cursor-pointer hover:bg-white">
+                      <span className="w-10 h-10 rounded-full bg-[var(--ink-primary)] text-white flex items-center justify-center shrink-0"><BookOpen className="w-4 h-4" /></span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold line-clamp-2">{event.title}</span>
+                        <span className="block mt-0.5 text-xs text-[var(--ink-secondary)] truncate">{event.dateTime || event.type}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4 bg-white/75 rounded-2xl p-4">
+                <p className="text-sm font-bold">Your calendar is open</p>
+                <p className="mt-1 text-xs text-[var(--ink-secondary)]">Community sessions will appear here.</p>
+                <button type="button" onClick={() => onNavigate('events')} className="mt-3 text-xs font-bold underline cursor-pointer">Explore events</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="pastel-card pastel-lilac p-5 sm:p-6 text-center">
+          <div className="flex items-center justify-between gap-3 text-left">
+            <h2 className="!text-base">My Profile</h2>
+            <button type="button" onClick={() => onNavigate('profile')} className="round-action px-3 min-h-9 text-xs font-bold cursor-pointer">Edit profile</button>
+          </div>
           <div className="relative w-32 h-32 mx-auto mt-6">
             <svg viewBox="0 0 120 120" className="absolute inset-0 -rotate-90" role="img" aria-label={`${ringPct}% complete`}>
-              <circle cx="60" cy="60" r="54" fill="none" stroke="var(--surface-subtle)" strokeWidth="6" />
+              <circle cx="60" cy="60" r="54" fill="none" stroke="rgb(255 255 255 / 65%)" strokeWidth="6" />
               <circle cx="60" cy="60" r="54" fill="none" stroke="var(--spark)" strokeWidth="6" strokeLinecap="round" strokeDasharray={ringC} strokeDashoffset={ringC * (1 - ringPct / 100)} />
             </svg>
-            <div className="absolute inset-4 rounded-full bg-[var(--panel-deep)] text-white flex items-center justify-center font-display text-2xl font-semibold">
+            <div className="absolute inset-4 rounded-full bg-[var(--surface-elevated)] text-[var(--ink-primary)] flex items-center justify-center font-display text-2xl font-semibold">
               {initialsOf(fullName)}
             </div>
           </div>
           <p className={`mt-4 text-base font-semibold ${textPrimary}`}>{greeting}{firstName ? `, ${firstName}` : ''}</p>
-          <p className={`mt-1 text-sm mx-auto max-w-[24ch] ${textSecondary}`}>
+          <p className="mt-1 text-sm mx-auto max-w-[24ch] text-[var(--ink-secondary)]">
             {ringPct}% through {latestCourse ? latestCourse.title : selectedRoadmap.title}. {profile.streakDays}-day streak.
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
             {[{ I: Bot, l: 'Ask the AI mentor', t: 'ai-mentor' }, { I: Users, l: 'Open community', t: 'community-home' }, { I: Trophy, l: 'See milestones', t: 'profile' }].map(({ I, l, t }) => (
-              <button key={l} type="button" aria-label={l} title={l} onClick={() => onNavigate(t)} className={`w-11 h-11 rounded-full border ${borderClass} ${textPrimary} flex items-center justify-center cursor-pointer hover:bg-[var(--surface-subtle)]`}>
+              <button key={l} type="button" aria-label={l} title={l} onClick={() => onNavigate(t)} className="w-11 h-11 rounded-full bg-white/80 text-[var(--ink-primary)] flex items-center justify-center cursor-pointer hover:bg-white">
                 <I className="w-[18px] h-[18px]" aria-hidden="true" />
               </button>
             ))}

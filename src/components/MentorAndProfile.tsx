@@ -866,13 +866,13 @@ export const ProfileSection = ({
                   {(draft.fullName || 'Member').split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
                 </div>
                 <div className="relative z-[1] min-w-0 flex-1">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-blue-200">Public profile preview</p>
-                  <h3 className="mt-1 !text-xl text-white truncate">{draft.fullName || 'Your name'}</h3>
-                  <p className="mt-0.5 text-sm text-white/70 truncate">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-secondary)]">Public profile preview</p>
+                  <h3 className="mt-1 !text-xl text-[var(--ink-primary)] truncate">{draft.fullName || 'Your name'}</h3>
+                  <p className="mt-0.5 text-sm text-[var(--ink-secondary)] truncate">
                     {draft.username ? `@${draft.username.replace(/^@+/, '')}` : 'Add a username'} · {draft.field || 'Choose a learning field'}
                   </p>
                 </div>
-                <span className="relative z-[1] self-start sm:self-center rounded-full bg-white/10 border border-white/15 px-3 py-1.5 text-xs font-medium text-blue-100">
+                <span className="relative z-[1] self-start sm:self-center rounded-full bg-white/65 border border-white/50 px-3 py-1.5 text-xs font-medium text-[var(--ink-primary)]">
                   Live preview
                 </span>
               </div>

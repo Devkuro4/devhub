@@ -229,7 +229,7 @@ export const WelcomeExperience: React.FC<{
         {/* Top editorial banner */}
         <div className="bg-[var(--panel-deep)] text-white px-6 py-6 sm:px-8 sm:py-7 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-200">
+            <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--ink-secondary)]">
               <Sparkles className="w-3.5 h-3.5 text-[var(--spark)]" />
               {firstName ? `Ready for you, ${firstName}` : 'Your workspace is ready'}
             </span>

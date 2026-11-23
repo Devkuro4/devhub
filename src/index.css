@@ -46,48 +46,53 @@
   --font-sans: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-600) 35%, transparent);
 
-  /* Light: white, black, one blue */
-  --page-bg: #EEF0F4;
-  --canvas-bg: #F8F9FB;
-  --surface-bg: #FFFFFF;
-  --surface-elevated: #FFFFFF;
-  --surface-subtle: #F1F3F6;
-  --border-hairline: #E1E4E8;
-  --border-strong: #C7CCD4;
-  --ink-primary: #0A0A0A;
-  --ink-secondary: #404040;
-  --ink-muted: #6B6B6B;
+  /* Light: warm paper, confident black, and a playful learning palette. */
+  --page-bg: #DDEBEA;
+  --canvas-bg: #F3F2F0;
+  --surface-bg: #F7F6F4;
+  --surface-elevated: #FFFDFC;
+  --surface-subtle: #EAE9E6;
+  --border-hairline: #E2E0DC;
+  --border-strong: #CBC8C2;
+  --ink-primary: #17191F;
+  --ink-secondary: #555961;
+  --ink-muted: #858995;
   --contour: transparent;
   --shadow-offset: #0A0A0A;
   --on-spark: #FFFFFF;
-  --panel-deep: #0A0A0A;
+  --panel-deep: #17191F;
 
-  --accent-50: #EFF4FF;
-  --accent-100: #DBE7FF;
-  --accent-500: #2563EB;
-  --accent-600: #2563EB;
-  --accent-700: #1D4ED8;
-  --spark: #2563EB;
-  --spark-ink: #1D4ED8;
+  --accent-50: #DDECEA;
+  --accent-100: #CBE1DE;
+  --accent-500: #17191F;
+  --accent-600: #17191F;
+  --accent-700: #000000;
+  --spark: #17191F;
+  --spark-ink: #17191F;
+
+  --pastel-aqua: #CFE3E1;
+  --pastel-pink: #F4CDE0;
+  --pastel-yellow: #FBE2A2;
+  --pastel-lilac: #D9CAE7;
 
   /* Progress and independence use the same blue */
-  --signal: #2563EB;
-  --signal-ink: #1D4ED8;
-  --signal-bg: #EFF4FF;
+  --signal: #17191F;
+  --signal-ink: #17191F;
+  --signal-bg: #FBE2A2;
 
   --success-bg: #E6F4EA; --success-border: #BFE3C9; --success-ink: #19703A;
   --warning-bg: #FDF1D6; --warning-border: #F1D58C; --warning-ink: #8A5300;
   --danger-bg: #FCE9E8;  --danger-border: #F3BDB9;  --danger-ink: #B42318;
 
   --shadow-sm: none;
-  --shadow-md: 0 16px 40px -28px rgb(10 10 10 / 38%);
-  --shadow-lg: 0 28px 70px -38px rgb(10 10 10 / 44%);
+  --shadow-md: 0 18px 44px -36px rgb(23 25 31 / 35%);
+  --shadow-lg: 0 30px 80px -50px rgb(23 25 31 / 42%);
 }
 
 .dark {
@@ -104,6 +109,11 @@
   --shadow-offset: #0A0A0A;
   --on-spark: #0A0A0A;
   --panel-deep: #000000;
+
+  --pastel-aqua: #203D3A;
+  --pastel-pink: #482C3A;
+  --pastel-yellow: #493C1F;
+  --pastel-lilac: #392E49;
 
   --accent-50: color-mix(in srgb, #3B82F6 16%, transparent);
   --accent-100: color-mix(in srgb, #3B82F6 24%, transparent);
@@ -184,34 +194,36 @@ html {
 
 /* Page atmosphere: one soft light from the top, nothing else */
 .studio-canvas { background-color: var(--canvas-bg); }
-.studio-sidebar { background-color: var(--surface-bg); border-color: var(--border-hairline); }
+.studio-sidebar { background-color: #FFFDFC; border-color: transparent; }
+.dark .studio-sidebar { background-color: var(--surface-bg); }
 
 /* App shell: a precise product workspace, not a floating marketing card. */
 .app-backdrop {
   background:
-    radial-gradient(60rem 32rem at 4% -10%, color-mix(in srgb, var(--accent-500) 16%, transparent), transparent 62%),
-    radial-gradient(48rem 28rem at 96% 108%, color-mix(in srgb, var(--accent-500) 10%, transparent), transparent 64%),
-    linear-gradient(135deg, transparent 0 48%, color-mix(in srgb, var(--accent-500) 5%, transparent) 48% 49%, transparent 49% 100%),
+    radial-gradient(44rem 25rem at 6% 8%, rgb(255 255 255 / 48%), transparent 66%),
+    repeating-linear-gradient(132deg, transparent 0 102px, rgb(93 117 119 / 16%) 103px 106px, transparent 107px 224px),
+    repeating-linear-gradient(18deg, transparent 0 168px, rgb(93 117 119 / 10%) 169px 172px, transparent 173px 316px),
     var(--page-bg);
-  background-size: auto, auto, 72px 72px, auto;
+  background-attachment: fixed;
 }
-.app-frame { background: var(--surface-bg); box-shadow: 0 20px 60px -42px rgb(10 10 10 / 38%); }
+.app-frame { background: var(--surface-bg); box-shadow: 0 28px 90px -50px rgb(51 72 73 / 42%); }
 @media (min-width: 1024px) {
-  .app-frame { border: 1px solid var(--border-hairline); border-radius: 22px; overflow: hidden; }
+  .app-backdrop { padding: clamp(1rem, 3vw, 3.5rem); }
+  .app-frame { border: 10px solid rgb(255 255 255 / 80%); border-radius: 42px; overflow: hidden; min-height: calc(100vh - clamp(2rem, 6vw, 7rem)); }
 }
 .dark .app-frame { box-shadow: none; border-color: var(--border-hairline); }
 
 /* Soft cards: flat, bounded surfaces used throughout the workspace. */
-.soft-card { background: color-mix(in srgb, var(--surface-elevated) 96%, var(--accent-50)); border: 1px solid var(--border-hairline); border-radius: 16px; box-shadow: var(--shadow-md); }
+.soft-card { background: var(--surface-elevated); border: 1px solid transparent; border-radius: 24px; box-shadow: var(--shadow-md); }
 .dark .soft-card { box-shadow: none; }
 .soft-card-interactive { transition: border-color 220ms ease, background-color 220ms ease, transform 220ms cubic-bezier(.16,1,.3,1), box-shadow 220ms ease; cursor: pointer; }
-.soft-card-interactive:hover { border-color: color-mix(in srgb, var(--accent-600) 48%, var(--border-hairline)); background: color-mix(in srgb, var(--accent-50) 36%, var(--surface-elevated)); transform: translateY(-3px); box-shadow: 0 22px 48px -32px color-mix(in srgb, var(--accent-600) 42%, #000); }
+.soft-card-interactive:hover { border-color: color-mix(in srgb, var(--ink-primary) 12%, transparent); background: color-mix(in srgb, var(--surface-elevated) 86%, var(--pastel-aqua)); transform: translateY(-4px); box-shadow: 0 24px 52px -36px rgb(23 25 31 / 44%); }
 
 /* Surfaces */
 .studio-card {
   background: color-mix(in srgb, var(--surface-elevated) 97%, var(--accent-50));
-  border: 1px solid var(--border-hairline);
-  border-radius: 16px;
+  border: 1px solid transparent;
+  border-radius: 24px;
   box-shadow: var(--shadow-md);
   transition: border-color 220ms ease, background-color 220ms ease, transform 220ms cubic-bezier(.16,1,.3,1), box-shadow 220ms ease;
 }
@@ -283,47 +295,36 @@ html {
 /* Navigation: a quiet blue rail makes location obvious without a glowing pill. */
 .nav-active {
   position: relative;
-  background: var(--accent-50);
-  color: var(--accent-700);
+  background: var(--ink-primary);
+  color: #fff;
 }
-.nav-active::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.65rem;
-  left: 0;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent-600);
-}
-.dark .nav-active { color: var(--accent-700); }
+.nav-active::before { display: none; }
+.dark .nav-active { color: #fff; }
+
+.pastel-card { border: 0; border-radius: 26px; color: var(--ink-primary); box-shadow: none; }
+.pastel-aqua { background: var(--pastel-aqua); }
+.pastel-pink { background: var(--pastel-pink); }
+.pastel-yellow { background: var(--pastel-yellow); }
+.pastel-lilac { background: var(--pastel-lilac); }
+.round-action { background: rgb(255 255 255 / 84%); color: var(--ink-primary); border-radius: 999px; }
 
 /* Editorial product banners replace the generic sparkle-card treatment. */
 .product-banner {
   position: relative;
   overflow: hidden;
-  border: 1px solid #22262d;
-  border-radius: 20px 20px 20px 8px;
-  background:
-    radial-gradient(28rem 18rem at 82% 18%, rgb(59 130 246 / 28%), transparent 68%),
-    linear-gradient(90deg, rgb(37 99 235 / 14%) 1px, transparent 1px) 0 0 / 48px 48px,
-    linear-gradient(rgb(37 99 235 / 10%) 1px, transparent 1px) 0 0 / 48px 48px,
-    #080a0d;
-  color: #fff;
+  border: 0;
+  border-radius: 28px;
+  background: var(--pastel-yellow);
+  color: var(--ink-primary);
 }
-.product-banner::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--accent-500);
-}
+.product-banner::before { display: none; }
 .product-banner::after {
   content: "</>";
   position: absolute;
   right: clamp(1.25rem, 5vw, 4rem);
   top: 50%;
   transform: translateY(-50%);
-  color: rgb(255 255 255 / 7%);
+  color: rgb(23 25 31 / 7%);
   font-family: var(--font-mono);
   font-size: clamp(4rem, 10vw, 8rem);
   font-weight: 700;
@@ -337,11 +338,9 @@ html {
 .profile-live-preview {
   position: relative;
   overflow: hidden;
-  border-radius: 18px 18px 18px 6px;
-  background:
-    radial-gradient(22rem 12rem at 90% 0%, rgb(59 130 246 / 26%), transparent 70%),
-    linear-gradient(135deg, #050505, #101827 72%, #07162f);
-  color: #fff;
+  border-radius: 28px;
+  background: linear-gradient(135deg, var(--pastel-lilac), var(--pastel-aqua));
+  color: var(--ink-primary);
 }
 .profile-live-preview::after {
   content: "";
@@ -350,7 +349,7 @@ html {
   height: 10rem;
   right: -4rem;
   bottom: -6rem;
-  border: 1px solid rgb(96 165 250 / 30%);
+  border: 1px solid rgb(23 25 31 / 16%);
   border-radius: 42% 58% 65% 35% / 45% 35% 65% 55%;
   transform: rotate(18deg);
 }

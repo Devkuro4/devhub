@@ -270,7 +270,7 @@ export const CompeteSection = ({
                 aria-label="Progress to the next level"
                 className="h-2 w-full rounded-full bg-white/15 overflow-hidden"
               >
-                <div className="h-full rounded-full bg-[#3B82F6] transition-all duration-500" style={{ width: `${summary.level.pct}%` }} />
+                <div className="h-full rounded-full bg-[var(--ink-primary)] transition-all duration-500" style={{ width: `${summary.level.pct}%` }} />
               </div>
               <p className="text-sm text-white/75">
                 {summary.level.nextName

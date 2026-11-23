@@ -13,10 +13,10 @@ import {
   Map as MapIcon,
   Menu,
   Moon,
-  Settings,
   Shield,
   Sun,
   Trophy,
+  UserRound,
   Users,
   WifiOff,
   X,
@@ -2020,6 +2020,27 @@ export default function App() {
     />
   );
 
+  const openProfile = () => {
+    setShowOnboardingWizard(false);
+    setActiveTab('profile');
+    setMobileMenuOpen(false);
+  };
+
+  const profileHeaderButton = (compact = false) => (
+    <button
+      type="button"
+      onClick={openProfile}
+      aria-label="Open My Profile"
+      aria-current={activeTab === 'profile' ? 'page' : undefined}
+      className={`inline-flex items-center justify-center gap-2.5 min-h-11 ${compact ? 'w-11 px-0' : 'px-3.5'} rounded-full border border-transparent bg-[var(--surface-elevated)] text-[var(--ink-primary)] font-semibold text-sm hover:bg-[var(--pastel-aqua)] transition-colors cursor-pointer`}
+    >
+      <span className="w-8 h-8 rounded-full bg-[var(--pastel-pink)] text-[var(--ink-primary)] flex items-center justify-center text-xs font-bold shrink-0">
+        {initialsOf(user?.name || profile.fullName)}
+      </span>
+      {!compact && <span>My Profile</span>}
+    </button>
+  );
+
   return (
     <MotionConfig reducedMotion="user">
     <DarkCtx.Provider value={darkMode}>
@@ -2147,22 +2168,21 @@ export default function App() {
             )}
 
             <div className="sb-foot px-5 pb-7 pt-2">
-              <p className={sideLabel}>Settings</p>
+              <p className={sideLabel}>Your space</p>
               <div className="space-y-0.5">
                 <button
                   type="button"
                   data-tour="nav-profile"
                   onClick={() => {
-                    setShowOnboardingWizard(false);
-                    setActiveTab('profile');
+                    openProfile();
                   }}
                   aria-current={activeTab === 'profile' ? 'page' : undefined}
                   className={`w-full flex items-center gap-3 px-3 min-h-11 rounded-lg text-[0.9375rem] cursor-pointer whitespace-nowrap ${
                     activeTab === 'profile' ? 'nav-active font-semibold' : `${textSecondary} font-medium hover:text-[var(--ink-primary)]`
                   }`}
                 >
-                  <Settings className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
-                  <span>Settings</span>
+                  <UserRound className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                  <span>My Profile</span>
                 </button>
                 <HelpTriggerButton
                   onClick={() => setHelpDrawerOpen(true)}
@@ -2236,6 +2256,7 @@ export default function App() {
                   </>
                 )}
               </span>
+              {profileHeaderButton(true)}
               {notificationBellNode(true)}
               <HelpTriggerButton
                 compact
@@ -2310,7 +2331,7 @@ export default function App() {
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
               >
-                <Settings className="w-4 h-4" /> Profile & Settings
+                <UserRound className="w-4 h-4" /> My Profile
               </button>
               {user.isAdmin && !ADMIN_SITE && (
                 <button
@@ -2375,6 +2396,7 @@ export default function App() {
                   )}
                 </nav>
                 <div className="flex items-center gap-2.5">
+                  {profileHeaderButton(false)}
                   {notificationBellNode(false)}
                   <HelpTriggerButton
                     onClick={() => setHelpDrawerOpen(true)}
@@ -2384,6 +2406,7 @@ export default function App() {
               </header>
             ) : (
               <div className="hidden lg:flex items-center justify-end gap-2.5 px-10 pt-6 -mb-4">
+                {profileHeaderButton(false)}
                 {notificationBellNode(false)}
               </div>
             )}

@@ -370,10 +370,10 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
   return (
     <div className={`hub-root ${dark ? 'dark' : ''} ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen grid grid-cols-1 lg:grid-cols-12 text-[var(--ink-primary)]`}>
       {/* Desktop: the story panel */}
-      <div className="relative hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col justify-between p-12 xl:p-16 bg-[#0A0A0A] text-white overflow-hidden">
-        <Sparkle className="absolute -right-16 -bottom-20 w-[26rem] text-[#3B82F6] opacity-20" />
-        <Sparkle className="absolute right-24 top-24 w-24 text-[#3B82F6] opacity-30" />
-        <Sparkle className="absolute right-12 top-56 w-12 text-white opacity-10" />
+      <div className="relative hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col justify-between p-12 xl:p-16 bg-[var(--pastel-aqua)] text-[var(--ink-primary)] overflow-hidden">
+        <Sparkle className="absolute -right-16 -bottom-20 w-[26rem] text-[var(--pastel-pink)] opacity-80" />
+        <Sparkle className="absolute right-24 top-24 w-24 text-[var(--pastel-yellow)] opacity-90" />
+        <Sparkle className="absolute right-12 top-56 w-12 text-[var(--ink-primary)] opacity-10" />
 
         <div className="relative z-10 flex items-center gap-3">
           <LogoMark />
@@ -382,10 +382,10 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
 
         <div className="relative z-10 max-w-xl space-y-10">
           <div className="space-y-5">
-            <h2 className="font-display text-4xl xl:text-5xl font-semibold leading-[1.08] tracking-tight [text-wrap:balance] text-white">
+            <h2 className="font-display text-4xl xl:text-5xl font-semibold leading-[1.08] tracking-tight [text-wrap:balance] text-[var(--ink-primary)]">
               {ADMIN_SITE ? 'Support members consistently, one week at a time.' : 'Turn the courses you follow into skills you can use.'}
             </h2>
-            <p className="text-lg text-white/80 leading-relaxed max-w-[46ch]">
+            <p className="text-lg text-[var(--ink-secondary)] leading-relaxed max-w-[46ch]">
               {ADMIN_SITE
                 ? 'Keep the community friendly, publish challenges and study sessions, and monitor the AI learning tools.'
                 : 'Practise every day, get clear feedback on your code, and build real projects alongside people who are learning too.'}
@@ -395,10 +395,10 @@ export const AuthShell = ({ children, onBack }: { children: React.ReactNode; onB
           <ol className="space-y-5">
             {trail.map((t) => (
               <li key={t.name} className="flex gap-4">
-                <span aria-hidden="true" className="mt-2.5 w-2 h-2 rounded-full bg-[#3B82F6] shrink-0" />
+                <span aria-hidden="true" className="mt-2.5 w-2 h-2 rounded-full bg-[var(--ink-primary)] shrink-0" />
                 <div className="text-base leading-snug">
-                  <span className="font-semibold text-white">{t.name}.</span>{' '}
-                  <span className="text-white/75">{t.note}</span>
+                  <span className="font-semibold text-[var(--ink-primary)]">{t.name}.</span>{' '}
+                  <span className="text-[var(--ink-secondary)]">{t.note}</span>
                 </div>
               </li>
             ))}
