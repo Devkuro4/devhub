@@ -1082,11 +1082,21 @@ export default function App() {
 
   const learningSyncedUserRef = useRef<string | null>(null);
 
-  const signOut = () => {
+  const signOut = async () => {
     setNotifications([]);
     learningSyncedUserRef.current = null;
-    if (supabase) supabase.auth.signOut();
-    else setUser(null);
+    lastAuthKey.current = null;
+    synced.current = {};
+    setLoadError('');
+    setHydrated(false);
+    // Leave the broken workspace immediately. A local-scoped Supabase sign-out
+    // clears browser auth before making its best-effort server request, so this
+    // still works when the Supabase connection itself is failing.
+    setUser(null);
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) console.warn('Local sign-out completed with a server warning:', error.message);
+    }
   };
 
   const handleOnboardingComplete = (result: OnboardingResult) => {
