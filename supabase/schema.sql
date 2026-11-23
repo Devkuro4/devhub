@@ -91,6 +91,8 @@ drop policy if exists "own state update" on public.member_state;
 create policy "own state update" on public.member_state for update to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+grant select, insert, update on public.member_state to authenticated;
+
 -- shared_state: everyone reads; members write community keys; only admins write the curated ones
 drop policy if exists "shared read" on public.shared_state;
 create policy "shared read" on public.shared_state for select to authenticated using (true);
@@ -103,6 +105,8 @@ drop policy if exists "shared update" on public.shared_state;
 create policy "shared update" on public.shared_state for update to authenticated
   using (public.is_admin() or key not in ('quizzes','weeklyActivities','presentations','resources','teamRoster'))
   with check (public.is_admin() or key not in ('quizzes','weeklyActivities','presentations','resources','teamRoster'));
+
+grant select, insert, update on public.shared_state to authenticated;
 
 do $$
 begin

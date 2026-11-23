@@ -587,8 +587,10 @@ export const NotAuthorized = ({ onSignOut }: { onSignOut: () => void }) => (
   </AuthShell>
 );
 
-export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut?: () => void }) => (
-  <div className={`hub-root ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen flex items-center justify-center studio-canvas text-[var(--ink-primary)] p-6`}>
+export const LoadingScreen = ({ error, onSignOut }: { error?: string; onSignOut?: () => void }) => {
+  const dark = useSystemDark();
+  return (
+  <div className={`hub-root ${dark ? 'dark' : ''} ${ADMIN_SITE ? 'admin-theme' : ''} min-h-screen flex items-center justify-center studio-canvas text-[var(--ink-primary)] p-6`}>
     {error ? (
       <div className="studio-card max-w-md w-full p-7 sm:p-8 space-y-5">
         <div className="w-11 h-11 rounded-xl bg-[var(--danger-bg)] border border-[var(--danger-border)] text-[var(--danger-ink)] flex items-center justify-center">
@@ -597,8 +599,10 @@ export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut
         <div role="alert">
           <h1 className="font-display text-[var(--ink-primary)]">We couldn’t load your workspace</h1>
           <p className="text-base text-[var(--ink-secondary)] mt-2 leading-relaxed">
-            Check your internet connection and try again. If it keeps happening, sign out and sign back in.
+            Dev Hub reached your account but could not read its Supabase workspace data.
           </p>
+          <p className="mt-3 rounded-xl bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--danger-ink)] break-words">{error}</p>
+          <p className="text-sm text-[var(--ink-muted)] mt-3">Run the workspace repair SQL in Supabase if retrying does not help.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <button
@@ -625,7 +629,8 @@ export const LoadingScreen = ({ error, onSignOut }: { error?: boolean; onSignOut
       </div>
     )}
   </div>
-);
+  );
+};
 
 const formatAuthError = (msg?: string) => {
   if (!msg) return 'Sign-in failed. Please try again.';

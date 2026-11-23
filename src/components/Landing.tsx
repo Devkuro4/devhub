@@ -196,8 +196,8 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
     'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-[var(--ink-primary)]/20 bg-[var(--surface-elevated)]/75 text-[var(--ink-primary)] text-base font-medium cursor-pointer hover:bg-[var(--surface-elevated)]';
 
   return (
-    <div className={`hub-root ${dark ? 'dark' : ''} app-backdrop min-h-screen sm:p-6`}>
-      <div className="app-frame min-h-[calc(100vh-3rem)]">
+    <div className={`hub-root ${dark ? 'dark' : ''} app-backdrop min-h-screen`}>
+      <div className="app-frame min-h-screen">
       <a href="#hero" className="skip-link">Skip to main content</a>
 
       <header className="sticky top-0 z-30 border-b border-[var(--border-hairline)] bg-[var(--surface-bg)]/94 backdrop-blur">

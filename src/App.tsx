@@ -241,7 +241,7 @@ export default function App() {
   const [user, setUser] = useState<UserSession | null>(saved?.user ?? null);
   const [authReady, setAuthReady] = useState(!CLOUD);
   const [hydrated, setHydrated] = useState(!CLOUD);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [onboarded, setOnboarded] = useState<boolean>(saved?.onboarded ?? false);
   const [onboardingState, setOnboardingState] = useState<OnboardingState>(() =>
     normalizeOnboarding(saved?.onboarded ?? false, saved?.onboardingState)
@@ -624,7 +624,7 @@ export default function App() {
         setRole(ADMIN_SITE ? 'admin' : 'member');
         setActiveTab(ADMIN_SITE ? 'admin-dashboard' : 'dashboard');
         setHydrated(false);
-        setLoadError(false);
+        setLoadError('');
         setAuthReady(true);
         return;
       }
@@ -691,16 +691,19 @@ export default function App() {
     if (!supabase || !user?.id || (ADMIN_SITE && !user.isAdmin)) return;
     let cancelled = false;
     setHydrated(false);
-    setLoadError(false);
+    setLoadError('');
     (async () => {
       try {
         const [mine, shared] = await Promise.all([
-          supabase.from('member_state').select('state').eq('user_id', user.id).maybeSingle(),
+          role === 'admin'
+            ? Promise.resolve({ data: null, error: null })
+            : supabase.from('member_state').select('state').eq('user_id', user.id).maybeSingle(),
           supabase.from('shared_state').select('key,value'),
         ]);
         if (cancelled) return;
         if (mine.error || shared.error) {
-          setLoadError(true);
+          const details = [mine.error?.message, shared.error?.message].filter(Boolean).join(' ');
+          setLoadError(details || 'Supabase could not read the workspace tables.');
           return;
         }
         const m = stateRef.current;
@@ -739,14 +742,14 @@ export default function App() {
         if (mineObj.onboardingState.status !== 'completed' && !ADMIN_SITE && !user.isAdmin) {
           setShowOnboardingWizard(true);
         }
-      } catch {
-        if (!cancelled) setLoadError(true);
+      } catch (error: any) {
+        if (!cancelled) setLoadError(error?.message || 'Supabase could not read the workspace tables.');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.isAdmin]);
+  }, [user?.id, user?.isAdmin, role]);
 
   useEffect(() => {
     if (!supabase || !user?.id || !hydrated) return;
@@ -2061,11 +2064,11 @@ export default function App() {
         openNotifRoomRequest={openNotifRoomRequest}
         onClearNotifRoom={() => setOpenNotifRoomRequest(null)}
       />
-      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-dvh app-backdrop lg:p-4 ${textPrimary}`}>
-        <div className="app-frame min-h-dvh lg:min-h-[calc(100vh-2rem)] flex flex-col lg:flex-row">
+      <div className={`hub-root ${darkMode ? 'dark' : ''} ${role === 'admin' ? 'admin-theme' : ''} min-h-dvh app-backdrop ${textPrimary}`}>
+        <div className="app-frame min-h-dvh flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop sidebar */}
-          <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-2rem)] border-r studio-sidebar">
+          <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:self-start lg:h-dvh border-r studio-sidebar">
             <div className="sb-logo px-8 pt-8 pb-7">
               <button
                 type="button"

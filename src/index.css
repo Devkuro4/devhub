@@ -96,13 +96,13 @@
 }
 
 .dark {
-  --page-bg: #050505;
-  --canvas-bg: #0A0A0A;
-  --surface-bg: #0F0F0F;
-  --surface-elevated: #141414;
-  --surface-subtle: #1C1C1C;
-  --border-hairline: #262626;
-  --border-strong: #3A3A3A;
+  --page-bg: #080B10;
+  --canvas-bg: #0B0F14;
+  --surface-bg: #0D1218;
+  --surface-elevated: #141B24;
+  --surface-subtle: #1A2430;
+  --border-hairline: #25303D;
+  --border-strong: #384657;
   --ink-primary: #FAFAFA;
   --ink-secondary: #B0B0B0;
   --ink-muted: #8A8A8A;
@@ -110,10 +110,10 @@
   --on-spark: #0A0A0A;
   --panel-deep: #000000;
 
-  --pastel-aqua: #203D3A;
-  --pastel-pink: #482C3A;
-  --pastel-yellow: #493C1F;
-  --pastel-lilac: #392E49;
+  --pastel-aqua: #173537;
+  --pastel-pink: #352431;
+  --pastel-yellow: #39311F;
+  --pastel-lilac: #29263D;
 
   --accent-50: color-mix(in srgb, #3B82F6 16%, transparent);
   --accent-100: color-mix(in srgb, #3B82F6 24%, transparent);
@@ -197,21 +197,9 @@ html {
 .studio-sidebar { background-color: #FFFDFC; border-color: transparent; }
 .dark .studio-sidebar { background-color: var(--surface-bg); }
 
-/* App shell: a precise product workspace, not a floating marketing card. */
-.app-backdrop {
-  background:
-    radial-gradient(44rem 25rem at 6% 8%, rgb(255 255 255 / 48%), transparent 66%),
-    repeating-linear-gradient(132deg, transparent 0 102px, rgb(93 117 119 / 16%) 103px 106px, transparent 107px 224px),
-    repeating-linear-gradient(18deg, transparent 0 168px, rgb(93 117 119 / 10%) 169px 172px, transparent 173px 316px),
-    var(--page-bg);
-  background-attachment: fixed;
-}
-.app-frame { background: var(--surface-bg); box-shadow: 0 28px 90px -50px rgb(51 72 73 / 42%); }
-@media (min-width: 1024px) {
-  .app-backdrop { padding: clamp(1rem, 3vw, 3.5rem); }
-  .app-frame { border: 10px solid rgb(255 255 255 / 80%); border-radius: 42px; overflow: hidden; min-height: calc(100vh - clamp(2rem, 6vw, 7rem)); }
-}
-.dark .app-frame { box-shadow: none; border-color: var(--border-hairline); }
+/* The workspace fills the browser. No decorative page behind the product. */
+.app-backdrop { background: var(--surface-bg); }
+.app-frame { background: var(--surface-bg); min-height: 100dvh; }
 
 /* Soft cards: flat, bounded surfaces used throughout the workspace. */
 .soft-card { background: var(--surface-elevated); border: 1px solid transparent; border-radius: 24px; box-shadow: var(--shadow-md); }
@@ -299,7 +287,7 @@ html {
   color: #fff;
 }
 .nav-active::before { display: none; }
-.dark .nav-active { color: #fff; }
+.dark .nav-active { background: var(--accent-600); color: #fff; }
 
 .pastel-card { border: 0; border-radius: 26px; color: var(--ink-primary); box-shadow: none; }
 .pastel-aqua { background: var(--pastel-aqua); }
