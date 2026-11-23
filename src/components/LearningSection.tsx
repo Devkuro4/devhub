@@ -1154,110 +1154,55 @@ export const LearningSection = ({
       {/* 1. TODAY'S LEARNING (OVERVIEW + 5-STAGE STEPPER) */}
       {subTab === 'today' && (
         <div data-tour="learning-today" className="space-y-6">
-          {/* Today's Learning Overview Strip + Study Session Tracker */}
-          <div className={`${cardClass} p-5 space-y-4`}>
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-1">
-                <div>
-                  <div className={`text-xs ${textSecondary}`}>Planned & Pending</div>
-                  <div className={`font-display text-2xl tabular-nums ${textPrimary}`}>{plannedForTodayCount}</div>
+          {/* One clear course focus, with secondary tracking details below it. */}
+          <section className="pastel-card pastel-yellow p-6 sm:p-8 space-y-6" aria-labelledby="learning-focus-heading">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+              <div className="min-w-0 max-w-2xl">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--ink-secondary)]">
+                  <span>{activeDailyCourse?.platform || 'Course tracker'}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{activeDailyCourse?.progress || 0}% complete</span>
                 </div>
-                <div>
-                  <div className={`text-xs ${textSecondary}`}>Completed Today</div>
-                  <div className="font-display text-2xl tabular-nums text-[var(--success-ink)]">{completedTodayCount}</div>
-                </div>
-                <div>
-                  <div className={`text-xs ${textSecondary}`}>Needs Revision</div>
-                  <div className={`font-display text-2xl tabular-nums ${revisionSubmissions.length > 0 ? 'text-[var(--warning-ink)]' : textPrimary}`}>
-                    {revisionSubmissions.length}
-                  </div>
-                </div>
-                <div>
-                  <div className={`text-xs ${textSecondary}`}>Next Recommended</div>
-                  <div className={`text-sm font-semibold truncate ${textPrimary}`}>
-                    {revisionSubmissions[0]
-                      ? `Revise ${revisionSubmissions[0].topic}`
-                      : activeDailyCourse?.currentTopic || dailyTarget.topic}
-                  </div>
+                <h2 id="learning-focus-heading" className="mt-2 !text-[1.65rem] sm:!text-[2rem] text-[var(--ink-primary)]">
+                  {activeDailyCourse?.title || 'Add the course you are currently taking'}
+                </h2>
+                <p className="mt-3 text-sm text-[var(--ink-secondary)]">Today: <strong className="text-[var(--ink-primary)]">{dailyTarget.topic}</strong></p>
+                <div className="mt-5 h-2 rounded-full bg-white/65 overflow-hidden" role="progressbar" aria-label="Course progress" aria-valuenow={activeDailyCourse?.progress || 0} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-[var(--ink-primary)] transition-all" style={{ width: `${activeDailyCourse?.progress || 0}%` }} />
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {/* Real Study Timer */}
-                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${borderClass} ${subtleBgClass} text-xs`}>
-                  <Clock className="w-3.5 h-3.5 text-[var(--accent-600)]" />
-                  <span className={`font-mono tabular-nums font-semibold ${textPrimary}`}>
-                    {String(Math.floor(sessionSeconds / 60)).padStart(2, '0')}:{String(sessionSeconds % 60).padStart(2, '0')}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSessionRunning((r) => !r)}
-                    className="text-[var(--accent-600)] font-semibold hover:underline cursor-pointer"
-                  >
-                    {sessionRunning ? <span className="inline-flex items-center gap-1"><Pause className="w-3 h-3" /> Pause</span> : 'Start Timer'}
-                  </button>
-                  {sessionSeconds > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleSaveStudySession}
-                      className="text-[var(--success-ink)] font-semibold hover:underline cursor-pointer"
-                    >
-                      Save Session
-                    </button>
-                  )}
-                </div>
-
-                {dailyTarget.status !== 'Demonstrated' && (
-                  <button
-                    type="button"
-                    onClick={handleMarkLessonComplete}
-                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> Mark Lesson Complete
-                  </button>
-                )}
-
-                {revisionSubmissions[0] && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rev = revisionSubmissions[0];
-                      setResubmitParentId(rev.id);
-                      setCodeDraft(rev.code);
-                      setDailyStage(3);
-                    }}
-                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
-                  >
-                    <Repeat className="w-3.5 h-3.5 text-[var(--warning-ink)]" /> Continue Unfinished Work
-                  </button>
-                )}
-
-                {activeDailyCourse?.url && (
-                  <a
-                    href={activeDailyCourse.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
-                  >
-                    Open Resource <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-
-                {activeDailyMaterials.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMaterialsModalMode('browse');
-                      setMaterialsModalPackId(activeDailyMaterials[0].id);
-                      setShowMaterialsModal(true);
-                    }}
-                    className={`${btnSecondary} !px-3.5 !py-2 text-xs`}
-                  >
-                    <FolderArchive className="w-3.5 h-3.5" /> Open Materials
-                  </button>
-                )}
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {activeDailyCourse?.url && <a href={activeDailyCourse.url} target="_blank" rel="noopener noreferrer" className="round-action inline-flex items-center gap-2 min-h-11 px-4 text-sm font-semibold">Open course <ExternalLink className="w-4 h-4" /></a>}
+                <button type="button" onClick={() => setDailyStage(2)} className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-[var(--ink-primary)] text-white text-sm font-semibold cursor-pointer">Log progress <ArrowRight className="w-4 h-4" /></button>
               </div>
             </div>
+          </section>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="pastel-card pastel-aqua p-5">
+              <p className="text-xs font-semibold text-[var(--ink-secondary)]">Study time logged</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{totalStudyMinutes} min</p>
+            </div>
+            <div className="pastel-card pastel-pink p-5">
+              <p className="text-xs font-semibold text-[var(--ink-secondary)]">Code evidence</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{codeSubmissions.length}</p>
+            </div>
+            <div className="pastel-card pastel-lilac p-5">
+              <p className="text-xs font-semibold text-[var(--ink-secondary)]">Quiz average</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{avgQuizScore === null ? '—' : `${avgQuizScore}%`}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={`inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-[var(--surface-elevated)] text-sm`}>
+              <Clock className="w-4 h-4" />
+              <span className="font-mono tabular-nums font-semibold">{String(Math.floor(sessionSeconds / 60)).padStart(2, '0')}:{String(sessionSeconds % 60).padStart(2, '0')}</span>
+              <button type="button" onClick={() => setSessionRunning((running) => !running)} className="font-semibold underline cursor-pointer">{sessionRunning ? 'Pause' : 'Start timer'}</button>
+              {sessionSeconds > 0 && <button type="button" onClick={handleSaveStudySession} className="font-semibold text-[var(--success-ink)] underline cursor-pointer">Save</button>}
+            </div>
+            {revisionSubmissions[0] && <button type="button" onClick={() => { const revision = revisionSubmissions[0]; setResubmitParentId(revision.id); setCodeDraft(revision.code); setDailyStage(3); }} className="min-h-11 px-4 rounded-full bg-[var(--warning-bg)] text-[var(--warning-ink)] text-sm font-semibold cursor-pointer">Continue revision</button>}
+            {activeDailyMaterials.length > 0 && <button type="button" onClick={() => { setMaterialsModalMode('browse'); setMaterialsModalPackId(activeDailyMaterials[0].id); setShowMaterialsModal(true); }} className={btnSecondary}><FolderArchive className="w-4 h-4" /> Materials</button>}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
