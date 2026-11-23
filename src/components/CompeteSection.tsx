@@ -249,9 +249,9 @@ export const CompeteSection = ({
       {/* ------------------------------------------------ OVERVIEW */}
       {subTab === 'compete' && (
         <div className="space-y-6">
-          <section className="product-banner px-6 py-7 sm:px-10 sm:py-10">
+          <section className="workspace-hero">
             <div className="relative max-w-2xl space-y-4">
-              <p className="text-sm text-white/70">Level {summary.level.index + 1} of {LEVELS.length}</p>
+              <p className="workspace-eyebrow">Level {summary.level.index + 1} of {LEVELS.length}</p>
               <h2 className="text-white font-semibold !text-[1.75rem] sm:!text-[2rem] leading-tight">
                 {summary.level.name} <span className="text-white/60 font-medium">· {summary.totalXp} XP</span>
               </h2>
@@ -261,9 +261,9 @@ export const CompeteSection = ({
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label="Progress to the next level"
-                className="h-2 w-full rounded-full bg-white/15 overflow-hidden"
+                className="h-2 w-full rounded-full hero-progress overflow-hidden"
               >
-                <div className="h-full rounded-full bg-[var(--ink-primary)] transition-all duration-500" style={{ width: `${summary.level.pct}%` }} />
+                <div className="h-full rounded-full bg-[var(--accent-600)] transition-all duration-500" style={{ width: `${summary.level.pct}%` }} />
               </div>
               <p className="text-sm text-white/75">
                 {summary.level.nextName
@@ -276,7 +276,7 @@ export const CompeteSection = ({
                   onClick={() => setSubTab('arena')}
                   className={btnPrimary}
                 >
-                  <Swords className="w-4 h-4" /> Enter Coding Arena
+                  <Swords className="w-4 h-4" /> Open Code Duels
                 </button>
                 <button
                   type="button"

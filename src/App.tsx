@@ -12,6 +12,7 @@ import {
   LogOut,
   Map as MapIcon,
   Menu,
+  MessageSquare,
   Moon,
   Shield,
   Sun,
@@ -1075,7 +1076,8 @@ export default function App() {
   const adminNav = [
     { id: 'admin-dashboard', label: 'Overview', icon: Shield, match: ['admin-dashboard'] },
     { id: 'admin-members', label: 'Members', icon: Users, match: ['admin-members'] },
-    { id: 'admin-support', label: 'Announcements', icon: BookOpen, match: ['admin-support'] },
+    { id: 'admin-announcements', label: 'Announcements', icon: BookOpen, match: ['admin-announcements'] },
+    { id: 'admin-support', label: 'Moderation & Help', icon: MessageSquare, match: ['admin-support'] },
     { id: 'admin-activities', label: 'Activities', icon: FolderGit2, match: ['admin-activities'] },
     { id: 'admin-ai', label: 'AI Settings', icon: Code2, match: ['admin-ai'] },
   ];
@@ -1900,7 +1902,7 @@ export default function App() {
   const isCommunitySubTab = ['community-home', 'study-chat', 'community', 'study-groups', 'announcements', 'resources', 'events', 'challenges', 'pairing-help'].includes(activeTab);
   const isProjectsSubTab = ['weekly-project', 'projects', 'showcase', 'devtools'].includes(activeTab);
   const isCompeteSubTab = ['compete', 'arena', 'arena-challenges', 'buildoffs', 'bounties', 'leaderboard', 'badges', 'compete-history'].includes(activeTab);
-  const isAdminSubTab = ['admin-dashboard', 'admin-members', 'admin-support', 'admin-activities', 'admin-ai'].includes(activeTab);
+  const isAdminSubTab = ['admin-dashboard', 'admin-announcements', 'admin-members', 'admin-support', 'admin-activities', 'admin-ai'].includes(activeTab);
 
   const breadcrumbParts: { primary: string; secondary?: string } = (() => {
     if (showOnboardingWizard) return { primary: 'Getting Started', secondary: '1-Minute Setup' };
@@ -1937,7 +1939,8 @@ export default function App() {
     if (activeTab === 'profile') return { primary: 'Profile & Settings' };
     if (activeTab === 'admin-dashboard') return { primary: 'Admin Console', secondary: 'Overview' };
     if (activeTab === 'admin-members') return { primary: 'Admin Console', secondary: 'Members' };
-    if (activeTab === 'admin-support') return { primary: 'Admin Console', secondary: 'Announcements & Help' };
+    if (activeTab === 'admin-announcements') return { primary: 'Admin Console', secondary: 'Announcements' };
+    if (activeTab === 'admin-support') return { primary: 'Admin Console', secondary: 'Moderation & Help' };
     if (activeTab === 'admin-activities') return { primary: 'Admin Console', secondary: 'Activities & Quizzes' };
     if (activeTab === 'admin-ai') return { primary: 'Admin Console', secondary: 'AI Settings' };
     return { primary: 'Workspace' };
@@ -2086,7 +2089,7 @@ export default function App() {
         <div className="app-frame min-h-dvh flex flex-col lg:flex-row">
           <a href="#main" className="skip-link">Skip to main content</a>
           {/* Desktop sidebar */}
-          <aside className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:self-start lg:h-dvh border-r studio-sidebar">
+          <aside className="hidden lg:flex lg:w-[222px] lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:self-start lg:h-dvh border-r studio-sidebar">
             <div className="sb-logo px-8 pt-8 pb-7">
               <button
                 type="button"
@@ -2404,7 +2407,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className={`${onDashboardHome ? 'w-full' : 'max-w-[80rem] mx-auto px-5 sm:px-8 lg:px-10 xl:px-12 py-7 sm:py-10 lg:py-12 space-y-8 sm:space-y-10'} workspace-page`}
+                className={`${onDashboardHome ? 'w-full' : 'workspace-content py-7 sm:py-10 space-y-7 sm:space-y-8'} workspace-page`}
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard
@@ -2659,7 +2662,7 @@ export default function App() {
                       />
                     )}
 
-                    {isAdminSubTab && (
+                    {role === 'admin' && isAdminSubTab && (
                       <AdminSection
                         subTab={activeTab as any}
                         setSubTab={(t) => setActiveTab(t)}
@@ -2726,8 +2729,8 @@ export default function App() {
           </div>
 
           {/* Compact Mobile Bottom Nav: 4 primary tabs + More (opens the full menu) */}
-          <nav aria-label="Mobile navigation" className={`mobile-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-30 border-t ${borderClass} bg-[var(--surface-bg)]/95 backdrop-blur grid grid-cols-5`}>
-            {mainNav.slice(0, 4).map((item) => {
+          <nav aria-label="Mobile navigation" className={`mobile-bottom-nav lg:hidden fixed bottom-0 inset-x-0 z-30 border-t ${borderClass} bg-[var(--surface-bg)]/95 backdrop-blur grid ${role === 'admin' ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            {(role === 'admin' ? adminNav.filter((item) => ['admin-dashboard', 'admin-members', 'admin-activities'].includes(item.id)) : mainNav.slice(0, 4)).map((item) => {
               const Icon = item.icon;
               const active = item.match.includes(activeTab);
               return (
@@ -2745,7 +2748,7 @@ export default function App() {
                   }`}
                 >
                   <Icon className="w-5 h-5 shrink-0" />
-                  <span className="truncate max-w-full px-0.5">{item.label.replace('My ', '')}</span>
+                  <span className="truncate max-w-full px-0.5">{item.id === 'dashboard' ? 'Home' : item.label.replace('My ', '')}</span>
                 </button>
               );
             })}
@@ -2754,7 +2757,7 @@ export default function App() {
               onClick={() => setMobileMenuOpen((v) => !v)}
               aria-expanded={mobileMenuOpen}
               className={`flex flex-col items-center justify-center gap-1 min-h-[56px] text-xs font-medium cursor-pointer ${
-                mobileMenuOpen || mainNav.slice(4).some((i) => i.match.includes(activeTab)) ? 'text-[var(--accent-700)] font-semibold' : textSecondary
+                mobileMenuOpen || activeTab === 'profile' || (role === 'admin' ? ['admin-announcements', 'admin-support', 'admin-ai'].includes(activeTab) : mainNav.slice(4).some((i) => i.match.includes(activeTab))) ? 'text-[var(--accent-700)] font-semibold' : textSecondary
               }`}
             >
               <Menu className="w-5 h-5 shrink-0" />

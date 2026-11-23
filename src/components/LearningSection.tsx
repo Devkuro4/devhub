@@ -1164,40 +1164,40 @@ export const LearningSection = ({
       {subTab === 'today' && (
         <div data-tour="learning-today" className="space-y-6">
           {/* One clear course focus, with secondary tracking details below it. */}
-          <section className="pastel-card pastel-yellow p-6 sm:p-8 space-y-6" aria-labelledby="learning-focus-heading">
+          <section className="workspace-hero space-y-5" aria-labelledby="learning-focus-heading">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
               <div className="min-w-0 max-w-2xl">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--ink-secondary)]">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold hero-support">
                   <span>{activeDailyCourse?.platform || 'Course tracker'}</span>
                   <span aria-hidden="true">·</span>
                   <span>{activeDailyCourse?.progress || 0}% complete</span>
                 </div>
-                <h2 id="learning-focus-heading" className="mt-2 !text-[1.65rem] sm:!text-[2rem] text-[var(--ink-primary)]">
+                <h2 id="learning-focus-heading" className="mt-2 !text-[1.65rem] sm:!text-[2rem] text-white">
                   {activeDailyCourse?.title || 'Add the course you are currently taking'}
                 </h2>
-                <p className="mt-3 text-sm text-[var(--ink-secondary)]">Today: <strong className="text-[var(--ink-primary)]">{dailyTarget.topic}</strong></p>
-                <div className="mt-5 h-2 rounded-full bg-[var(--surface-elevated)]/70 overflow-hidden" role="progressbar" aria-label="Course progress" aria-valuenow={activeDailyCourse?.progress || 0} aria-valuemin={0} aria-valuemax={100}>
-                  <div className="h-full rounded-full bg-[var(--ink-primary)] transition-all" style={{ width: `${activeDailyCourse?.progress || 0}%` }} />
+                <p className="mt-3 text-sm hero-support">Today: <strong className="text-white">{dailyTarget.topic}</strong></p>
+                <div className="mt-5 h-2 rounded-full hero-progress overflow-hidden" role="progressbar" aria-label="Course progress" aria-valuenow={activeDailyCourse?.progress || 0} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-[var(--accent-600)] transition-all" style={{ width: `${activeDailyCourse?.progress || 0}%` }} />
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2 lg:justify-end">
                 {activeDailyCourse?.url && <a href={activeDailyCourse.url} target="_blank" rel="noopener noreferrer" className="round-action inline-flex items-center gap-2 min-h-11 px-4 text-sm font-semibold">Open course <ExternalLink className="w-4 h-4" /></a>}
-                <button type="button" onClick={() => setDailyStage(2)} className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-[var(--ink-primary)] text-[var(--surface-elevated)] text-sm font-semibold cursor-pointer">Log progress <ArrowRight className="w-4 h-4" /></button>
+                <button type="button" onClick={() => setDailyStage(2)} className="hub-action">Log progress <ArrowRight className="w-4 h-4" /></button>
               </div>
             </div>
           </section>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="pastel-card pastel-aqua p-5">
+            <div className="soft-card p-5">
               <p className="text-xs font-semibold text-[var(--ink-secondary)]">Study time logged</p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{totalStudyMinutes} min</p>
             </div>
-            <div className="pastel-card pastel-pink p-5">
+            <div className="soft-card p-5">
               <p className="text-xs font-semibold text-[var(--ink-secondary)]">Code evidence</p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{codeSubmissions.length}</p>
             </div>
-            <div className="pastel-card pastel-lilac p-5">
+            <div className="soft-card p-5">
               <p className="text-xs font-semibold text-[var(--ink-secondary)]">Quiz average</p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{avgQuizScore === null ? '—' : `${avgQuizScore}%`}</p>
             </div>

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   Code2,
   Compass,
   ExternalLink,
@@ -33,7 +34,7 @@ export const LogoMark = ({ size = 40 }: { size?: number }) => (
   <span
     aria-hidden="true"
     style={{ width: size, height: size, borderRadius: Math.max(6, Math.round(size * 0.2)) }}
-    className="bg-[var(--panel-deep)] text-white flex items-center justify-center shrink-0 dark:border dark:border-[var(--border-strong)]"
+    className="bg-[var(--accent-50)] text-[var(--accent-700)] flex items-center justify-center shrink-0"
   >
     <svg viewBox="0 0 24 24" style={{ width: size * 0.5, height: size * 0.5 }} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
       <path d="M8.5 7.5 4 12l4.5 4.5M15.5 7.5 20 12l-4.5 4.5" />
@@ -52,7 +53,7 @@ export const PageHeader = ({
   action?: React.ReactNode;
 }) => {
   return (
-    <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 lg:gap-8 pb-1 lg:pb-2 border-b border-[var(--border-hairline)]">
+    <header className="workspace-page-header flex flex-col justify-between gap-4 lg:flex-row lg:items-start lg:gap-8">
       <div className="space-y-3 max-w-2xl min-w-0">
         <h1 className="font-display text-[var(--ink-primary)]">{title}</h1>
         <p className="text-base leading-relaxed max-w-[62ch] text-[var(--ink-secondary)]">{description}</p>
@@ -63,74 +64,65 @@ export const PageHeader = ({
 };
 
 export const SectionTabs = <T extends string>({
-  tabs,
-  active,
-  onChange,
+  tabs, active, onChange,
 }: {
-  tabs: { id: T; label: string; badge?: string | number }[];
+  tabs: readonly { id: T; label: string; badge?: string | number }[];
   active: T;
   onChange: (id: T) => void;
 }) => {
-  const tabListRef = React.useRef<HTMLDivElement>(null);
-  // Only when the active tab changes, and only sideways inside the tab row (never moves the page)
+  const navRef = useRef<HTMLElement>(null);
+  const moreRef = useRef<HTMLDetailsElement>(null);
+  const [capacity, setCapacity] = useState(2);
+
   useEffect(() => {
-    const list = tabListRef.current;
-    const el = list?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (!list || !el || list.scrollWidth <= list.clientWidth) return;
-    list.scrollTo({ left: el.offsetLeft - (list.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' });
-  }, [active]);
-  // Fade the edge that has more tabs hidden past it, so a clipped tab reads as "scroll" not "broken"
-  const [edges, setEdges] = useState({ start: false, end: false });
-  useEffect(() => {
-    const list = tabListRef.current;
-    if (!list) return;
-    const measure = () =>
-      setEdges({
-        start: list.scrollLeft > 4,
-        end: list.scrollLeft + list.clientWidth < list.scrollWidth - 4,
-      });
+    const nav = navRef.current;
+    if (!nav) return;
+    const measure = () => setCapacity(nav.clientWidth < 480 ? 2 : nav.clientWidth < 820 ? 3 : 4);
     measure();
-    list.addEventListener('scroll', measure, { passive: true });
-    window.addEventListener('resize', measure);
-    return () => {
-      list.removeEventListener('scroll', measure);
-      window.removeEventListener('resize', measure);
-    };
-  }, [tabs.length]);
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, []);
+
+  const visible = tabs.slice(0, capacity);
+  const selected = tabs.find((tab) => tab.id === active);
+  if (selected && !visible.includes(selected)) visible[visible.length - 1] = selected;
+  const overflow = tabs.filter((tab) => !visible.includes(tab));
+
+  const tabButton = (tab: (typeof tabs)[number], inMenu = false) => (
+    <button key={tab.id} type="button" aria-current={tab.id === active ? 'page' : undefined}
+      className={inMenu ? 'workspace-tab w-full justify-between' : 'workspace-tab'}
+      onClick={() => {
+        if (inMenu && moreRef.current) {
+          moreRef.current.open = false;
+          moreRef.current.querySelector('summary')?.focus();
+        }
+        onChange(tab.id);
+      }}>
+      <span>{tab.label}</span>
+      {tab.badge !== undefined && tab.badge !== 0 && <span className="rounded-full bg-[var(--accent-50)] px-1.5 text-xs text-[var(--accent-700)]">{tab.badge}</span>}
+    </button>
+  );
+
   return (
-    <div
-      role="tablist"
-      ref={tabListRef}
-      data-fade-start={edges.start || undefined}
-      data-fade-end={edges.end || undefined}
-      className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar w-full max-w-full border-b border-[var(--border-hairline)] snap-x overscroll-x-contain"
-    >
-      {tabs.map((tab) => {
-        const isActive = tab.id === active;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onChange(tab.id)}
-            className={`relative px-4 sm:px-5 py-3.5 text-[0.9375rem] font-medium whitespace-nowrap shrink-0 snap-start cursor-pointer min-h-[52px] flex items-center gap-2 transition-colors ${
-              isActive
-                ? 'text-[var(--ink-primary)] font-semibold'
-                : 'text-[var(--ink-secondary)] hover:text-[var(--ink-primary)]'
-            }`}
-          >
-            <span>{tab.label}</span>
-            {tab.badge !== undefined && tab.badge !== 0 && (
-              <span className="text-xs font-semibold tabular-nums min-w-[1.5rem] text-center rounded-full px-1.5 py-0.5 leading-none bg-[var(--accent-50)] text-[var(--accent-700)]">
-                {tab.badge}
-              </span>
-            )}
-            {isActive && <span aria-hidden="true" className="absolute left-3 right-3 -bottom-px h-[3px] rounded-t-full bg-[var(--spark)]" />}
-          </button>
-        );
-      })}
-    </div>
+    <nav ref={navRef} className="workspace-tabs" aria-label="Section navigation">
+      {visible.map((tab) => tabButton(tab))}
+      {overflow.length > 0 && (
+        <details ref={moreRef} className="workspace-tabs-more" onKeyDown={(event) => {
+          if (event.key === 'Escape' && event.currentTarget.open) {
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector('summary')?.focus();
+          }
+        }}>
+          <summary className="workspace-tab">More <ChevronDown size={16} aria-hidden="true" /></summary>
+          <div className="workspace-tabs-menu">{overflow.map((tab) => tabButton(tab, true))}</div>
+        </details>
+      )}
+    </nav>
   );
 };
 

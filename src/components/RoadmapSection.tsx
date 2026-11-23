@@ -296,7 +296,7 @@ export const RoadmapSection = ({
   return (
     <div className="page-stack">
       <PageHeader
-        title="My Learning Plan"
+        title="My Roadmap"
         description="Follow one stage at a time instead of everything at once. Mark topics you already know, save notes, or switch paths anytime."
         action={
           <>
@@ -516,8 +516,7 @@ export const RoadmapSection = ({
                 </button>
               </div>
             )}
-            <h2 className={`font-display text-2xl ${textPrimary}`}>{selectedRoadmap.title}</h2>
-            <p className={`text-xs leading-relaxed ${textSecondary}`}>{selectedRoadmap.summary}</p>
+            <div className="workspace-hero space-y-2"><p className="workspace-eyebrow">Active roadmap</p><h2 className="text-2xl!">{selectedRoadmap.title}</h2><p className="hero-support text-sm">{selectedRoadmap.summary}</p></div>
           </div>
           <div className="shrink-0 min-w-[200px] space-y-2">
             <div className="flex items-center justify-between text-xs">

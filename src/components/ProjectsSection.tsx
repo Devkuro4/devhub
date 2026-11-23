@@ -401,7 +401,7 @@ export const ProjectsSection = ({
       {/* 1. PERSONALIZED WEEKLY PROJECT */}
       {subTab === 'weekly-project' && (
         <div className="space-y-6">
-          <details open={!activeWp} className={`${cardClass} group`}>
+          <details open={!activeWp} className={`${cardClass} workspace-reveal group`}>
             <summary className="list-none cursor-pointer px-5 py-4 flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
               <span>
                 <span className={`block text-lg font-display ${textPrimary}`}>Start a new weekly project</span>
@@ -461,14 +461,15 @@ export const ProjectsSection = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-7 space-y-5">
                 <div className={`${cardClass} p-6 space-y-5`}>
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className={`flex flex-wrap items-center gap-2 text-xs ${textSecondary}`}>
-                        <span className="font-semibold text-[var(--accent-600)]">{activeWp.projectLevel}</span>
+                  <div className="workspace-hero flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-2">
+                      <p className="workspace-eyebrow">This week’s project</p>
+                      <div className="hero-support flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold text-[var(--hero-accent)]">{activeWp.projectLevel}</span>
                         <span>· {activeWp.language}</span>
                         <span>· Due {activeWp.deadline}</span>
                       </div>
-                      <h3 className={`font-display text-3xl ${textPrimary}`}>{activeWp.title}</h3>
+                      <h3 className="font-display text-3xl! text-white">{activeWp.title}</h3>
                     </div>
                     <Badge variant={activeWp.status === 'Reviewed' ? 'success' : activeWp.status === 'Submitted' ? 'info' : 'warning'}>
                       {activeWp.status}

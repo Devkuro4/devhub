@@ -1021,7 +1021,7 @@ export const CommunitySection = ({
       ? challenges
       : challenges.filter((c) => c.category === challengeFilter || c.difficulty === challengeFilter);
 
-  const latestAnnouncement = announcementsList[0] || visiblePosts[0];
+  const latestAnnouncement = announcementsList[0];
   const openHelpList = helpRequests.filter(
     (h) =>
       h.status !== 'Resolved' &&
@@ -1238,7 +1238,7 @@ export const CommunitySection = ({
               type="search"
               value={homeQuery}
               onChange={(e) => setHomeQuery(e.target.value)}
-              placeholder="Search discussions, tags, study groups, resources, events, or members..."
+              placeholder="Search the community…"
               className={`${commInput} !pl-11 !h-12 !rounded-full`}
             />
           </div>
@@ -1403,15 +1403,15 @@ export const CommunitySection = ({
                 <button
                   type="button"
                   onClick={() => setSubTab('announcements')}
-                  className={`${cardClass} studio-card-interactive w-full text-left flex items-start gap-4 p-5 cursor-pointer border-l-[6px] border-l-[var(--spark)]`}
+                  className="workspace-hero flex w-full cursor-pointer items-start gap-4 text-left"
                 >
-                  <Megaphone className="w-5 h-5 text-[var(--accent-600)] shrink-0 mt-1" />
+                  <Megaphone className="w-5 h-5 text-[var(--hero-accent)] shrink-0 mt-1" />
                   <span className="min-w-0 flex-1 space-y-1">
-                    <span className={`block text-xs ${textSecondary}`}>Pinned announcement · {latestAnnouncement.timestamp}</span>
-                    <span className={`block text-lg font-display ${textPrimary}`}>{latestAnnouncement.title}</span>
-                    <span className={`block text-sm line-clamp-2 max-w-[70ch] ${textSecondary}`}>{latestAnnouncement.content}</span>
+                    <span className="workspace-eyebrow block">Team announcement · {latestAnnouncement.timestamp}</span>
+                    <span className="block font-display text-2xl font-bold">{latestAnnouncement.title}</span>
+                    <span className="hero-support block max-w-[70ch] text-sm line-clamp-2">{latestAnnouncement.content}</span>
                   </span>
-                  <ArrowRight className="w-4 h-4 mt-1 shrink-0 text-[var(--accent-600)]" />
+                  <ArrowRight className="w-4 h-4 mt-1 shrink-0 text-[var(--hero-accent)]" />
                 </button>
               )}
 

@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import {
+  ArrowRight,
   BookOpen,
+  Check,
   Bot,
   Calendar,
   ChevronDown,
@@ -12,7 +14,6 @@ import {
   Map as MapIcon,
   Megaphone,
   MessageSquare,
-  Play,
   Search,
   SlidersHorizontal,
   Trophy,
@@ -319,15 +320,15 @@ export const HomeDashboard = ({
   ];
 
   return (
-    <div className="2xl:grid 2xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="workspace-content space-y-8 py-7 sm:py-10">
       {/* ------------------------------------------------------------ MAIN */}
-      <div data-tour="home-workspace" className="p-5 sm:p-8 xl:p-10 2xl:p-12 space-y-9 sm:space-y-12 min-w-0">
+      <div data-tour="home-workspace" className="min-w-0 space-y-8 sm:space-y-10">
         {/* Welcome + search */}
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
           <div>
             <p className="text-sm font-semibold text-[var(--ink-muted)]">Your Dev Hub</p>
             <h1 className="mt-1 !text-[2.1rem] sm:!text-[3rem] font-bold tracking-[-0.04em]">
-              Welcome back{firstName ? `, ${firstName}` : ''} <span aria-hidden="true">👋</span>
+              Welcome back{firstName ? `, ${firstName}` : ''}
             </h1>
           </div>
           <div className="flex items-center gap-3 sm:gap-4 xl:w-[min(100%,28rem)]">
@@ -338,7 +339,7 @@ export const HomeDashboard = ({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search something"
+              placeholder="Search your courses"
               className="w-full !h-14 !pl-14 pr-5 !rounded-full text-sm !border-transparent bg-[var(--surface-elevated)] focus:!border-[var(--ink-primary)]"
             />
           </label>
@@ -356,47 +357,52 @@ export const HomeDashboard = ({
           </div>
         </div>
 
-        {/* Today's activities */}
-        <section className="space-y-5" aria-labelledby="today-activities-h">
-          <div className="flex items-end justify-between gap-4">
-            <h2 id="today-activities-h" className="!text-[1.75rem] sm:!text-[2.15rem]">Your activities today <span className="text-[var(--ink-muted)]">({todayChecklist.length})</span></h2>
-            <span className={`hidden sm:block text-sm ${textSecondary}`}>{doneCount} completed</span>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(15rem,.46fr)]">
+          <section className="workspace-hero space-y-3" aria-labelledby="dashboard-next-session">
+            <p className="workspace-eyebrow">{isBrandNewMember ? 'Get started' : 'Continue learning'}</p>
+            <h2 id="dashboard-next-session" className="text-3xl! font-bold">{isBrandNewMember ? 'Set up your learning path' : dailyTarget.topic || latestCourse?.title || 'Your next study session'}</h2>
+            <p className="hero-support text-sm">{isBrandNewMember ? 'Bring your current course and choose a study rhythm.' : latestCourse?.title || 'Start with one topic and work through today’s activities.'}</p>
+            <progress className="block h-1.5 w-full accent-[var(--accent-600)]" max={todayChecklist.length} value={doneCount} aria-label="Today’s activities complete" />
+            <p className="workspace-eyebrow">{doneCount} of {todayChecklist.length} activities complete</p>
+            <button type="button" onClick={onStartLearning} className="hub-action">{isBrandNewMember ? 'Start learning' : 'Resume today’s lesson'}</button>
+          </section>
+          <section className="soft-card space-y-2 p-5" aria-label="Independence score">
+            <p className="workspace-eyebrow">Last 30 days</p>
+            <h2>Independence score</h2>
+            {independence.score === null ? <p className={textSecondary}>Complete a quiz, code practice, or project to see your score.</p> : (
+              <>
+                <p className="text-4xl font-bold tabular-nums">{independence.score} <span className={`text-sm ${textSecondary}`}>/ 100</span></p>
+                <ProgressBar value={independence.score} />
+                <p className="text-sm text-[var(--accent-700)]">{independence.label}</p>
+              </>
+            )}
+          </section>
+        </div>
+
+        <section className="space-y-3" aria-labelledby="today-activities-h">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="today-activities-h" className="text-2xl!">Your activities today</h2>
+            <button type="button" className="workspace-tab" onClick={() => onNavigate('today')} aria-label="More about today’s activities">More</button>
           </div>
-          <div className="grid md:grid-cols-2 gap-5">
-            {todayChecklist.slice(0, 2).map((item, index) => {
-              const ActivityIcon = index === 0 ? BookOpen : Code2;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onNavigate(item.tab)}
-                  className={`pastel-card ${index === 0 ? 'pastel-aqua' : 'pastel-pink'} min-h-[220px] p-6 sm:p-7 flex flex-col justify-between text-left cursor-pointer transition-transform hover:-translate-y-1`}
-                >
-                  <span className="flex items-start justify-between gap-4">
-                    <span className="round-action w-12 h-12 flex items-center justify-center"><ActivityIcon className="w-5 h-5" /></span>
-                    <span className="round-action px-3 py-1.5 text-xs font-bold">{item.done ? 'Completed' : `${dailyTarget.estimatedMinutes} min`}</span>
-                  </span>
-                  <span className="flex items-end justify-between gap-4 mt-8">
-                    <span>
-                      <span className="block text-sm font-medium text-[var(--ink-secondary)] line-clamp-1">{item.detail}</span>
-                      <span className="block mt-1 text-xl sm:text-2xl font-bold">{item.label}</span>
-                    </span>
-                    <span className="round-action w-12 h-12 flex items-center justify-center shrink-0"><Play className="w-4 h-4 fill-current" /></span>
-                  </span>
+          <ul className="soft-card divide-y divide-[var(--border-hairline)] px-4 sm:px-6">
+            {todayChecklist.map((item) => (
+              <li key={item.id}>
+                <button type="button" className="flex min-h-14 w-full cursor-pointer items-center gap-3 py-2.5 text-left" onClick={() => onNavigate(item.tab)}>
+                  {item.done ? <Check size={18} className="shrink-0 text-[var(--accent-700)]" aria-hidden="true" /> : <ArrowRight size={18} className="shrink-0 text-[var(--accent-700)]" aria-hidden="true" />}
+                  <span className="min-w-0"><span className="block text-sm font-bold">{item.label}{item.done && <span className="sr-only">, complete</span>}</span><span className={`block text-sm ${textSecondary}`}>{item.detail}</span></span>
                 </button>
-              );
-            })}
-          </div>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="space-y-5" aria-labelledby="learning-progress-h">
           <h2 id="learning-progress-h" className="!text-[1.75rem] sm:!text-[2.15rem]">Learning progress</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-            {statCards.map((c, index) => {
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {statCards.map((c) => {
               const Icon = c.icon;
-              const tone = ['pastel-aqua', 'pastel-yellow', 'pastel-lilac'][index];
               return (
-                <button key={c.label} type="button" onClick={() => onNavigate(c.tab)} className={`pastel-card ${tone} min-h-[160px] p-5 sm:p-6 flex flex-col justify-between text-left cursor-pointer transition-transform hover:-translate-y-1`}>
+                <button key={c.label} type="button" onClick={() => onNavigate(c.tab)} className="soft-card flex min-w-0 flex-col gap-3 p-4 text-left hover:border-[var(--accent-600)] sm:p-5">
                   <span className="flex items-center justify-between gap-3">
                     <span className="text-sm font-semibold">{c.label}</span>
                     <span className="round-action w-10 h-10 flex items-center justify-center"><Icon className="w-4 h-4" /></span>
@@ -599,7 +605,7 @@ export const HomeDashboard = ({
       </div>
 
       {/* ------------------------------------------------------ RIGHT PANEL */}
-      <aside aria-label="Schedule and profile" className={`border-t 2xl:border-t-0 2xl:border-l ${borderClass} bg-[var(--surface-elevated)]/45 p-6 sm:p-8 xl:p-10 2xl:p-8 grid gap-8 sm:grid-cols-2 2xl:block 2xl:space-y-10 min-w-0`}>
+      <aside aria-label="Schedule and profile" className="grid min-w-0 gap-6 lg:grid-cols-2">
         <section className="space-y-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="!text-[1.65rem]">Your schedule</h2>

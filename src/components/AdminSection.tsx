@@ -320,7 +320,7 @@ export const AdminSection = ({
   return (
     <div className="page-stack">
       <PageHeader
-        title="Community Admin Console"
+        title="Admin Console"
         description="Lightweight coordination for a small, growing beginner community. Member AI chats and personal notes always stay private."
         action={
           <div className="inline-flex items-center gap-1.5 text-xs text-[var(--success-ink)]">
@@ -380,6 +380,20 @@ export const AdminSection = ({
       {/* 1. OVERVIEW */}
       {subTab === 'admin-dashboard' && (
         <div className="space-y-6">
+          <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Members', value: teamRoster.length },
+              { label: 'Open reports', value: openReports.length },
+              { label: 'Upcoming events', value: presentations.length },
+              { label: 'Challenges', value: challenges.length },
+            ].map((stat) => (
+              <div key={stat.label} className="soft-card px-5 py-4">
+                <dt className={`text-xs ${textSecondary}`}>{stat.label}</dt>
+                <dd className={`font-display text-4xl tabular-nums ${textPrimary}`}>{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
+
           <section className={`${cardClass} p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-[6px] border-l-[var(--spark)]`}>
             <div>
               <p className={`text-xs ${textSecondary}`}>Needs your attention</p>
@@ -394,19 +408,7 @@ export const AdminSection = ({
             </button>
           </section>
 
-          <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
-            {[
-              { label: 'Members', value: teamRoster.length },
-              { label: 'Open reports', value: openReports.length },
-              { label: 'Upcoming events', value: presentations.length },
-              { label: 'Challenges', value: challenges.length },
-            ].map((stat) => (
-              <div key={stat.label} className="soft-card px-5 py-4">
-                <dt className={`text-xs ${textSecondary}`}>{stat.label}</dt>
-                <dd className={`font-display text-4xl tabular-nums ${textPrimary}`}>{stat.value}</dd>
-              </div>
-            ))}
-          </dl>
+
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <section className={`${cardClass} p-6 lg:col-span-7 space-y-4`}>
