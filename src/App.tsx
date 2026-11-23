@@ -1331,7 +1331,7 @@ export default function App() {
     if (!user) return;
     const timer = setTimeout(() => {
       syncDirectoryProfile(communityActor, {
-        name: user.name || profile.fullName || 'Member',
+        name: profile.fullName || user.name || 'Member',
         fullName: profile.fullName || user.name || 'Member',
         username: profile.username,
         field: profile.field,
@@ -1365,6 +1365,59 @@ export default function App() {
     profile.streakDays,
     milestoneSummary.earnedCount,
   ]);
+
+  const handleSaveMemberProfile = React.useCallback(
+    async (nextProfile: OnboardingProfile) => {
+      if (!user) throw new Error('Sign in again before updating your profile.');
+
+      const fullName = nextProfile.fullName.trim().replace(/\s+/g, ' ').slice(0, 80);
+      if (!fullName) throw new Error('Add your name before saving your profile.');
+
+      if (supabase && user.id) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ full_name: fullName })
+          .eq('id', user.id);
+        if (profileError) throw new Error('Your profile could not be saved. Please try again.');
+
+        // Keep future sessions and email-confirmation logins consistent with the public profile.
+        const { error: authError } = await supabase.auth.updateUser({ data: { full_name: fullName } });
+        if (authError) console.warn('Auth display name update failed:', authError.message);
+      }
+
+      const saved = await syncDirectoryProfile(
+        { ...communityActor, userName: fullName },
+        {
+          name: fullName,
+          fullName,
+          username: nextProfile.username,
+          field: nextProfile.field,
+          skillLevel: nextProfile.skillLevel,
+          bio: nextProfile.bio,
+          languages: nextProfile.languages,
+          frameworks: nextProfile.frameworks,
+          interests: nextProfile.interests,
+          githubUrl: nextProfile.githubUrl,
+          portfolioUrl: nextProfile.portfolioUrl,
+          linkedinUrl: nextProfile.linkedinUrl,
+          badgesCount: milestoneSummary.earnedCount,
+          streakDays: nextProfile.streakDays,
+        }
+      );
+
+      setProfile(nextProfile);
+      setUser((current) => (current ? { ...current, name: fullName } : current));
+      setMemberProfiles((current) => ({ ...current, [saved.profile.id]: saved.profile }));
+      setTeamRoster((current) => {
+        const index = current.findIndex((member: any) => member.id === saved.profile.id);
+        if (index < 0) return [...current, saved.profile as any];
+        return current.map((member: any, memberIndex: number) =>
+          memberIndex === index ? { ...member, ...saved.profile } : member
+        );
+      });
+    },
+    [user, communityActor, milestoneSummary.earnedCount]
+  );
 
   const handleLocalLogin = async (u: { id: string; name: string; email: string; isAdmin: boolean; adminCode?: string }) => {
     const cleanName = u.name.trim();
@@ -2341,7 +2394,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className={onDashboardHome ? 'w-full' : 'max-w-[80rem] mx-auto px-5 sm:px-8 lg:px-10 xl:px-12 py-7 sm:py-10 lg:py-12 space-y-8 sm:space-y-10'}
+                className={`${onDashboardHome ? 'w-full' : 'max-w-[80rem] mx-auto px-5 sm:px-8 lg:px-10 xl:px-12 py-7 sm:py-10 lg:py-12 space-y-8 sm:space-y-10'} workspace-page`}
               >
                 {showOnboardingWizard ? (
                   <OnboardingWizard
@@ -2588,7 +2641,7 @@ export default function App() {
                     {activeTab === 'profile' && (
                       <ProfileSection
                         profile={profile}
-                        setProfile={setProfile}
+                        onSaveProfile={handleSaveMemberProfile}
                         milestones={milestoneSummary}
                         onRestartOnboarding={() => setShowOnboardingWizard(true)}
                         onNotify={notify}

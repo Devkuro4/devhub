@@ -603,7 +603,7 @@ export const HomeDashboard = ({
       </div>
 
       {/* ------------------------------------------------------ RIGHT PANEL */}
-      <aside aria-label="Your profile" className={`border-t 2xl:border-t-0 2xl:border-l ${borderClass} p-6 sm:p-8 xl:p-10 2xl:p-8 grid gap-8 sm:grid-cols-2 xl:grid-cols-3 2xl:block 2xl:space-y-10 min-w-0`}>
+      <aside aria-label="Your profile" className={`border-t 2xl:border-t-0 2xl:border-l ${borderClass} p-6 sm:p-8 xl:p-10 2xl:p-8 grid gap-8 sm:grid-cols-2 2xl:block 2xl:space-y-10 min-w-0`}>
         <section className="text-center">
           <h2 className={`!text-base text-left ${textPrimary}`}>Your profile</h2>
           <div className="relative w-32 h-32 mx-auto mt-6">
@@ -631,7 +631,12 @@ export const HomeDashboard = ({
         <section aria-labelledby="scores-h" className="space-y-4">
           <h2 id="scores-h" className={`!text-base ${textPrimary}`}>Recent quiz scores</h2>
           {recentScores.length === 0 ? (
-            <p className={`text-sm ${textSecondary}`}>Take a quiz and your scores will show up here.</p>
+            <div className="soft-card p-4 space-y-3">
+              <p className={`text-sm ${textSecondary}`}>No score yet. A short quiz will give you a useful baseline.</p>
+              <button type="button" onClick={() => onNavigate('quizzes')} className="min-h-10 px-3 rounded-lg bg-[var(--accent-50)] text-[var(--accent-700)] text-sm font-semibold cursor-pointer">
+                Take a quick quiz
+              </button>
+            </div>
           ) : (
             <ul className="flex items-end justify-center gap-4 h-32" role="list">
               {recentScores.map((a, i) => (
@@ -649,7 +654,12 @@ export const HomeDashboard = ({
         <section aria-labelledby="people-h" className="space-y-3">
           <h2 id="people-h" className={`!text-base ${textPrimary}`}>Mentors and peers</h2>
           {people.length === 0 ? (
-            <p className={`text-sm ${textSecondary}`}>People you study with will appear here.</p>
+            <div className="soft-card p-4 space-y-3">
+              <p className={`text-sm ${textSecondary}`}>Your circle is empty for now. Meet someone learning a similar path.</p>
+              <button type="button" onClick={() => onNavigate('community-home')} className="min-h-10 px-3 rounded-lg bg-[var(--accent-50)] text-[var(--accent-700)] text-sm font-semibold cursor-pointer">
+                Explore the community
+              </button>
+            </div>
           ) : (
             <ul className={`divide-y ${borderClass}`}>
               {people.map((m: any) => (

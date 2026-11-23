@@ -705,14 +705,14 @@ const SettingsCheck = ({
 
 export const ProfileSection = ({
   profile,
-  setProfile,
+  onSaveProfile,
   milestones,
   onRestartOnboarding,
   onNotify,
   styles,
 }: {
   profile: OnboardingProfile;
-  setProfile: (p: OnboardingProfile) => void;
+  onSaveProfile: (profile: OnboardingProfile) => Promise<void>;
   milestones: MilestoneSummary;
   onRestartOnboarding: () => void;
   onNotify: (msg: string, tone?: 'success' | 'error') => void;
@@ -732,55 +732,89 @@ export const ProfileSection = ({
 
   const [draft, setDraft] = useState<OnboardingProfile>(profile);
   const [langText, setLangText] = useState((profile.languages || []).join(', '));
+  const [frameworkText, setFrameworkText] = useState((profile.frameworks || []).join(', '));
   const [interestsText, setInterestsText] = useState((profile.interests || []).join(', '));
   const [activeSection, setActiveSection] = useState<string>('profile');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     setDraft(profile);
     setLangText((profile.languages || []).join(', '));
+    setFrameworkText((profile.frameworks || []).join(', '));
     setInterestsText((profile.interests || []).join(', '));
   }, [profile]);
 
-  // Highlight the section currently in view in the left list (display only).
-  useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) setActiveSection(entry.target.id.replace('settings-', ''));
-        });
-      },
-      { rootMargin: '-15% 0px -70% 0px' },
-    );
-    SETTINGS_SECTIONS.forEach((sec) => {
-      const el = document.getElementById(`settings-${sec.id}`);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, []);
-
   const goToSection = (id: string) => {
     setActiveSection(id);
-    const el = document.getElementById(`settings-${id}`);
-    if (!el) return;
-    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfile({
+    if (saving) return;
+
+    const fullName = draft.fullName.trim().replace(/\s+/g, ' ');
+    const username = draft.username.trim().replace(/^@+/, '');
+    if (!fullName) {
+      setSaveError('Add your name before saving your profile.');
+      return;
+    }
+    if (username && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{1,47}$/.test(username)) {
+      setSaveError('Username must be 2–48 characters and use only letters, numbers, dots, dashes or underscores.');
+      return;
+    }
+
+    const invalidLink = [draft.githubUrl, draft.portfolioUrl, draft.linkedinUrl]
+      .map((value) => value.trim())
+      .find((value) => {
+        if (!value) return false;
+        try {
+          const parsed = new URL(value);
+          return parsed.protocol !== 'https:' && parsed.protocol !== 'http:';
+        } catch {
+          return true;
+        }
+      });
+    if (invalidLink) {
+      setSaveError('Developer links must be complete web addresses beginning with https:// or http://.');
+      return;
+    }
+
+    const cleanList = (value: string) =>
+      Array.from(new Set(value.split(',').map((item) => item.trim()).filter(Boolean))).slice(0, 12);
+    const nextProfile: OnboardingProfile = {
       ...draft,
-      languages: langText.split(',').map((s) => s.trim()).filter(Boolean),
-      interests: interestsText.split(',').map((s) => s.trim()).filter(Boolean),
-    });
-    onNotify('Profile & learning preferences saved!');
+      fullName: fullName.slice(0, 80),
+      username: username.slice(0, 48),
+      bio: draft.bio.trim().slice(0, 400),
+      languages: cleanList(langText),
+      frameworks: cleanList(frameworkText),
+      interests: cleanList(interestsText),
+      githubUrl: draft.githubUrl.trim(),
+      portfolioUrl: draft.portfolioUrl.trim(),
+      linkedinUrl: draft.linkedinUrl.trim(),
+    };
+
+    setSaving(true);
+    setSaveError('');
+    try {
+      await onSaveProfile(nextProfile);
+      setDraft(nextProfile);
+      onNotify('Your profile is updated everywhere.');
+    } catch (err: any) {
+      const message = err?.message || 'We couldn’t save your profile. Please try again.';
+      setSaveError(message);
+      onNotify(message, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Display only: tells the person whether the form differs from what is saved.
   const hasChanges =
     JSON.stringify(draft) !== JSON.stringify(profile) ||
     langText !== (profile.languages || []).join(', ') ||
+    frameworkText !== (profile.frameworks || []).join(', ') ||
     interestsText !== (profile.interests || []).join(', ');
 
   const field = `${inputClass} min-h-[44px]`;
@@ -821,12 +855,27 @@ export const ProfileSection = ({
           ))}
         </nav>
 
-        <form onSubmit={handleSave} className="lg:col-span-9 min-w-0 space-y-12">
+        <form onSubmit={handleSave} className="lg:col-span-9 min-w-0 space-y-6">
           {/* PROFILE */}
-          <section id="settings-profile" aria-labelledby="settings-profile-title" className="space-y-4 scroll-mt-24">
+          <section id="settings-profile" aria-labelledby="settings-profile-title" className={`${activeSection === 'profile' ? 'space-y-4' : 'hidden'} scroll-mt-24`}>
             <div id="settings-profile-title">{sectionHead('Profile', 'How other members see you, and where to find your work.')}</div>
 
             <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
+              <div className="profile-live-preview p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+                <div className="relative z-[1] w-16 h-16 rounded-[22px] bg-white text-[#0A0A0A] flex items-center justify-center text-xl font-bold shrink-0 shadow-lg">
+                  {(draft.fullName || 'Member').split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
+                </div>
+                <div className="relative z-[1] min-w-0 flex-1">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-blue-200">Public profile preview</p>
+                  <h3 className="mt-1 !text-xl text-white truncate">{draft.fullName || 'Your name'}</h3>
+                  <p className="mt-0.5 text-sm text-white/70 truncate">
+                    {draft.username ? `@${draft.username.replace(/^@+/, '')}` : 'Add a username'} · {draft.field || 'Choose a learning field'}
+                  </p>
+                </div>
+                <span className="relative z-[1] self-start sm:self-center rounded-full bg-white/10 border border-white/15 px-3 py-1.5 text-xs font-medium text-blue-100">
+                  Live preview
+                </span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <SettingsField label="Full name" {...fieldProps}>
                   <input value={draft.fullName} onChange={(e) => setDraft({ ...draft, fullName: e.target.value })} className={field} />
@@ -840,9 +889,12 @@ export const ProfileSection = ({
                 <textarea rows={3} value={draft.bio} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} className={`${inputClass} min-h-[88px]`} />
               </SettingsField>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <SettingsField label="Languages and tools" hint="Separate with commas." {...fieldProps}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <SettingsField label="Languages" hint="Separate with commas." {...fieldProps}>
                   <input value={langText} onChange={(e) => setLangText(e.target.value)} className={field} />
+                </SettingsField>
+                <SettingsField label="Frameworks and tools" hint="Separate with commas." {...fieldProps}>
+                  <input value={frameworkText} onChange={(e) => setFrameworkText(e.target.value)} className={field} />
                 </SettingsField>
                 <SettingsField label="Interests" hint="Separate with commas." {...fieldProps}>
                   <input value={interestsText} onChange={(e) => setInterestsText(e.target.value)} className={field} />
@@ -876,7 +928,7 @@ export const ProfileSection = ({
           </section>
 
           {/* LEARNING GOALS */}
-          <section id="settings-goals" aria-labelledby="settings-goals-title" className="space-y-4 scroll-mt-24">
+          <section id="settings-goals" aria-labelledby="settings-goals-title" className={`${activeSection === 'goals' ? 'space-y-4' : 'hidden'} scroll-mt-24`}>
             <div id="settings-goals-title">{sectionHead('Learning goals', 'Your mentor and roadmap use these to suggest the right next step.')}</div>
 
             <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
@@ -962,7 +1014,7 @@ export const ProfileSection = ({
           </section>
 
           {/* APPEARANCE */}
-          <section id="settings-appearance" aria-labelledby="settings-appearance-title" className="space-y-4 scroll-mt-24">
+          <section id="settings-appearance" aria-labelledby="settings-appearance-title" className={`${activeSection === 'appearance' ? 'space-y-4' : 'hidden'} scroll-mt-24`}>
             <div id="settings-appearance-title">{sectionHead('Appearance', 'Choose how much of Dev Hub you see and which theme you use.')}</div>
 
             <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
@@ -982,7 +1034,7 @@ export const ProfileSection = ({
           </section>
 
           {/* ACCOUNT */}
-          <section id="settings-account" aria-labelledby="settings-account-title" className="space-y-4 scroll-mt-24">
+          <section id="settings-account" aria-labelledby="settings-account-title" className={`${activeSection === 'account' ? 'space-y-4' : 'hidden'} scroll-mt-24`}>
             <div id="settings-account-title">{sectionHead('Account', 'Reminders we send you, and your setup.')}</div>
 
             <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
@@ -1022,11 +1074,14 @@ export const ProfileSection = ({
 
           {/* One save for every section above */}
           <div className={`sticky bottom-[68px] lg:bottom-0 z-10 -mx-1 px-3 sm:px-1 py-3 border-t ${borderClass} bg-[var(--canvas-bg)] flex flex-wrap items-center justify-between gap-3`}>
-            <p aria-live="polite" className={`text-sm ${hasChanges ? 'text-[var(--ink-primary)] font-medium' : textSecondary}`}>
-              {hasChanges ? 'You have unsaved changes.' : 'All changes saved.'}
-            </p>
-            <button type="submit" className={`${btnPrimary} min-h-[44px] !px-5 !text-sm`}>
-              <Save className="w-4 h-4" /> Save changes
+            <div aria-live="polite" className="min-w-0">
+              <p className={`text-sm ${saveError ? 'text-[var(--danger-ink)] font-medium' : hasChanges ? 'text-[var(--ink-primary)] font-medium' : textSecondary}`}>
+                {saveError || (saving ? 'Saving your profile…' : hasChanges ? 'You have unsaved changes.' : 'All changes saved.')}
+              </p>
+            </div>
+            <button type="submit" disabled={!hasChanges || saving} className={`${btnPrimary} min-h-[44px] !px-5 !text-sm disabled:opacity-50 disabled:cursor-not-allowed`}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </form>
