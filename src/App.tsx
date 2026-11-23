@@ -694,12 +694,20 @@ export default function App() {
     setLoadError('');
     (async () => {
       try {
-        const [mine, shared] = await Promise.all([
+        const readWorkspace = () => Promise.all([
           role === 'admin'
             ? Promise.resolve({ data: null, error: null })
             : supabase.from('member_state').select('state').eq('user_id', user.id).maybeSingle(),
           supabase.from('shared_state').select('key,value'),
         ]);
+        let [mine, shared] = await readWorkspace();
+        const connectionFailed = [mine.error?.message, shared.error?.message]
+          .filter(Boolean)
+          .some((message) => /failed to fetch|networkerror/i.test(String(message)));
+        if (connectionFailed) {
+          const { error: refreshError } = await supabase.auth.refreshSession();
+          if (!refreshError) [mine, shared] = await readWorkspace();
+        }
         if (cancelled) return;
         if (mine.error || shared.error) {
           const details = [mine.error?.message, shared.error?.message].filter(Boolean).join(' ');
