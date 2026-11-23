@@ -14,6 +14,8 @@ export interface UserSession {
 
 export interface OnboardingProfile {
   fullName: string;
+  /** Compressed profile photo data URL. Optional for existing accounts. */
+  avatarUrl?: string;
   username: string;
   bio: string;
   field: string;
@@ -595,6 +597,7 @@ export interface ContentReport {
 export interface MemberDirectoryProfile {
   id: string;
   name: string;
+  avatarUrl?: string;
   username?: string;
   role: string;
   field: string;

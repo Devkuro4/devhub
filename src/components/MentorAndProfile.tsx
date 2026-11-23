@@ -737,6 +737,7 @@ export const ProfileSection = ({
   const [activeSection, setActiveSection] = useState<string>('profile');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useEffect(() => {
     setDraft(profile);
@@ -747,6 +748,36 @@ export const ProfileSection = ({
 
   const goToSection = (id: string) => {
     setActiveSection(id);
+  };
+
+  const handleProfilePhoto = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setSaveError('Choose a JPG, PNG, WebP or GIF image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSaveError('Profile photos must be smaller than 5 MB.');
+      return;
+    }
+    setPhotoBusy(true);
+    setSaveError('');
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not prepare that image.');
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      setDraft((current) => ({ ...current, avatarUrl: canvas.toDataURL('image/jpeg', 0.82) }));
+    } catch (err: any) {
+      setSaveError(err?.message || 'Could not prepare that profile photo.');
+    } finally {
+      setPhotoBusy(false);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -862,8 +893,8 @@ export const ProfileSection = ({
 
             <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
               <div className="profile-live-preview p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
-                <div className="relative z-[1] w-16 h-16 rounded-[22px] bg-white text-[#0A0A0A] flex items-center justify-center text-xl font-bold shrink-0 shadow-lg">
-                  {(draft.fullName || 'Member').split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
+                <div className="relative z-[1] w-16 h-16 rounded-[22px] bg-white text-[#0A0A0A] flex items-center justify-center text-xl font-bold shrink-0 shadow-lg overflow-hidden">
+                  {draft.avatarUrl ? <img src={draft.avatarUrl} alt="" className="w-full h-full object-cover" /> : (draft.fullName || 'Member').split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
                 </div>
                 <div className="relative z-[1] min-w-0 flex-1">
                   <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-secondary)]">Public profile preview</p>
@@ -875,6 +906,14 @@ export const ProfileSection = ({
                 <span className="relative z-[1] self-start sm:self-center rounded-full bg-white/65 border border-white/50 px-3 py-1.5 text-xs font-medium text-[var(--ink-primary)]">
                   Live preview
                 </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className={`${btnSecondary} cursor-pointer`}>
+                  {photoBusy ? 'Preparing photo…' : draft.avatarUrl ? 'Change profile photo' : 'Add profile photo'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={photoBusy} onChange={(e) => { void handleProfilePhoto(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+                {draft.avatarUrl && <button type="button" onClick={() => setDraft((current) => ({ ...current, avatarUrl: '' }))} className="min-h-11 px-3 text-sm font-semibold text-[var(--danger-ink)] cursor-pointer">Remove photo</button>}
+                <span className={`text-xs ${textSecondary}`}>Images are resized before being saved.</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <SettingsField label="Full name" {...fieldProps}>

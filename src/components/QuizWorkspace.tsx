@@ -294,6 +294,13 @@ export const QuizWorkspace = ({
           snippets.push(`Material (${candidateFile.name}): ${candidateFile.contentPreview.slice(0, 900)}`);
           sourceLabel = `${sourceLabel} + ${candidateFile.name}`;
         }
+        const recentEvidence = codeSubmissions.find(
+          (submission) => submission.courseId === course.id || submission.topic.toLowerCase() === quizGen.topic.toLowerCase()
+        );
+        if (recentEvidence) {
+          const evidence = recentEvidence.code?.trim() || recentEvidence.explanation?.trim();
+          if (evidence) snippets.push(`Learner code evidence (use only to check concepts already practised): ${evidence.slice(0, 700)}`);
+        }
       }
     } else if (quizGen.sourceType === 'roadmap') {
       const rmTopic = selectedRoadmap.topics.find((t) => t.name.toLowerCase() === quizGen.topic.toLowerCase());

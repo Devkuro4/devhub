@@ -67,6 +67,26 @@ import type {
 type LearningSubTab = 'today' | 'courses' | 'plans' | 'submissions' | 'quizzes' | 'progress';
 type DailyStage = 1 | 2 | 3 | 4 | 5;
 
+const courseRecommendationsFor = (field: string) => {
+  const normalized = field.toLowerCase();
+  if (/data|machine|ai/.test(normalized)) return [
+    { title: 'Kaggle Learn', platform: 'Kaggle', url: 'https://www.kaggle.com/learn', note: 'Short practical courses for data and machine learning.' },
+    { title: 'Data Analysis with Python', platform: 'freeCodeCamp', url: 'https://www.freecodecamp.org/learn/data-analysis-with-python/', note: 'A structured, project-based Python path.' },
+  ];
+  if (/cyber|security/.test(normalized)) return [
+    { title: 'Introduction to Cybersecurity', platform: 'Cisco Skills for All', url: 'https://skillsforall.com/course/introduction-to-cybersecurity', note: 'Beginner-friendly cybersecurity foundations.' },
+    { title: 'Cyber Security Learning Paths', platform: 'TryHackMe', url: 'https://tryhackme.com/paths', note: 'Hands-on guided security practice.' },
+  ];
+  if (/mobile|android/.test(normalized)) return [
+    { title: 'Android Basics with Compose', platform: 'Android Developers', url: 'https://developer.android.com/courses/android-basics-compose/course', note: 'Official project-based Android course.' },
+    { title: 'React Native Learn', platform: 'React Native', url: 'https://reactnative.dev/docs/getting-started', note: 'Official learning path for cross-platform apps.' },
+  ];
+  return [
+    { title: 'Responsive Web Design', platform: 'freeCodeCamp', url: 'https://www.freecodecamp.org/learn/2022/responsive-web-design/', note: 'Project-based HTML and CSS foundations.' },
+    { title: 'MDN Learn Web Development', platform: 'MDN', url: 'https://developer.mozilla.org/en-US/docs/Learn_web_development', note: 'A trusted path for modern web fundamentals.' },
+  ];
+};
+
 export const LearningSection = ({
   subTab,
   setSubTab,
@@ -252,6 +272,9 @@ export const LearningSection = ({
   // Manual Study Session Timer (tracks real seconds studied without faking completion)
   const [sessionRunning, setSessionRunning] = useState(false);
   const [sessionSeconds, setSessionSeconds] = useState(0);
+  const [checkInMinutes, setCheckInMinutes] = useState('30');
+  const [checkInNote, setCheckInNote] = useState('');
+  const [completedCurrentLesson, setCompletedCurrentLesson] = useState(false);
   useEffect(() => {
     if (!sessionRunning) return;
     const t = setInterval(() => setSessionSeconds((s) => s + 1), 1000);
@@ -287,6 +310,63 @@ export const LearningSection = ({
     setSessionRunning(false);
     setSessionSeconds(0);
     onNotify(`Logged ${mins} min study session for "${dailyTarget.topic}".`);
+  };
+
+  const handleSaveProgressCheckIn = () => {
+    const minutes = Math.max(1, Math.min(720, Number(checkInMinutes) || 0));
+    if (!minutes) {
+      onNotify('Add how many minutes you studied today.', 'error');
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    const entry: StudySessionLog = {
+      id: `sess-${Date.now()}`,
+      title: dailyTarget.topic,
+      sourceType: dailyTarget.courseId ? 'course' : 'general',
+      courseId: dailyTarget.courseId || undefined,
+      minutes,
+      dateIso: nowIso.slice(0, 10),
+    };
+    setStudySessions((prev) => [entry, ...prev]);
+    setDailyLogs((prev) => [{
+      id: `dl-${Date.now()}`,
+      date: 'Today',
+      module: dailyTarget.topic,
+      summary: checkInNote.trim() || `Studied ${dailyTarget.topic} for ${minutes} minutes.`,
+      repoLink: '',
+    }, ...prev]);
+    setDailyTarget({
+      ...dailyTarget,
+      status: completedCurrentLesson ? 'Demonstrated' : 'In Progress',
+      completedAt: completedCurrentLesson ? nowIso : dailyTarget.completedAt,
+      sessionMinutesLogged: (dailyTarget.sessionMinutesLogged || 0) + minutes,
+    });
+    if (dailyTarget.courseId) {
+      setCourses((prev) => prev.map((course) => {
+        if (course.id !== dailyTarget.courseId) return course;
+        const modules = course.modules.map((module) =>
+          completedCurrentLesson && (module.id === course.currentModuleId || module.title === dailyTarget.topic || module.title === dailyTarget.recommendedLesson)
+            ? { ...module, completed: true }
+            : module
+        );
+        const completed = modules.filter((module) => module.completed).length;
+        const progress = modules.length ? Math.round((completed / modules.length) * 100) : course.progress;
+        const nextModule = modules.find((module) => !module.completed);
+        return {
+          ...course,
+          modules,
+          progress,
+          status: progress === 100 ? 'Completed' : 'In Progress',
+          currentModuleId: nextModule?.id || course.currentModuleId,
+          currentTopic: nextModule?.title || course.currentTopic,
+          lastStudied: 'Today',
+        };
+      }));
+    }
+    setCheckInNote('');
+    setCompletedCurrentLesson(false);
+    setDailyStage(3);
+    onNotify(`Progress saved: ${minutes} minutes on ${dailyTarget.topic}.`);
   };
 
   const handleMarkLessonComplete = () => {
@@ -421,6 +501,10 @@ export const LearningSection = ({
       onNotify('Add your code, upload files, paste a GitHub link, or write your notes first.');
       return;
     }
+    if (/(?:api[_-]?key|secret|access[_-]?token|private[_-]?key)\s*[:=]\s*["'][^"']{8,}["']/i.test(combinedCode)) {
+      onNotify('That code appears to contain a secret or API key. Remove it before saving your evidence.', 'error');
+      return;
+    }
 
     setReviewBusy(true);
     let execResult = sandboxPreview;
@@ -526,8 +610,8 @@ export const LearningSection = ({
       sessionStorage.removeItem(draftKey);
     } catch {}
     setReviewBusy(false);
-    setDailyStage(5);
-    onNotify(`Submission v${nextVersion} saved and reviewed!`);
+    setDailyStage(4);
+    onNotify(`Code evidence v${nextVersion} saved. Your daily quiz is ready next.`);
   };
 
   // ============================================================================
@@ -941,6 +1025,7 @@ export const LearningSection = ({
       return true;
     });
   }, [courses, courseSearch, coursePlatformFilter, courseStatusFilter]);
+  const courseRecommendations = useMemo(() => courseRecommendationsFor(profile.field || profile.primaryField || ''), [profile.field, profile.primaryField]);
 
   const filteredSubmissions = useMemo(() => {
     if (submissionStatusFilter === 'ALL') return codeSubmissions;
@@ -960,12 +1045,11 @@ export const LearningSection = ({
 
   // Persistent Sub-navigation tabs inside My Learning
   const learningTabs: { id: LearningSubTab; label: string; badge?: number }[] = [
-    { id: 'today', label: 'Today’s Learning' },
+    { id: 'today', label: 'Daily Tracker' },
     { id: 'courses', label: 'My Courses', badge: courses.length },
-    { id: 'plans', label: 'Plans & Self-Directed', badge: selfDirectedTopics.length + pendingScheduledCount || undefined },
-    { id: 'submissions', label: 'Submissions & Feedback', badge: codeSubmissions.length },
-    { id: 'quizzes', label: 'Quizzes', badge: allAvailableQuizzes.length },
-    { id: 'progress', label: 'Your Progress' },
+    { id: 'plans', label: 'Plans & Goals', badge: selfDirectedTopics.length + pendingScheduledCount || undefined },
+    { id: 'submissions', label: 'Code & Evidence', badge: codeSubmissions.length },
+    { id: 'progress', label: 'Progress' },
   ];
 
   // Daily Learning Variables (accurate topic matching — avoids false positives)
@@ -989,11 +1073,11 @@ export const LearningSection = ({
   );
 
   const pipelineSteps: { n: DailyStage; label: string; hint: string; done: boolean }[] = [
-    { n: 1, label: 'Learn', hint: 'Understand the idea', done: dailyStage > 1 || topicHasSubmission || dailyTarget.status === 'Demonstrated' },
-    { n: 2, label: 'Practise', hint: 'Try the small exercise', done: Boolean(codeDraft.trim() || uploadedFiles.length || topicHasSubmission) },
-    { n: 3, label: 'Submit Code', hint: 'Share your attempt', done: topicHasSubmission },
-    { n: 4, label: 'Take Quiz', hint: 'Check what clicked', done: topicHasQuiz },
-    { n: 5, label: 'View Feedback', hint: 'See tips & next step', done: topicHasReview },
+    { n: 1, label: 'Choose Course', hint: 'Confirm today’s lesson', done: Boolean(dailyTarget.courseId) },
+    { n: 2, label: 'Check In', hint: 'Log time and progress', done: Boolean(dailyTarget.sessionMinutesLogged) },
+    { n: 3, label: 'Add Code', hint: 'Save private evidence', done: topicHasSubmission },
+    { n: 4, label: 'Daily Quiz', hint: 'Check today’s topic', done: topicHasQuiz },
+    { n: 5, label: 'Summary', hint: 'See progress and feedback', done: topicHasReview && topicHasQuiz },
   ];
 
   // Stage-level controls: 44px targets, variable-driven so light and dark both work
@@ -1025,7 +1109,7 @@ export const LearningSection = ({
     <div className="page-stack">
       <PageHeader
         title="My Learning"
-        description="Work through your daily target step by step, manage external and downloaded courses, schedule study plans, and get feedback."
+        description="Track the courses you already use, log today’s progress, save private code evidence and check your understanding with a short daily quiz."
         action={
           subTab === 'courses' ? (
             <div className="flex flex-wrap gap-2">
@@ -1054,7 +1138,7 @@ export const LearningSection = ({
               }}
               className={btnPrimary}
             >
-              Submit New Code
+              Add Code Evidence
             </button>
           ) : subTab === 'progress' ? (
             <button type="button" disabled={summaryBusy} onClick={handleGenerateWeeklySummary} className={btnPrimary}>
@@ -1218,119 +1302,89 @@ export const LearningSection = ({
           </aside>
 
           <div className="lg:col-span-9 space-y-6 min-w-0">
-          {/* STAGE 1: LEARN */}
+          {/* STAGE 1: CHOOSE THE COURSE/LESSON BEING TRACKED */}
           {dailyStage === 1 && (
             <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
-              <div className="space-y-4">
-                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 1 of 5 · Learn</p>
-                <div className="border-l-4 border-[var(--spark)] pl-4 space-y-2">
-                  <p className={`text-sm ${textSecondary}`}>Today’s goal</p>
-                  <h2 className={`font-display text-xl sm:text-2xl max-w-[44ch] [text-wrap:pretty] ${textPrimary}`}>{dailyTarget.objective}</h2>
-                </div>
-                <p className={`flex items-start gap-2 text-sm ${textSecondary}`}>
-                  <BookOpen className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-                  <span>
-                    <strong className={`font-semibold ${textPrimary}`}>{dailyTarget.courseTitle}</strong> · {dailyTarget.recommendedLesson}
-                  </span>
-                </p>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 1 of 5 · Choose course</p>
+                <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>What are you continuing today?</h2>
+                <p className={`text-base max-w-[62ch] ${textSecondary}`}>Dev Hub tracks the course you are already taking. It does not replace the lesson provider.</p>
               </div>
 
-              <div className="space-y-2">
-                <h3 className={`text-lg ${textPrimary}`}>By the end you’ll be able to</h3>
-                <p className={`text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>{dailyTarget.whatYouWillUnderstand}</p>
-              </div>
+              {courses.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {courses.filter((course) => course.status !== 'Completed').slice(0, 4).map((course) => (
+                    <button
+                      key={course.id}
+                      type="button"
+                      onClick={() => setDailyTarget({
+                        ...dailyTarget,
+                        courseId: course.id,
+                        courseTitle: course.title,
+                        sourceType: 'course',
+                        topic: course.currentTopic || course.modules.find((module) => !module.completed)?.title || 'Current lesson',
+                        recommendedLesson: course.currentTopic || 'Continue your course',
+                        objective: `Continue ${course.currentTopic || course.title} and record your progress.`,
+                      })}
+                      className={`p-5 rounded-2xl text-left cursor-pointer transition-colors ${dailyTarget.courseId === course.id ? 'pastel-aqua' : `${subtleBgClass} hover:bg-[var(--pastel-aqua)]`}`}
+                    >
+                      <span className={`block text-xs ${textSecondary}`}>{course.platform} · {course.progress}% complete</span>
+                      <span className={`block mt-1 font-semibold ${textPrimary}`}>{course.title}</span>
+                      <span className={`block mt-2 text-sm ${textSecondary}`}>{course.currentTopic || 'Choose your current lesson'}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="pastel-card pastel-yellow p-5 space-y-3">
+                  <h3 className={textPrimary}>No course added yet</h3>
+                  <p className={`text-sm ${textSecondary}`}>Add the course you already use, or browse recommendations for {profile.field || 'your field'}.</p>
+                  <button type="button" onClick={() => setSubTab('courses')} className={stagePrimary}>Add or find a course</button>
+                </div>
+              )}
 
               <div className={`pt-5 border-t ${borderClass} flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3`}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onAskMentor(`Can you explain "${dailyTarget.topic}" simply with a beginner mental model before I start practising?`)
-                  }
-                  className={stageSecondary}
-                >
-                  <HelpCircle className="w-4 h-4" aria-hidden="true" /> Explain this simply
-                </button>
+                <button type="button" onClick={() => setSubTab('courses')} className={stageSecondary}>Manage courses</button>
                 <button type="button" onClick={() => setDailyStage(2)} className={stagePrimary}>
-                  Next: try the exercise <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  Next: log today’s progress <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STAGE 2: PRACTISE */}
+          {/* STAGE 2: DAILY PROGRESS CHECK-IN */}
           {dailyStage === 2 && (
             <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 2 of 5 · Practise</p>
-                <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>{dailyTarget.exerciseTitle}</h2>
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 2 of 5 · Daily check-in</p>
+                <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>Record what you actually studied</h2>
+                <p className={`text-sm ${textSecondary}`}>{dailyTarget.courseTitle} · {dailyTarget.topic}</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
-                <div className="md:col-span-7 space-y-5 min-w-0">
-                  <p className={`text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>{dailyTarget.exerciseInstructions}</p>
-
-                  {dailyTarget.exerciseRequirements.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className={`text-lg ${textPrimary}`}>Your solution should</h3>
-                      <ol className="space-y-3">
-                        {dailyTarget.exerciseRequirements.map((req, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-base">
-                            <span
-                              aria-hidden="true"
-                              className={`mt-0.5 w-6 h-6 rounded-full border ${borderClass} flex items-center justify-center text-xs font-semibold tabular-nums shrink-0 ${textSecondary}`}
-                            >
-                              {idx + 1}
-                            </span>
-                            <span className={`max-w-[58ch] ${textPrimary}`}>{req}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-                </div>
-
-                <aside aria-label="Help with this exercise" className={`md:col-span-5 md:border-l ${borderClass} md:pl-8 space-y-4 min-w-0`}>
-                  <h3 className={`text-lg ${textPrimary}`}>Need a hand?</h3>
-                  {dailyTarget.starterHint && (
-                    <div className="space-y-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowHint((v) => !v)}
-                        aria-expanded={showHint}
-                        className={`${stageSecondary} w-full justify-between`}
-                      >
-                        {showHint ? 'Hide the starting hint' : 'Show a gentle starting hint'}
-                        <ChevronDown className={`w-4 h-4 transition-transform ${showHint ? 'rotate-180' : ''}`} aria-hidden="true" />
-                      </button>
-                      {showHint && (
-                        <p className={`p-3.5 rounded-lg border-l-4 border-[var(--spark)] ${subtleBgClass} text-base leading-relaxed ${textPrimary}`}>
-                          {dailyTarget.starterHint}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onAskMentor(`Help me break down how to start "${dailyTarget.exerciseTitle}" without giving away the answer.`)
-                    }
-                    className={`${stageSecondary} w-full`}
-                  >
-                    <HelpCircle className="w-4 h-4" aria-hidden="true" /> Ask the AI mentor
-                  </button>
-                  <button type="button" disabled={exerciseBusy} onClick={handleGenerateExercise} className={`${stageSecondary} w-full`}>
-                    {exerciseBusy ? <Loader2 className="w-4 h-4 motion-safe:animate-spin" aria-hidden="true" /> : <Sparkles className="w-4 h-4" aria-hidden="true" />}
-                    Try another exercise
-                  </button>
-                </aside>
+              <div className="grid grid-cols-1 sm:grid-cols-[160px_minmax(0,1fr)] gap-5">
+                <label className={`block text-sm font-medium ${textPrimary}`}>
+                  Minutes studied
+                  <input type="number" min="1" max="720" value={checkInMinutes} onChange={(e) => setCheckInMinutes(e.target.value)} className={`${stageInput} mt-2`} />
+                </label>
+                <label className={`block text-sm font-medium ${textPrimary}`}>
+                  Notes or something you understood
+                  <textarea rows={3} value={checkInNote} onChange={(e) => setCheckInNote(e.target.value)} placeholder="What did you cover? What felt difficult?" className={`${stageInput} mt-2`} />
+                </label>
               </div>
+
+              <label className="pastel-card pastel-aqua p-4 flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={completedCurrentLesson} onChange={(e) => setCompletedCurrentLesson(e.target.checked)} />
+                <span>
+                  <span className={`block text-sm font-semibold ${textPrimary}`}>I completed this lesson or module</span>
+                  <span className={`block text-xs ${textSecondary}`}>This updates the course percentage and moves you to the next unfinished module.</span>
+                </span>
+              </label>
 
               <div className={`pt-5 border-t ${borderClass} flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3`}>
                 <button type="button" onClick={() => setDailyStage(1)} className={stageSecondary}>
-                  Back to Learn
+                  Back to course
                 </button>
-                <button type="button" onClick={() => setDailyStage(3)} className={stagePrimary}>
-                  Next: submit your code <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                <button type="button" onClick={handleSaveProgressCheckIn} className={stagePrimary}>
+                  Save and add code <ArrowRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -1340,10 +1394,11 @@ export const LearningSection = ({
           {dailyStage === 3 && (
             <form onSubmit={handleSubmitAndReview} className={`${cardClass} p-6 sm:p-8 space-y-6`}>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 3 of 5 · Submit</p>
+                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 3 of 5 · Add code evidence</p>
                 <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>
-                  {resubmitParentId ? 'Resubmit your improved version' : 'Share your code or your thinking'}
+                  {resubmitParentId ? 'Save your improved version' : 'Add what you built today'}
                 </h2>
+                <p className={`text-sm ${textSecondary}`}>Your code stays private. Dev Hub uses it to recognize what you practised, personalize today’s quiz and show improvement over time.</p>
                 <p className={`text-sm ${textSecondary}`}>
                   Exercise: <strong className={`font-semibold ${textPrimary}`}>{dailyTarget.exerciseTitle}</strong>
                 </p>
@@ -1582,7 +1637,7 @@ export const LearningSection = ({
                   )}
                   <button type="submit" disabled={reviewBusy} className={stagePrimary}>
                     {reviewBusy ? <Loader2 className="w-4 h-4 motion-safe:animate-spin" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
-                    {reviewBusy ? 'Reviewing…' : 'Submit and get AI review'}
+                    {reviewBusy ? 'Analysing progress…' : 'Save evidence and continue'}
                   </button>
                 </div>
               </div>
@@ -1593,10 +1648,10 @@ export const LearningSection = ({
           {dailyStage === 4 && (
             <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 4 of 5 · Quiz</p>
-                <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>Check what clicked</h2>
+                <p className="text-sm font-semibold text-[var(--accent-600)]">Step 4 of 5 · Daily quiz</p>
+                <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>Check today’s progress</h2>
                 <p className={`text-base leading-relaxed max-w-[62ch] ${textSecondary}`}>
-                  A short quiz on <strong className={`font-semibold ${textPrimary}`}>{dailyTarget.topic}</strong>. It’s untimed and shows one question at a time, so small misunderstandings come up early.
+                  A short quiz based on <strong className={`font-semibold ${textPrimary}`}>{dailyTarget.topic}</strong> and the evidence you logged today. It checks the course material you are already studying—it does not introduce a new lesson.
                 </p>
               </div>
 
@@ -1646,7 +1701,7 @@ export const LearningSection = ({
                     Browse all quizzes
                   </button>
                   <button type="button" onClick={() => setDailyStage(5)} className={stagePrimary}>
-                    Next: see your feedback <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                    Skip to today’s summary <ArrowRight className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -1666,7 +1721,7 @@ export const LearningSection = ({
               ) : (
                 <div className={`${cardClass} p-6 sm:p-8 space-y-6`}>
                   <div className="space-y-3">
-                    <p className="text-sm font-semibold text-[var(--accent-600)]">Step 5 of 5 · Feedback</p>
+                    <p className="text-sm font-semibold text-[var(--accent-600)]">Step 5 of 5 · Progress summary</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                       <h2 className={`font-display text-xl sm:text-2xl ${textPrimary}`}>
                         {latestTopicSubmission.topic} <span className={textSecondary}>· version {latestTopicSubmission.version}</span>
@@ -1814,6 +1869,29 @@ export const LearningSection = ({
       {/* 2. MY COURSES & IMPORTED MATERIALS */}
       {subTab === 'courses' && (
         <div data-tour="learning-courses" className="space-y-6">
+          <section className="space-y-3" aria-labelledby="recommended-courses-heading">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 id="recommended-courses-heading" className={`text-xl ${textPrimary}`}>Recommended for {profile.field || 'your field'}</h2>
+                <p className={`mt-1 text-sm ${textSecondary}`}>Optional starting points. Choose one only if you are not already following a course.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {courseRecommendations.map((recommendation, index) => (
+                <div key={recommendation.url} className={`pastel-card ${index % 2 === 0 ? 'pastel-aqua' : 'pastel-yellow'} p-5 flex items-start justify-between gap-4`}>
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--ink-secondary)]">{recommendation.platform}</p>
+                    <h3 className="mt-1 text-lg text-[var(--ink-primary)]">{recommendation.title}</h3>
+                    <p className="mt-2 text-sm text-[var(--ink-secondary)]">{recommendation.note}</p>
+                  </div>
+                  <button type="button" onClick={() => {
+                    setNewCourseForm((current) => ({ ...current, title: recommendation.title, platform: 'Other', customPlatform: recommendation.platform, url: recommendation.url, field: profile.field || current.field }));
+                    setShowAddCourseModal(true);
+                  }} className="round-action min-h-10 px-3 text-xs font-bold shrink-0 cursor-pointer">Track it</button>
+                </div>
+              ))}
+            </div>
+          </section>
           {/* Course Filter & Search Controls */}
           <div className={`${cardClass} p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-center`}>
             <div className="relative md:col-span-5">
@@ -2594,9 +2672,9 @@ export const LearningSection = ({
         <div className="space-y-4">
           {codeSubmissions.length === 0 ? (
             <EmptyState
-              title="No submissions yet"
-              description="Finish today’s small exercise and submit your code, documents, or notes to get step-by-step feedback."
-              actionLabel="Go to today’s learning"
+              title="No code evidence yet"
+              description="After studying, save code, files, a GitHub link or short notes so your progress history reflects what you actually built."
+              actionLabel="Open daily tracker"
               onAction={() => {
                 setDailyStage(2);
                 setSubTab('today');
@@ -2744,7 +2822,15 @@ export const LearningSection = ({
 
       {/* 4. QUIZZES */}
       {subTab === 'quizzes' && (
-        <QuizWorkspace
+        <div className="space-y-4">
+          <div className="pastel-card pastel-aqua px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={`text-sm font-semibold ${textPrimary}`}>Today’s progress check</p>
+              <p className={`text-xs ${textSecondary}`}>Questions stay focused on {dailyTarget.topic}.</p>
+            </div>
+            <button type="button" onClick={() => { setDailyStage(5); setSubTab('today'); }} className={btnSecondary}>Back to today’s summary</button>
+          </div>
+          <QuizWorkspace
           profile={profile}
           user={user}
           courses={courses}
@@ -2765,7 +2851,8 @@ export const LearningSection = ({
           onAskMentor={onAskMentor}
           onNotify={onNotify}
           styles={styles}
-        />
+          />
+        </div>
       )}
 
       {/* 5. YOUR PROGRESS */}

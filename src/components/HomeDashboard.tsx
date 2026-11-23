@@ -643,8 +643,8 @@ export const HomeDashboard = ({
               <circle cx="60" cy="60" r="54" fill="none" stroke="rgb(255 255 255 / 65%)" strokeWidth="6" />
               <circle cx="60" cy="60" r="54" fill="none" stroke="var(--spark)" strokeWidth="6" strokeLinecap="round" strokeDasharray={ringC} strokeDashoffset={ringC * (1 - ringPct / 100)} />
             </svg>
-            <div className="absolute inset-4 rounded-full bg-[var(--surface-elevated)] text-[var(--ink-primary)] flex items-center justify-center font-display text-2xl font-semibold">
-              {initialsOf(fullName)}
+            <div className="absolute inset-4 rounded-full bg-[var(--surface-elevated)] text-[var(--ink-primary)] flex items-center justify-center font-display text-2xl font-semibold overflow-hidden">
+              {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsOf(fullName)}
             </div>
           </div>
           <p className={`mt-4 text-base font-semibold ${textPrimary}`}>{greeting}{firstName ? `, ${firstName}` : ''}</p>

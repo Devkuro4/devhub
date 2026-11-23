@@ -1334,6 +1334,7 @@ export default function App() {
         name: profile.fullName || user.name || 'Member',
         fullName: profile.fullName || user.name || 'Member',
         username: profile.username,
+        avatarUrl: profile.avatarUrl,
         field: profile.field,
         skillLevel: profile.skillLevel,
         bio: profile.bio,
@@ -1353,6 +1354,7 @@ export default function App() {
     communityActor,
     profile.fullName,
     profile.username,
+    profile.avatarUrl,
     profile.field,
     profile.skillLevel,
     profile.bio,
@@ -1381,7 +1383,7 @@ export default function App() {
         if (profileError) throw new Error('Your profile could not be saved. Please try again.');
 
         // Keep future sessions and email-confirmation logins consistent with the public profile.
-        const { error: authError } = await supabase.auth.updateUser({ data: { full_name: fullName } });
+        const { error: authError } = await supabase.auth.updateUser({ data: { full_name: fullName, avatar_url: nextProfile.avatarUrl || null } });
         if (authError) console.warn('Auth display name update failed:', authError.message);
       }
 
@@ -1391,6 +1393,7 @@ export default function App() {
           name: fullName,
           fullName,
           username: nextProfile.username,
+          avatarUrl: nextProfile.avatarUrl,
           field: nextProfile.field,
           skillLevel: nextProfile.skillLevel,
           bio: nextProfile.bio,
@@ -1881,12 +1884,12 @@ export default function App() {
   const breadcrumbParts: { primary: string; secondary?: string } = (() => {
     if (showOnboardingWizard) return { primary: 'Getting Started', secondary: '1-Minute Setup' };
     if (activeTab === 'dashboard') return { primary: 'Dashboard' };
-    if (activeTab === 'today') return { primary: 'My Learning', secondary: 'Today’s Learning' };
+    if (activeTab === 'today') return { primary: 'My Learning', secondary: 'Daily Tracker' };
     if (activeTab === 'courses') return { primary: 'My Learning', secondary: 'My Courses' };
     if (activeTab === 'plans') return { primary: 'My Learning', secondary: 'Plans & Self-Directed' };
     if (activeTab === 'submissions') return { primary: 'My Learning', secondary: 'Submissions & Feedback' };
-    if (activeTab === 'quizzes') return { primary: 'My Learning', secondary: 'Quizzes' };
-    if (activeTab === 'progress') return { primary: 'My Learning', secondary: 'Your Progress' };
+    if (activeTab === 'quizzes') return { primary: 'My Learning', secondary: 'Daily Quiz' };
+    if (activeTab === 'progress') return { primary: 'My Learning', secondary: 'Progress' };
     if (activeTab === 'roadmaps') return { primary: 'My Roadmap' };
     if (activeTab === 'community-home') return { primary: 'Community', secondary: 'Community Home' };
     if (activeTab === 'study-chat') return { primary: 'Community', secondary: 'Study Group Chat' };
@@ -2035,7 +2038,7 @@ export default function App() {
       className={`inline-flex items-center justify-center gap-2.5 min-h-11 ${compact ? 'w-11 px-0' : 'px-3.5'} rounded-full border border-transparent bg-[var(--surface-elevated)] text-[var(--ink-primary)] font-semibold text-sm hover:bg-[var(--pastel-aqua)] transition-colors cursor-pointer`}
     >
       <span className="w-8 h-8 rounded-full bg-[var(--pastel-pink)] text-[var(--ink-primary)] flex items-center justify-center text-xs font-bold shrink-0">
-        {initialsOf(user?.name || profile.fullName)}
+        {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" /> : initialsOf(user?.name || profile.fullName)}
       </span>
       {!compact && <span>My Profile</span>}
     </button>
