@@ -2221,64 +2221,17 @@ export default function App() {
               className="flex items-center gap-2 cursor-pointer min-w-0"
             >
               <LogoMark size={32} />
-              <span className="min-w-0 text-left">
-                <span className="block font-display text-base font-semibold leading-tight">Dev Hub</span>
-                <span className={`block text-[11px] leading-tight truncate ${textSecondary}`}>
-                  {breadcrumbParts.secondary || breadcrumbParts.primary}
-                </span>
-              </span>
+              <span className="font-display text-base font-semibold leading-tight">Dev Hub</span>
             </button>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span
-                aria-live="polite"
-                aria-label={syncStatus === 'offline' ? 'Offline' : syncStatus === 'error' ? 'Sync failed, retry' : syncStatus === 'saving' ? 'Saving' : 'Saved'}
-                className={`inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap px-1 ${
-                  syncStatus === 'offline' || syncStatus === 'error'
-                    ? 'text-[var(--warning-ink)]'
-                    : textSecondary
-                }`}
-              >
-                {syncStatus === 'offline' ? (
-                  <>
-                    <WifiOff className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Offline</span>
-                  </>
-                ) : syncStatus === 'error' ? (
-                  <>
-                    <AlertCircle className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Retry</span>
-                  </>
-                ) : syncStatus === 'saving' ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> <span className="hidden sm:inline">Saving</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" /> <span className="hidden sm:inline">Saved</span>
-                  </>
-                )}
-              </span>
+            <div className="flex items-center gap-2">
               {profileHeaderButton(true)}
-              {notificationBellNode(true)}
-              <HelpTriggerButton
-                compact
-                hasPausedTour={hasPausedTour}
-                onClick={() => setHelpDrawerOpen(true)}
-                className="hidden sm:inline-flex"
-              />
-              <button
-                type="button"
-                aria-label="Toggle dark mode"
-                onClick={() => setDarkMode((v) => !v)}
-                className={`hidden sm:flex p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] items-center justify-center`}
-              >
-                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
               <button
                 type="button"
                 aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
                 aria-expanded={mobileMenuOpen}
                 aria-controls="mobile-navigation-menu"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className={`p-2 rounded-[10px] border ${borderClass} ${textSecondary} hover:bg-[var(--surface-subtle)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
+                className={`p-2 rounded-full border-0 bg-[var(--surface-elevated)] ${textSecondary} hover:bg-[var(--pastel-aqua)] cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center`}
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -2301,6 +2254,16 @@ export default function App() {
                 aria-label="Navigation menu"
                 className="mobile-drawer lg:hidden fixed left-auto right-0 bottom-0 z-20 w-[min(22rem,92vw)] px-4 pt-4 space-y-2.5 overflow-y-auto overscroll-contain studio-canvas border-l border-[var(--border-hairline)] shadow-2xl"
               >
+              <div className="pastel-card pastel-aqua px-4 py-3 mb-3 flex items-center justify-between gap-4">
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold">Notifications</span>
+                  <span className={`mt-0.5 flex items-center gap-1.5 text-xs ${syncStatus === 'offline' || syncStatus === 'error' ? 'text-[var(--warning-ink)]' : textSecondary}`}>
+                    {syncStatus === 'offline' ? <WifiOff className="w-3.5 h-3.5" /> : syncStatus === 'error' ? <AlertCircle className="w-3.5 h-3.5" /> : syncStatus === 'saving' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success-ink)]" />}
+                    {syncStatus === 'offline' ? 'Offline' : syncStatus === 'error' ? 'Sync needs attention' : syncStatus === 'saving' ? 'Saving changes' : 'All changes saved'}
+                  </span>
+                </span>
+                {notificationBellNode(true)}
+              </div>
               {(role === 'admin' ? adminNav : mainNav).map((item) => {
                 const Icon = item.icon;
                 const active = item.match.includes(activeTab);
@@ -2354,14 +2317,14 @@ export default function App() {
                   setMobileMenuOpen(false);
                   setHelpDrawerOpen(true);
                 }}
-                className={`sm:hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
               >
                 <Bot className="w-4 h-4" /> Help & guided tour
               </button>
               <button
                 type="button"
                 onClick={() => setDarkMode((v) => !v)}
-                className={`sm:hidden w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium min-h-[52px] ${cardClass} ${textPrimary} cursor-pointer`}
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 {darkMode ? 'Light mode' : 'Dark mode'}
