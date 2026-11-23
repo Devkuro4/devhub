@@ -1079,6 +1079,15 @@ export const LearningSection = ({
     { n: 4, label: 'Daily Quiz', hint: 'Check today’s topic', done: topicHasQuiz },
     { n: 5, label: 'Summary', hint: 'See progress and feedback', done: topicHasReview && topicHasQuiz },
   ];
+  const completedTodaySteps = pipelineSteps.filter((step) => step.done).length;
+  const momentumCopy =
+    completedTodaySteps === 5
+      ? 'Day complete. Your progress story just got stronger.'
+      : completedTodaySteps >= 3
+        ? 'You are over halfway there. One small step keeps the rhythm going.'
+        : completedTodaySteps > 0
+          ? 'Nice start. Keep it light and finish the next useful step.'
+          : 'Start small: confirm the course you are continuing today.';
 
   // Stage-level controls: 44px targets, variable-driven so light and dark both work
   const stageBtn =
@@ -1167,14 +1176,14 @@ export const LearningSection = ({
                   {activeDailyCourse?.title || 'Add the course you are currently taking'}
                 </h2>
                 <p className="mt-3 text-sm text-[var(--ink-secondary)]">Today: <strong className="text-[var(--ink-primary)]">{dailyTarget.topic}</strong></p>
-                <div className="mt-5 h-2 rounded-full bg-white/65 overflow-hidden" role="progressbar" aria-label="Course progress" aria-valuenow={activeDailyCourse?.progress || 0} aria-valuemin={0} aria-valuemax={100}>
+                <div className="mt-5 h-2 rounded-full bg-[var(--surface-elevated)]/70 overflow-hidden" role="progressbar" aria-label="Course progress" aria-valuenow={activeDailyCourse?.progress || 0} aria-valuemin={0} aria-valuemax={100}>
                   <div className="h-full rounded-full bg-[var(--ink-primary)] transition-all" style={{ width: `${activeDailyCourse?.progress || 0}%` }} />
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2 lg:justify-end">
                 {activeDailyCourse?.url && <a href={activeDailyCourse.url} target="_blank" rel="noopener noreferrer" className="round-action inline-flex items-center gap-2 min-h-11 px-4 text-sm font-semibold">Open course <ExternalLink className="w-4 h-4" /></a>}
-                <button type="button" onClick={() => setDailyStage(2)} className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-[var(--ink-primary)] text-white text-sm font-semibold cursor-pointer">Log progress <ArrowRight className="w-4 h-4" /></button>
+                <button type="button" onClick={() => setDailyStage(2)} className="inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-[var(--ink-primary)] text-[var(--surface-elevated)] text-sm font-semibold cursor-pointer">Log progress <ArrowRight className="w-4 h-4" /></button>
               </div>
             </div>
           </section>
@@ -1193,6 +1202,23 @@ export const LearningSection = ({
               <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--ink-primary)]">{avgQuizScore === null ? '—' : `${avgQuizScore}%`}</p>
             </div>
           </div>
+
+          <section className="pastel-card pastel-lilac p-5 sm:p-6" aria-label="Today's momentum">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--ink-secondary)]">Today’s momentum</p>
+                <p className="mt-1 text-base font-semibold text-[var(--ink-primary)]">{momentumCopy}</p>
+              </div>
+              <p className="font-display text-3xl font-bold tabular-nums text-[var(--ink-primary)] shrink-0">{completedTodaySteps}<span className="text-base font-sans font-medium text-[var(--ink-secondary)]"> / 5</span></p>
+            </div>
+            <div className="mt-4 grid grid-cols-5 gap-2" role="progressbar" aria-label="Today's tracker progress" aria-valuenow={completedTodaySteps} aria-valuemin={0} aria-valuemax={5}>
+              {pipelineSteps.map((step, index) => (
+                <button key={step.n} type="button" onClick={() => setDailyStage(step.n)} title={step.label} className={`h-2 rounded-full cursor-pointer transition-all ${step.done ? 'bg-[var(--ink-primary)]' : dailyStage === step.n ? 'bg-[var(--surface-elevated)] ring-2 ring-[var(--ink-primary)]/25' : 'bg-[var(--surface-elevated)]/65'}`} aria-label={`${step.label}${step.done ? ', complete' : ''}`}>
+                  <span className="sr-only">{index + 1}. {step.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
 
           <div className="flex flex-wrap items-center gap-3">
             <div className={`inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-[var(--surface-elevated)] text-sm`}>

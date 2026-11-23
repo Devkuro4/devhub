@@ -39,48 +39,41 @@ export interface TourStepDef {
 }
 
 const DEV_HUB_OFFERINGS = [
-  { icon: MapIcon, label: 'Structured learning journeys' },
-  { icon: Bot, label: 'AI-powered mentorship' },
-  { icon: Target, label: 'Quizzes and practical exercises' },
-  { icon: LayoutDashboard, label: 'Personal learning progress' },
-  { icon: Trophy, label: 'Coding challenges and competitions' },
-  { icon: FolderGit2, label: 'Real-world projects' },
-  { icon: Users, label: 'Community collaboration' },
-  { icon: Sparkles, label: 'Peer learning and mentorship' },
+  { icon: LayoutDashboard, label: 'Track the course you already use' },
+  { icon: Target, label: 'Turn daily effort into visible progress' },
+  { icon: Users, label: 'Get unstuck with people and an AI mentor' },
 ];
 
-export const buildTourSteps = (): TourStepDef[] => [
+export const buildTourSteps = (): TourStepDef[] => ([
   {
     id: 'step-dashboard',
     key: 'dashboard',
-    title: 'Home & Developer Workspace',
+    title: 'Your home',
     tab: 'dashboard',
     selector: '[data-tour="home-workspace"]',
     fallbackSelector: '[data-tour="nav-dashboard"]',
-    message: 'This is your developer workspace. Everything you need to keep moving forward starts here.',
+    message: 'This is your calm overview: what you are tracking, how today is going and the clearest next step.',
     highlights: [
-      'Your personalized dashboard and current learning path',
-      'Daily learning objectives and upcoming activities',
-      'Overall learning progress and recommended next steps',
+      'See your active course and today’s progress',
+      'Continue without searching through menus',
     ],
     presentation: 'intro',
   },
   {
     id: 'step-learning',
     key: 'learning',
-    title: 'Learning Paths & Courses',
+    title: 'Your progress tracker',
     tab: 'courses',
     selector: '[data-tour="learning-courses"]',
     fallbackSelector: '[data-tour="nav-today"]',
-    message: 'Your learning journey should fit your goals. Follow your existing courses or create a structured learning path.',
+    message: 'Bring the course you already use, then record study time, modules and private code evidence in one short daily flow.',
     highlights: [
-      'View active courses, add a new course, or import Udemy, Coursera, YouTube, or downloaded course materials',
-      'Follow your structured roadmap and track completed vs. upcoming topics',
-      'Continue right where you stopped in your daily learning flow',
+      'Add or open an external course',
+      'Log today’s work and check what stuck',
     ],
     presentation: 'interactive',
-    miniActionLabel: 'Open my active course & next lesson',
-    miniActionDescription: 'Jump to Today’s Learning to see your current topic and lesson checklist.',
+    miniActionLabel: 'Open today’s tracker',
+    miniActionDescription: 'See the short check-in flow for your active course.',
   },
   {
     id: 'step-mentor',
@@ -151,36 +144,34 @@ export const buildTourSteps = (): TourStepDef[] => [
   {
     id: 'step-community',
     key: 'community',
-    title: 'Community & Study Groups',
+    title: 'Help when you need it',
     tab: 'community-home',
     selector: '[data-tour="community-section"]',
     fallbackSelector: '[data-tour="nav-community-home"]',
-    message: "You don't have to figure everything out alone. Learn alongside people who are growing too.",
+    message: "Ask the community, join a study room or use the AI mentor for a hint. You stay in control of the work.",
     highlights: [
-      'Connect with fellow learners, ask questions, and share knowledge',
-      'Collaborate on projects and help peers overcome blockers',
-      'Join real-time topic rooms in Study Group Chat',
+      'Ask questions and learn beside real people',
+      'Use the mentor for hints rather than copied answers',
     ],
     presentation: 'interactive',
-    miniActionLabel: 'Open Live Study Chat',
-    miniActionDescription: 'Peek at the live Study Rooms where learners check in together.',
+    miniActionLabel: 'Open study chat',
+    miniActionDescription: 'See the rooms where members check in together.',
   },
   {
     id: 'step-profile',
     key: 'profile',
-    title: 'Profile & Achievements',
+    title: 'Your growth story',
     tab: 'profile',
     selector: '[data-tour="profile-section"]',
     fallbackSelector: '[data-tour="nav-profile"]',
-    message: 'Your profile tells the story of your growth. Every milestone contributes to your journey.',
+    message: 'Your profile brings your progress, code, preferences and earned badges together—and you can edit it anytime.',
     highlights: [
-      'Your developer profile, portfolio links, and personal study settings',
-      'Learning statistics, practiced skills, and progress history',
-      'Earned badges and milestone achievements',
+      'Update your photo and personal details',
+      'See real milestones and collectible badges',
     ],
     presentation: 'spotlight',
   },
-];
+] satisfies TourStepDef[]).filter((step) => ['dashboard', 'learning', 'community', 'profile'].includes(step.key));
 
 function sampleQuestionForProfile(profile: OnboardingProfile, activeCourse?: CourseItem): string {
   const field = (profile.field || '').toLowerCase();
@@ -226,8 +217,7 @@ export const WelcomeExperience: React.FC<{
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/55 backdrop-blur-sm overflow-y-auto"
     >
       <div className={`w-full max-w-2xl rounded-2xl border ${borderClass} bg-[var(--surface-elevated)] shadow-[var(--shadow-lg)] overflow-hidden my-auto`}>
-        {/* Top editorial banner */}
-        <div className="bg-[var(--panel-deep)] text-white px-6 py-6 sm:px-8 sm:py-7 space-y-3">
+        <div className="pastel-aqua text-[var(--ink-primary)] px-6 py-6 sm:px-8 sm:py-7 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--ink-secondary)]">
               <Sparkles className="w-3.5 h-3.5 text-[var(--spark)]" />
@@ -237,16 +227,16 @@ export const WelcomeExperience: React.FC<{
               type="button"
               onClick={onExploreOwn}
               aria-label="Close welcome screen"
-              className="p-2 -mr-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="p-2 -mr-2 rounded-full text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] hover:bg-[var(--surface-elevated)]/60 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
           <h1 id="welcome-headline" className="font-display text-2xl sm:text-3xl font-bold leading-tight">
-            Welcome to Dev Hub. Your journey starts here.
+            Your learning now has a home.
           </h1>
-          <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-[58ch]">
-            More than a place to learn code. A community, a learning environment, and a space to grow into the developer you want to become.
+          <p className="text-sm sm:text-base text-[var(--ink-secondary)] leading-relaxed max-w-[58ch]">
+            You bring the course. Dev Hub helps you turn the work into a steady rhythm, visible progress and a story you can be proud of.
           </p>
         </div>
 
@@ -265,12 +255,11 @@ export const WelcomeExperience: React.FC<{
             </span>
           </div>
 
-          {/* What Dev Hub offers */}
           <div className="space-y-2.5">
-            <p className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Everything waiting inside Dev Hub</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {DEV_HUB_OFFERINGS.map(({ icon: Icon, label }) => (
-                <div key={label} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border ${borderClass} bg-[var(--surface-bg)]`}>
+            <p className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Three things to remember</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {DEV_HUB_OFFERINGS.map(({ icon: Icon, label }, index) => (
+                <div key={label} className={`min-h-28 flex flex-col gap-3 px-4 py-4 rounded-2xl ${index === 0 ? 'pastel-yellow' : index === 1 ? 'pastel-pink' : 'pastel-lilac'}`}>
                   <Icon className="w-4 h-4 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
                   <span className={`text-sm font-medium ${textPrimary}`}>{label}</span>
                 </div>
@@ -281,14 +270,14 @@ export const WelcomeExperience: React.FC<{
           {/* Actions */}
           <div className={`pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t ${borderClass}`}>
             <p className={`text-xs ${textSecondary}`}>
-              Takes about 60 seconds. You can replay or resume anytime from Help.
+              Four short stops. Replay it anytime from Help.
             </p>
             <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
               <button type="button" onClick={onExploreOwn} className={`${btnSecondary} min-h-[44px] justify-center`}>
-                Explore on my own
+                Start with my dashboard
               </button>
               <button type="button" onClick={onStartTour} className={`${btnPrimary} min-h-[44px] justify-center`}>
-                Take a quick tour <ArrowRight className="w-4 h-4" />
+                Show me the essentials
               </button>
             </div>
           </div>

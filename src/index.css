@@ -307,6 +307,7 @@ html {
 .pastel-yellow { background: var(--pastel-yellow); }
 .pastel-lilac { background: var(--pastel-lilac); }
 .round-action { background: rgb(255 255 255 / 84%); color: var(--ink-primary); border-radius: 999px; }
+.dark .round-action { background: color-mix(in srgb, var(--surface-elevated) 86%, var(--pastel-aqua)); color: var(--ink-primary); }
 
 /* Editorial product banners replace the generic sparkle-card treatment. */
 .product-banner {

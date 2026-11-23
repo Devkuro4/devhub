@@ -552,36 +552,32 @@ export const OnboardingWizard = ({
 
   return (
     <div className="max-w-4xl mx-auto py-2 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-      <nav aria-label="Setup steps" className="hidden lg:block lg:col-span-4">
-        <ol className="lg:sticky lg:top-6 space-y-1">
-          {STEP_NAMES.map((n, i) => {
-            const num = i + 1;
-            const done = num < step;
-            const current = num === step;
-            return (
-              <li key={n} aria-current={current ? 'step' : undefined} className={`relative flex gap-3 py-2.5 pl-4 ${current || done ? 'text-[var(--ink-primary)]' : 'text-[var(--ink-muted)]'}`}>
-                {current && <span aria-hidden="true" className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-[var(--spark)]" />}
-                <span
-                  aria-hidden="true"
-                  className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold tabular-nums border ${
-                    done ? 'bg-[var(--accent-600)] border-[var(--accent-600)] text-white' : current ? 'border-[var(--ink-primary)]' : 'border-[var(--border-strong)]'
-                  }`}
-                >
-                  {done ? <Check className="w-3.5 h-3.5" /> : num}
-                </span>
-                <span className={`text-base leading-6 ${current ? 'font-semibold' : ''}`}>{n}</span>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      <aside aria-label="What setup covers" className="hidden lg:block lg:col-span-4">
+        <div className="lg:sticky lg:top-6 space-y-4">
+          <div className="pastel-card pastel-aqua p-6">
+            <p className="text-sm font-semibold text-[var(--ink-secondary)]">Quick setup</p>
+            <h2 className="mt-2 !text-2xl">A tracker shaped around you.</h2>
+            <p className="mt-3 text-base leading-relaxed text-[var(--ink-secondary)]">Answer only what feels useful. You can change everything later.</p>
+          </div>
+          {[
+            { label: 'Choose your focus', range: 'Your field and learning source', active: step <= 2, done: step > 2 },
+            { label: 'Bring your course', range: 'What you use and where you are', active: step >= 3 && step <= 5, done: step > 5 },
+            { label: 'Shape your rhythm', range: 'Your goal, pace and review', active: step >= 6, done: false },
+          ].map((phase, index) => (
+            <div key={phase.label} className={`rounded-2xl p-4 flex gap-3 ${phase.active ? 'pastel-yellow' : 'bg-[var(--surface-subtle)]'}`}>
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${phase.done ? 'bg-[var(--ink-primary)] text-[var(--surface-elevated)]' : 'bg-[var(--surface-elevated)]'}`}>{phase.done ? <Check className="w-4 h-4" /> : index + 1}</span>
+              <div><p className="text-sm font-semibold">{phase.label}</p><p className="mt-0.5 text-sm text-[var(--ink-secondary)]">{phase.range}</p></div>
+            </div>
+          ))}
+        </div>
+      </aside>
 
       <section className="lg:col-span-8 studio-card p-6 sm:p-8 space-y-6" aria-labelledby="onboarding-heading">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <p className="font-semibold tabular-nums text-[var(--ink-primary)]">
-              Step {step} of {TOTAL}
-              <span className="font-normal text-[var(--ink-secondary)]"> · {STEP_NAMES[step - 1]}</span>
+            <p className="font-semibold text-[var(--ink-primary)]">
+              {STEP_NAMES[step - 1]}
+              <span className="font-normal text-[var(--ink-secondary)]"> · about {Math.max(1, Math.ceil((TOTAL - step + 1) / 3))} min left</span>
             </p>
             {onSkipToHome && (
               <button type="button" onClick={onSkipToHome} className="min-h-11 px-2 -mr-2 text-[var(--ink-secondary)] hover:text-[var(--ink-primary)] underline underline-offset-2 cursor-pointer">
@@ -600,12 +596,12 @@ export const OnboardingWizard = ({
           <div className="space-y-5 py-1">
             <div>
               <h1 id="onboarding-heading" ref={headingRef} tabIndex={-1} className="font-display text-[var(--ink-primary)] outline-none [text-wrap:balance]">
-                Every developer starts somewhere.
+                Let’s make your learning easier to see.
               </h1>
-              <p className={sub}>Let’s build a learning experience around where you are and where you want to go.</p>
+              <p className={sub}>Bring the course or plan you already use. We’ll turn it into a personal progress tracker—not another classroom.</p>
             </div>
             <ul className="space-y-3 text-base text-[var(--ink-secondary)]">
-              {['Organise what you’re learning in one place', 'Get practical exercises matched to your level', 'Track real progress, not just time spent', 'Grow into an independent developer'].map((t) => (
+              {['Keep your course and progress together', 'Save private code evidence as you practise', 'Use short quizzes to check what stuck'].map((t) => (
                 <li key={t} className="flex items-center gap-2.5">
                   <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--spark)] shrink-0" />
                   {t}
@@ -614,7 +610,7 @@ export const OnboardingWizard = ({
             </ul>
             <p className="text-sm text-[var(--ink-secondary)]">Only one question is required. You can skip the rest and add details later.</p>
             <button type="button" onClick={() => setStep(2)} className={`${primaryBtn} text-base`}>
-              Let’s get started <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              Set up my tracker
             </button>
           </div>
         )}

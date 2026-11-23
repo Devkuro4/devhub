@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play } from 'lucide-react';
+import { Check, Code2, TimerReset } from 'lucide-react';
 import { LogoMark, useSystemDark } from './ui';
 
 /* Public front door for visitors who are not signed in.
@@ -7,12 +7,12 @@ import { LogoMark, useSystemDark } from './ui';
    Everything else stays quiet. */
 
 const STAGES = [
-  { name: 'Learn', note: 'Follow a course' },
-  { name: 'Practise', note: 'Daily exercises' },
-  { name: 'Demonstrate', note: 'Show you understand' },
-  { name: 'Build', note: 'Real projects' },
-  { name: 'Collaborate', note: 'Work with others' },
-  { name: 'Independent', note: 'Ship on your own' },
+  { name: 'Add a course', note: 'Bring what you use' },
+  { name: 'Check in', note: 'Log real progress' },
+  { name: 'Save code', note: 'Keep proof of practice' },
+  { name: 'Quick quiz', note: 'Check what stuck' },
+  { name: 'See patterns', note: 'Know what needs work' },
+  { name: 'Keep growing', note: 'Stay consistent' },
 ];
 
 const W = 1000;
@@ -98,24 +98,24 @@ const Trail = () => (
 
 const LOOP = [
   {
-    title: 'Learn from the courses you already follow',
-    text: 'Link a course and Dev Hub gives you a roadmap for your field and one clear next step every day.',
+    title: 'Bring the course you already chose',
+    text: 'Add a YouTube playlist, online course, class or personal study plan. Dev Hub keeps the useful details together without replacing it.',
   },
   {
-    title: 'Practise a little, every day',
-    text: 'One focused exercise sized to your time. Paste your code, upload your files or link your GitHub.',
+    title: 'Record what actually happened',
+    text: 'Log time, completed modules and private code evidence. Your progress reflects the work you did, not made-up activity.',
   },
   {
-    title: 'Get kind, specific feedback',
-    text: 'Reviews say what worked and what to fix next, then ask you to explain your code instead of just fixing it for you.',
+    title: 'Make each day feel finishable',
+    text: 'A short daily flow turns a big course into a calm next step: study, save evidence, check understanding and close the day.',
   },
   {
-    title: 'Check what stuck',
-    text: 'Short quizzes after each topic show what you understand and what needs another pass.',
+    title: 'Notice what is sticking',
+    text: 'Small quizzes and progress summaries reveal strong topics, weak spots and the best place to continue tomorrow.',
   },
   {
-    title: 'Build projects that are yours',
-    text: 'Weekly projects and group builds, shared with the community when you are ready.',
+    title: 'Get support without losing ownership',
+    text: 'Ask the Groq-powered mentor for a hint, learn with the community and celebrate milestones while your work stays yours.',
   },
 ];
 
@@ -190,10 +190,10 @@ const COMMUNITY = [
 export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: () => void }) => {
   const dark = useSystemDark();
   const wrap = 'max-w-6xl mx-auto px-5 sm:px-8 lg:px-12';
-  const onBlack =
-    'inline-flex items-center gap-2.5 px-6 min-h-12 rounded-lg bg-white text-[#0A0A0A] text-base font-semibold cursor-pointer hover:bg-white/90';
-  const onBlackGhost =
-    'inline-flex items-center justify-center min-h-12 px-6 rounded-lg border border-white/25 text-white text-base font-medium cursor-pointer hover:bg-white/10';
+  const primaryAction =
+    'inline-flex items-center justify-center px-6 min-h-12 rounded-full bg-[var(--ink-primary)] text-[var(--surface-elevated)] text-base font-semibold cursor-pointer hover:opacity-90';
+  const secondaryAction =
+    'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-[var(--ink-primary)]/20 bg-[var(--surface-elevated)]/75 text-[var(--ink-primary)] text-base font-medium cursor-pointer hover:bg-[var(--surface-elevated)]';
 
   return (
     <div className={`hub-root ${dark ? 'dark' : ''} app-backdrop min-h-screen sm:p-6`}>
@@ -225,27 +225,43 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
       <main id="hero">
         {/* Hero */}
         <section className={`${wrap} pt-8 sm:pt-12 pb-12 sm:pb-16`}>
-          <div className="product-banner px-7 py-14 sm:px-14 sm:py-20">
-            <div className="relative max-w-3xl">
-              <h1 className="!text-white !font-display !text-[clamp(2.25rem,1.5rem_+_3.8vw,4.25rem)] !leading-[1.05] !tracking-[-0.035em] font-semibold">
-                Stop following tutorials. Start building on your own.
+          <div className="product-banner px-6 py-8 sm:px-10 sm:py-12 lg:px-14 lg:py-14 grid gap-10 lg:grid-cols-12 lg:items-center">
+            <div className="relative lg:col-span-7">
+              <span className="inline-flex rounded-full bg-[var(--surface-elevated)]/75 px-3 py-1.5 text-sm font-semibold text-[var(--ink-secondary)]">Your learning, finally visible</span>
+              <h1 className="mt-5 !font-display !text-[clamp(2.25rem,1.5rem_+_3.8vw,4.25rem)] !leading-[1.02] !tracking-[-0.04em] font-semibold text-[var(--ink-primary)]">
+                Keep the course. Make the progress yours.
               </h1>
-              <p className="mt-6 text-lg sm:text-xl leading-relaxed text-white/75 max-w-[40ch] sm:max-w-[46ch]">
-                Dev Hub is a community for people learning to code. Follow the courses you already use, practise every day, and get an AI mentor that gives hints instead of answers, so what you build is really yours.
+              <p className="mt-6 text-lg sm:text-xl leading-relaxed text-[var(--ink-secondary)] max-w-[42ch]">
+                Dev Hub helps you track external courses, save code evidence, check what you understood and stay consistent—with an AI mentor and community when you need support.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={onJoin} className={onBlack}>
-                  Join Dev Hub <Play className="w-4 h-4 fill-current" aria-hidden="true" />
+                <button type="button" onClick={onJoin} className={primaryAction}>
+                  Start tracking free
                 </button>
-                <button type="button" onClick={onSignIn} className={onBlackGhost}>
+                <button type="button" onClick={onSignIn} className={secondaryAction}>
                   Sign in
                 </button>
               </div>
             </div>
+            <div className="relative lg:col-span-5 rounded-[26px] bg-[var(--surface-elevated)]/88 p-5 sm:p-6 shadow-[var(--shadow-md)] border border-[var(--ink-primary)]/5">
+              <div className="flex items-start justify-between gap-4">
+                <div><p className="text-sm font-medium text-[var(--ink-muted)]">Current course</p><h2 className="mt-1 !text-xl">Frontend foundations</h2></div>
+                <span className="rounded-full pastel-aqua px-3 py-1 text-sm font-bold">68%</span>
+              </div>
+              <div className="mt-5 h-2 rounded-full bg-[var(--border-hairline)] overflow-hidden"><span className="block h-full w-[68%] rounded-full bg-[var(--ink-primary)]" /></div>
+              <div className="mt-6 grid grid-cols-3 gap-2">
+                {[{ icon: TimerReset, value: '42m', label: 'studied' }, { icon: Code2, value: '2', label: 'code saves' }, { icon: Check, value: '4/5', label: 'today' }].map(({ icon: Icon, value, label }, index) => (
+                  <div key={label} className={`rounded-2xl p-3 ${index === 0 ? 'pastel-aqua' : index === 1 ? 'pastel-pink' : 'pastel-lilac'}`}>
+                    <Icon className="w-4 h-4" aria-hidden="true" /><p className="mt-3 font-display text-xl font-bold">{value}</p><p className="text-xs text-[var(--ink-secondary)]">{label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-5 text-sm text-[var(--ink-secondary)]">Next: log what you practised, then take a 3-minute check-in quiz.</p>
+            </div>
           </div>
 
           <div className="mt-16 sm:mt-20">
-            <h2 className="text-xl sm:text-2xl mb-8 sm:mb-4 max-w-[28ch]">The path from beginner to independent developer</h2>
+            <h2 className="text-xl sm:text-2xl mb-8 sm:mb-4 max-w-[30ch]">A simple rhythm that keeps your learning moving</h2>
             <Trail />
           </div>
         </section>
@@ -255,9 +271,9 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
           <div className={`${wrap} py-20 sm:py-28 grid gap-12 lg:grid-cols-12`}>
             <div className="lg:col-span-5">
               <div className="lg:sticky lg:top-28 space-y-5">
-                <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">One daily loop, built to make you independent</h2>
+                <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">One calm loop for the course you already use</h2>
                 <p className="text-lg text-[var(--ink-secondary)] leading-relaxed max-w-[44ch]">
-                  You do not need another course. You need a clear next step, honest feedback and people to build with. That is the whole idea.
+                  Dev Hub does not pretend to teach your course. It helps you see the work, understand your pace and know what to do next.
                 </p>
               </div>
             </div>
@@ -312,15 +328,15 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
         <section className={`${wrap} pb-16 sm:pb-24`}>
           <div className="product-banner px-7 py-14 sm:px-14 sm:py-16 grid gap-10 lg:grid-cols-12 items-center">
             <div className="relative lg:col-span-7 space-y-5">
-              <h2 className="!text-white !text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">Ready to build something that is yours?</h2>
-              <p className="text-lg text-white/75 leading-relaxed max-w-[50ch]">
-                Start from a Frontend, Backend, Full-Stack or AI Engineering roadmap, or describe what you want to learn and get a plan made for you. Setting up takes about a minute.
+              <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1] text-[var(--ink-primary)]">Ready to make your effort visible?</h2>
+              <p className="text-lg text-[var(--ink-secondary)] leading-relaxed max-w-[50ch]">
+                Add the course you are taking, choose your pace and get a personal tracker in about two minutes.
               </p>
               <div className="pt-3 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={onJoin} className={onBlack}>
-                  Join Dev Hub <Play className="w-4 h-4 fill-current" aria-hidden="true" />
+                <button type="button" onClick={onJoin} className={primaryAction}>
+                  Create my tracker
                 </button>
-                <button type="button" onClick={onSignIn} className={onBlackGhost}>
+                <button type="button" onClick={onSignIn} className={secondaryAction}>
                   I already have an account
                 </button>
               </div>

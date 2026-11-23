@@ -9,6 +9,7 @@ import {
   GraduationCap,
   HeartHandshake,
   Library,
+  Lock,
   Moon,
   Puzzle,
   Rocket,
@@ -21,17 +22,12 @@ import {
 } from 'lucide-react';
 import type { MemberMilestone, MilestoneSummary, MilestoneTone } from '../types';
 
-// All badge tones share one palette so the Home strip matches the Profile block.
-const EARNED = {
-  earned: 'border-[var(--accent-500)]/30 bg-[var(--accent-50)] text-[var(--ink-primary)]',
-  iconWrap: 'bg-[var(--accent-100)] text-[var(--accent-600)]',
-};
-const TONE_CLASSES: Record<MilestoneTone, { earned: string; iconWrap: string }> = {
-  emerald: EARNED,
-  amber: EARNED,
-  sky: EARNED,
-  violet: EARNED,
-  rose: EARNED,
+const TONE_CLASSES: Record<MilestoneTone, { earned: string; medal: string; ribbon: string }> = {
+  emerald: { earned: 'bg-[var(--pastel-aqua)]', medal: 'bg-[#205E56] text-white', ribbon: 'bg-[#78B8AF]' },
+  amber: { earned: 'bg-[var(--pastel-yellow)]', medal: 'bg-[#8A5A08] text-white', ribbon: 'bg-[#E8B94E]' },
+  sky: { earned: 'bg-[#CFE1F4] dark:bg-[#243C54]', medal: 'bg-[#245B88] text-white', ribbon: 'bg-[#6FA6D1]' },
+  violet: { earned: 'bg-[var(--pastel-lilac)]', medal: 'bg-[#624887] text-white', ribbon: 'bg-[#A98CC8]' },
+  rose: { earned: 'bg-[var(--pastel-pink)]', medal: 'bg-[#8B3F63] text-white', ribbon: 'bg-[#D884AA]' },
 };
 
 export function MilestoneIcon({
@@ -81,6 +77,31 @@ export function MilestoneIcon({
   }
 }
 
+export function AchievementBadgeMark({
+  milestone,
+  earned = milestone.earned,
+  size = 'md',
+}: {
+  milestone: MemberMilestone;
+  earned?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const palette = TONE_CLASSES[milestone.tone];
+  const dimensions = size === 'sm' ? 'w-8 h-10' : size === 'lg' ? 'w-16 h-[4.75rem]' : 'w-12 h-14';
+  const medalSize = size === 'sm' ? 'w-7 h-7' : size === 'lg' ? 'w-14 h-14' : 'w-11 h-11';
+  const iconSize = size === 'sm' ? 'w-3.5 h-3.5' : size === 'lg' ? 'w-6 h-6' : 'w-5 h-5';
+
+  return (
+    <span className={`relative inline-flex justify-center shrink-0 ${dimensions}`} aria-hidden="true">
+      <span className={`absolute bottom-0 left-[20%] h-[42%] w-[27%] rotate-[8deg] rounded-b-sm ${earned ? palette.ribbon : 'bg-[var(--border-strong)]'}`} />
+      <span className={`absolute bottom-0 right-[20%] h-[42%] w-[27%] -rotate-[8deg] rounded-b-sm ${earned ? palette.ribbon : 'bg-[var(--border-strong)]'}`} />
+      <span className={`relative z-10 rounded-full border-[3px] border-[var(--surface-elevated)] shadow-sm flex items-center justify-center ${medalSize} ${earned ? palette.medal : 'bg-[var(--surface-subtle)] text-[var(--ink-muted)]'}`}>
+        {earned ? <MilestoneIcon icon={milestone.icon} className={iconSize} /> : <Lock className={iconSize} />}
+      </span>
+    </span>
+  );
+}
+
 /**
  * Compact badge strip for HomeDashboard: displays earned small badge icons
  * plus the closest upcoming milestone to encourage steady progress.
@@ -128,11 +149,9 @@ export const DashboardMilestoneStrip = ({
               <span
                 key={m.id}
                 title={`${m.title} (${m.requirementLabel}) — ${m.encouragement}`}
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-medium ${palette.earned}`}
+                className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold ${palette.earned}`}
               >
-                <span className={`w-4 h-4 rounded flex items-center justify-center ${palette.iconWrap}`}>
-                  <MilestoneIcon icon={m.icon} className="w-3 h-3" />
-                </span>
+                <AchievementBadgeMark milestone={m} size="sm" />
                 <span>{m.title}</span>
               </span>
             );
@@ -217,11 +236,9 @@ export const ProfileMilestonesCard = ({
             {earned.map((m) => (
               <li
                 key={m.id}
-                className={`flex items-start gap-3 p-3.5 rounded-lg border ${borderClass} border-l-4 !border-l-[var(--accent-600)] bg-[var(--accent-50)]`}
+                className={`flex items-start gap-4 p-4 rounded-2xl ${TONE_CLASSES[m.tone].earned}`}
               >
-                <span className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-[var(--accent-100)] text-[var(--accent-600)]">
-                  <MilestoneIcon icon={m.icon} className="w-4 h-4" />
-                </span>
+                <AchievementBadgeMark milestone={m} size="lg" />
                 <span className="min-w-0 space-y-0.5">
                   <span className={`block text-sm font-semibold ${textPrimary}`}>{m.title}</span>
                   <span className={`block text-sm leading-relaxed ${textSecondary}`}>{m.encouragement}</span>
@@ -244,9 +261,7 @@ export const ProfileMilestonesCard = ({
               const pct = Math.min(100, Math.round((m.current / m.target) * 100));
               return (
                 <li key={m.id} className="flex items-start gap-3">
-                  <span className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-[var(--surface-subtle)] text-[var(--ink-secondary)]">
-                    <MilestoneIcon icon={m.icon} className="w-4 h-4" />
-                  </span>
+                  <AchievementBadgeMark milestone={m} earned={false} size="md" />
                   <span className="min-w-0 flex-1 space-y-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className={`text-sm font-medium ${textPrimary}`}>{m.title}</span>

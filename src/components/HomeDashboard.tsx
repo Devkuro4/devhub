@@ -373,8 +373,8 @@ export const HomeDashboard = ({
                   className={`pastel-card ${index === 0 ? 'pastel-aqua' : 'pastel-pink'} min-h-[220px] p-6 sm:p-7 flex flex-col justify-between text-left cursor-pointer transition-transform hover:-translate-y-1`}
                 >
                   <span className="flex items-start justify-between gap-4">
-                    <span className="w-12 h-12 rounded-full bg-white/80 flex items-center justify-center"><ActivityIcon className="w-5 h-5" /></span>
-                    <span className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-bold">{item.done ? 'Completed' : `${dailyTarget.estimatedMinutes} min`}</span>
+                    <span className="round-action w-12 h-12 flex items-center justify-center"><ActivityIcon className="w-5 h-5" /></span>
+                    <span className="round-action px-3 py-1.5 text-xs font-bold">{item.done ? 'Completed' : `${dailyTarget.estimatedMinutes} min`}</span>
                   </span>
                   <span className="flex items-end justify-between gap-4 mt-8">
                     <span>
@@ -613,7 +613,7 @@ export const HomeDashboard = ({
               <ul className="mt-4 space-y-3">
                 {presentations.slice(0, 3).map((event) => (
                   <li key={event.id}>
-                    <button type="button" onClick={() => onNavigate('events')} className="w-full bg-white/75 rounded-2xl p-4 flex items-center gap-3 text-left cursor-pointer hover:bg-white">
+                    <button type="button" onClick={() => onNavigate('events')} className="w-full bg-[var(--surface-elevated)] rounded-2xl p-4 flex items-center gap-3 text-left cursor-pointer hover:bg-[var(--surface-subtle)]">
                       <span className="w-10 h-10 rounded-full bg-[var(--ink-primary)] text-white flex items-center justify-center shrink-0"><BookOpen className="w-4 h-4" /></span>
                       <span className="min-w-0">
                         <span className="block text-sm font-bold line-clamp-2">{event.title}</span>
@@ -624,7 +624,7 @@ export const HomeDashboard = ({
                 ))}
               </ul>
             ) : (
-              <div className="mt-4 bg-white/75 rounded-2xl p-4">
+              <div className="mt-4 bg-[var(--surface-elevated)] rounded-2xl p-4">
                 <p className="text-sm font-bold">Your calendar is open</p>
                 <p className="mt-1 text-xs text-[var(--ink-secondary)]">Community sessions will appear here.</p>
                 <button type="button" onClick={() => onNavigate('events')} className="mt-3 text-xs font-bold underline cursor-pointer">Explore events</button>
@@ -653,7 +653,7 @@ export const HomeDashboard = ({
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
             {[{ I: Bot, l: 'Ask the AI mentor', t: 'ai-mentor' }, { I: Users, l: 'Open community', t: 'community-home' }, { I: Trophy, l: 'See milestones', t: 'profile' }].map(({ I, l, t }) => (
-              <button key={l} type="button" aria-label={l} title={l} onClick={() => onNavigate(t)} className="w-11 h-11 rounded-full bg-white/80 text-[var(--ink-primary)] flex items-center justify-center cursor-pointer hover:bg-white">
+              <button key={l} type="button" aria-label={l} title={l} onClick={() => onNavigate(t)} className="round-action w-11 h-11 flex items-center justify-center cursor-pointer hover:opacity-85">
                 <I className="w-[18px] h-[18px]" aria-hidden="true" />
               </button>
             ))}

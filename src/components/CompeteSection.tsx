@@ -9,7 +9,6 @@ import {
   Flame,
   Hammer,
   History,
-  Lock,
   Swords,
   Target,
   TrendingUp,
@@ -17,7 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { EmptyState, PageHeader, ProgressBar, SectionTabs } from './ui';
-import { MilestoneIcon } from './MilestoneBadges';
+import { AchievementBadgeMark } from './MilestoneBadges';
 import { ArenaMatchRoom } from './ArenaMatchRoom';
 import {
   ArenaChallengesPanel,
@@ -112,13 +111,7 @@ const BadgeTile = ({ m, textPrimary, textSecondary }: { m: MemberMilestone; text
   return (
     <li className={`soft-card p-5 flex flex-col gap-4 ${m.earned ? '' : 'opacity-95'}`}>
       <div className="flex items-start gap-3">
-        <span
-          className={`w-12 h-12 rounded-full shrink-0 flex items-center justify-center ${
-            m.earned ? 'bg-[var(--accent-100)] text-[var(--accent-600)]' : 'bg-[var(--surface-subtle)] text-[var(--ink-muted)]'
-          }`}
-        >
-          {m.earned ? <MilestoneIcon icon={m.icon} className="w-5 h-5" /> : <Lock className="w-5 h-5" aria-hidden="true" />}
-        </span>
+        <AchievementBadgeMark milestone={m} earned={m.earned} size="lg" />
         <span className="min-w-0 space-y-0.5">
           <span className={`block text-base font-semibold leading-snug ${textPrimary}`}>{m.title}</span>
           <span className={`block text-sm ${textSecondary}`}>{m.requirementLabel}</span>
