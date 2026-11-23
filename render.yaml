@@ -19,6 +19,8 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: VITE_PUBLIC_SITE_URL   # exact member-site URL used after email confirmation
+        sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY   # server only: persists competitions, messages, moderation and learning state
         sync: false
       - key: ALLOWED_ORIGINS   # your Vercel site address, e.g. https://yourhub.vercel.app (no trailing slash)

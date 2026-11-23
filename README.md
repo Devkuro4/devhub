@@ -41,8 +41,8 @@ On Render:
 
 1. Push this folder to GitHub.
 2. Render, New, Blueprint, pick the repo. It reads `render.yaml`.
-3. Fill in the secrets: `GROQ_API_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-4. After it deploys, copy the live URL into Supabase, Authentication, URL Configuration (Site URL and Redirect URLs).
+3. Fill in the secrets: `GROQ_API_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Also set `VITE_PUBLIC_SITE_URL` to the exact public member-site URL.
+4. After it deploys, copy that same URL into Supabase, Authentication, URL Configuration as the **Site URL** and add `<your-url>/**` under **Redirect URLs**.
 
 On Railway: New Project, Deploy from GitHub repo, pick the repo, add the same variables **before** the first
 deploy, then Settings, Networking, Generate Domain. Optional: Settings, Deploy, Healthcheck Path = `/api/health`.
@@ -57,8 +57,21 @@ Notes:
 
 Vercel only hosts the website, so the AI server runs separately on Railway.
 1. Deploy the repo on Render or Railway as above. Also add `ALLOWED_ORIGINS` = your Vercel address (no trailing slash).
-2. In Vercel, Settings, Environment Variables: add `VITE_API_URL` = your Render/Railway address (no trailing slash), plus `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then redeploy.
-3. In Supabase, keep your Vercel address as the Site URL.
+2. In Vercel, Settings, Environment Variables: add `VITE_API_URL` = your Render/Railway address (no trailing slash), plus `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_PUBLIC_SITE_URL` = the public member-site address, then redeploy.
+3. In Supabase, use that exact public member-site address as the Site URL and add `<your-url>/**` to Redirect URLs. Remove obsolete preview URLs when the team no longer uses them.
+
+### Confirmation emails opening the wrong deployment
+
+Supabase can fall back to an old Site URL when the requested redirect is not allow-listed, or when a customized email template links directly to `{{ .SiteURL }}`.
+
+1. Open Supabase → Authentication → URL Configuration.
+2. Set **Site URL** to the public Dev Hub member site.
+3. Add `https://your-public-domain.example/**` under **Redirect URLs**. Keep `http://localhost:5173/**` only for local development.
+4. Open Authentication → Email Templates → Confirm signup. The confirmation button should use Supabase's complete confirmation URL:
+
+       <a href="{{ .ConfirmationURL }}">Confirm email address</a>
+
+5. Set `VITE_PUBLIC_SITE_URL` to the same public URL on the deployment host and redeploy because Vite variables are baked in at build time.
 
 ## 3b. Reset before inviting your team
 

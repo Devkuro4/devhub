@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { ADMIN_CODE, ADMIN_SITE, MEMBER_SITE_URL } from '../data/seedData';
+import { ADMIN_CODE, ADMIN_SITE, MEMBER_SITE_URL, PUBLIC_SITE_URL } from '../data/seedData';
 
 
 export const DarkCtx = createContext(false);
@@ -637,6 +637,12 @@ const formatAuthError = (msg?: string) => {
   return msg;
 };
 
+const getAuthRedirectUrl = () => {
+  const configured = String(PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+  const origin = typeof window !== 'undefined' ? window.location.origin.replace(/\/+$/, '') : '';
+  return `${configured || origin}/`;
+};
+
 export const AuthScreen = ({ initialMode = 'in', onBack }: { initialMode?: 'in' | 'up'; onBack?: () => void }) => {
   const [mode, setMode] = useState<'in' | 'up'>(initialMode);
   const [name, setName] = useState('');
@@ -702,7 +708,7 @@ export const AuthScreen = ({ initialMode = 'in', onBack }: { initialMode?: 'in' 
     try {
       const res: any =
         mode === 'up'
-          ? await supabase!.auth.signUp({ email: email.trim(), password, options: { data: { full_name: name.trim() }, emailRedirectTo: window.location.origin } })
+          ? await supabase!.auth.signUp({ email: email.trim(), password, options: { data: { full_name: name.trim() }, emailRedirectTo: getAuthRedirectUrl() } })
           : await supabase!.auth.signInWithPassword({ email: email.trim(), password });
       if (res.error) return setErr(formatAuthError(res.error.message));
       if (mode === 'up' && !res.data?.session) setInfo('Confirmation email sent. Open the link in your inbox to verify and sign in.');
@@ -723,7 +729,7 @@ export const AuthScreen = ({ initialMode = 'in', onBack }: { initialMode?: 'in' 
     }
     setBusy(true);
     try {
-      const { error } = await supabase!.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: window.location.origin } });
+      const { error } = await supabase!.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: getAuthRedirectUrl() } });
       error ? setErr(formatAuthError(error.message)) : setInfo('Sign-in link sent to your inbox. You can use it instead of a password.');
     } catch (error: any) {
       setErr(formatAuthError(error?.message));

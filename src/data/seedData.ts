@@ -737,6 +737,8 @@ export const LAUNCH_RESOURCES = INITIAL_RESOURCES.map((r) => ({ ...r, addedBy: '
 
 export const ADMIN_SITE = (import.meta as any).env?.VITE_APP_MODE === 'admin';
 export const MEMBER_SITE_URL: string | undefined = (import.meta as any).env?.VITE_MEMBER_SITE_URL;
+/** Canonical public member-site URL used by Supabase confirmation and magic-link redirects. */
+export const PUBLIC_SITE_URL: string | undefined = (import.meta as any).env?.VITE_PUBLIC_SITE_URL;
 export const ADMIN_CODE: string | undefined = (import.meta as any).env?.VITE_ADMIN_CODE;
 
 export const PERSONAL_KEYS = [
