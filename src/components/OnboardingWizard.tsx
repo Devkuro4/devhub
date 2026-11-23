@@ -551,10 +551,15 @@ export const OnboardingWizard = ({
   const isOptionalStep = step === 3 || step === 5 || step === 6 || step === 7;
 
   return (
-    <div className="max-w-4xl mx-auto py-2 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-      <aside aria-label="What setup covers" className="hidden lg:block lg:col-span-4">
-        <div className="lg:sticky lg:top-6 space-y-4">
-          <div className="pastel-card pastel-aqua p-6">
+    <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
+      <header className="workspace-page-header space-y-2 lg:col-span-12">
+        <p className="workspace-eyebrow">Get started</p>
+        <h1>Set up My Learning</h1>
+        <p className="text-[var(--ink-secondary)]">Bring the course you already use and make a plan that fits.</p>
+      </header>
+      <aside aria-label="What setup covers" className="hidden lg:order-2 lg:col-span-4 lg:block">
+        <div className="lg:sticky lg:top-24 space-y-4">
+          <div className="soft-card p-6">
             <p className="text-sm font-semibold text-[var(--ink-secondary)]">Quick setup</p>
             <h2 className="mt-2 !text-2xl">A tracker shaped around you.</h2>
             <p className="mt-3 text-base leading-relaxed text-[var(--ink-secondary)]">Answer only what feels useful. You can change everything later.</p>
@@ -595,9 +600,9 @@ export const OnboardingWizard = ({
         {step === 1 && (
           <div className="space-y-5 py-1">
             <div>
-              <h1 id="onboarding-heading" ref={headingRef} tabIndex={-1} className="font-display text-[var(--ink-primary)] outline-none [text-wrap:balance]">
+              <h2 id="onboarding-heading" ref={headingRef} tabIndex={-1} className="font-display text-[var(--ink-primary)] outline-none [text-wrap:balance]">
                 Let’s make your learning easier to see.
-              </h1>
+              </h2>
               <p className={sub}>Bring the course or plan you already use. We’ll turn it into a personal progress tracker—not another classroom.</p>
             </div>
             <ul className="space-y-3 text-base text-[var(--ink-secondary)]">

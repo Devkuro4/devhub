@@ -18,7 +18,7 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import { PageHeader } from './ui';
+import { PageHeader, SectionTabs } from './ui';
 import { ProfileMilestonesCard } from './MilestoneBadges';
 import { requestMentorChat, requestMentorChatStream, StreamUnsupportedError, type GroundedSource } from '../lib/aiClient';
 import { HELP_LEVELS } from '../lib/independence';
@@ -864,35 +864,16 @@ export const ProfileSection = ({
         description="Update your learning focus, links, badges and notification preferences whenever you like."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-start">
-        <nav
-          aria-label="Settings sections"
-          className="lg:col-span-3 lg:sticky lg:top-24 flex lg:flex-col gap-1.5 overflow-x-auto no-scrollbar pb-1"
-        >
-          {SETTINGS_SECTIONS.map((sec) => (
-            <button
-              key={sec.id}
-              type="button"
-              onClick={() => goToSection(sec.id)}
-              aria-current={activeSection === sec.id ? 'true' : undefined}
-              className={`min-h-[44px] px-3.5 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap shrink-0 text-left border-l-4 transition-colors ${
-                activeSection === sec.id
-                  ? 'bg-[var(--accent-50)] border-[var(--spark)] text-[var(--ink-primary)] font-semibold'
-                  : `border-transparent hover:bg-[var(--surface-subtle)] ${textSecondary}`
-              }`}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </nav>
+      <div className="grid gap-6">
+        <SectionTabs tabs={SETTINGS_SECTIONS} active={activeSection} onChange={goToSection} />
 
-        <form onSubmit={handleSave} className="lg:col-span-9 min-w-0 space-y-6">
+        <form onSubmit={handleSave} className="min-w-0 space-y-6">
           {/* PROFILE */}
           <section id="settings-profile" aria-labelledby="settings-profile-title" className={`${activeSection === 'profile' ? 'space-y-4' : 'hidden'} scroll-mt-24`}>
             <div id="settings-profile-title">{sectionHead('Profile', 'How other members see you, and where to find your work.')}</div>
 
             <div className={`${cardClass} p-6 sm:p-8 space-y-5`}>
-              <div className="profile-live-preview p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+              <div className="rounded-[var(--radius-md)] bg-[var(--surface-subtle)] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
                 <div className="relative z-[1] w-16 h-16 rounded-[22px] bg-white text-[#0A0A0A] flex items-center justify-center text-xl font-bold shrink-0 shadow-lg overflow-hidden">
                   {draft.avatarUrl ? <img src={draft.avatarUrl} alt="" className="w-full h-full object-cover" /> : (draft.fullName || 'Member').split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}
                 </div>
@@ -903,7 +884,7 @@ export const ProfileSection = ({
                     {draft.username ? `@${draft.username.replace(/^@+/, '')}` : 'Add a username'} · {draft.field || 'Choose a learning field'}
                   </p>
                 </div>
-                <span className="relative z-[1] self-start sm:self-center rounded-full bg-white/65 border border-white/50 px-3 py-1.5 text-xs font-medium text-[var(--ink-primary)]">
+                <span className="relative z-[1] self-start sm:self-center rounded-full bg-[var(--accent-50)] px-3 py-1.5 text-xs font-medium text-[var(--ink-primary)]">
                   Live preview
                 </span>
               </div>

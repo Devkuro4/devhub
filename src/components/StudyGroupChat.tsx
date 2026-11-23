@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
+  ArrowLeft,
   Check,
   ChevronDown,
   Clock,
@@ -1201,6 +1202,8 @@ export const StudyGroupChatPanel: React.FC<{
   const [codeDraft, setCodeDraft] = useState('');
   const [showCodeBox, setShowCodeBox] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
+  const [showConversation, setShowConversation] = useState(() => rooms.some((room) => room.id === activeRoomId && room.isDirect));
+  const previousRoomId = useRef(activeRoomId);
   const [replyTo, setReplyTo] = useState<{ id: string; senderName: string; text: string } | null>(null);
   const draft = drafts[activeRoomId] || '';
   const connected = connectionStatus === 'connected';
@@ -1211,6 +1214,8 @@ export const StudyGroupChatPanel: React.FC<{
 
   useEffect(() => {
     setReplyTo(null);
+    if (activeRoomId && activeRoomId !== previousRoomId.current) setShowConversation(true);
+    previousRoomId.current = activeRoomId;
   }, [activeRoomId]);
 
   const activeRoom = rooms.find((r) => r.id === activeRoomId) || rooms[0];
@@ -1249,9 +1254,9 @@ export const StudyGroupChatPanel: React.FC<{
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
       {/* Room selector */}
-      <aside className={`lg:col-span-4 ${cardClass} p-3.5 sm:p-5 space-y-3 sm:space-y-4 min-w-0`}>
+      <aside className={`${showConversation ? 'hidden lg:block' : 'block'} lg:col-span-4 ${cardClass} p-3.5 sm:p-5 space-y-3 sm:space-y-4 min-w-0`}>
         <div className="flex items-center justify-between gap-2">
-          <h2 className={`text-base font-semibold ${textPrimary}`}>Study Rooms</h2>
+          <h2 className={`text-base font-semibold ${textPrimary}`}>Conversations</h2>
           <span
             className={`inline-flex items-center gap-1.5 text-xs font-medium ${
               connected ? 'text-[var(--success-ink)]' : 'text-[var(--warning-ink)]'
@@ -1266,9 +1271,9 @@ export const StudyGroupChatPanel: React.FC<{
         </div>
 
         <div
-          role="tablist"
-          aria-label="Study rooms"
-          className="flex lg:flex-col gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 lg:pb-0 lg:mx-0 lg:px-0 snap-x"
+          role="group"
+          aria-label="Conversations"
+          className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto p-1"
         >
           {rooms.map((room) => {
             const active = room.id === activeRoomId;
@@ -1277,23 +1282,25 @@ export const StudyGroupChatPanel: React.FC<{
               <button
                 key={room.id}
                 type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveRoomId(room.id)}
-                className={`shrink-0 snap-start lg:w-full text-left px-3.5 py-2.5 rounded-xl border min-h-[44px] transition-colors cursor-pointer ${
+                aria-current={active ? 'true' : undefined}
+                onClick={() => {
+                  setActiveRoomId(room.id);
+                  setShowConversation(true);
+                }}
+                className={`shrink-0 w-full text-left px-3.5 py-2.5 rounded-xl border min-h-[44px] transition-colors cursor-pointer ${
                   active
                     ? 'border-[var(--accent-600)] bg-[var(--accent-50)] text-[var(--accent-600)]'
                     : `${borderClass} ${textPrimary} hover:bg-[var(--surface-subtle)]`
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 font-semibold text-sm whitespace-nowrap lg:whitespace-normal">
+                <div className="flex items-center justify-between gap-2 font-semibold text-sm">
                   <span className="flex items-center gap-2 min-w-0">
                     {room.isDirect ? (
                       <UserCheck className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                     ) : (
                       <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                     )}
-                    <span className="lg:truncate">{room.name}</span>
+                    <span className="truncate">{room.name}</span>
                   </span>
                   <span className="flex items-center gap-1.5 shrink-0">
                     {room.groupId && <span className="text-[11px] font-medium opacity-75">Group</span>}
@@ -1325,7 +1332,10 @@ export const StudyGroupChatPanel: React.FC<{
       </aside>
 
       {/* Live conversation */}
-      <section className={`lg:col-span-8 ${cardClass} flex flex-col min-w-0 h-[72dvh] min-h-[440px] lg:h-[620px] lg:max-h-[78dvh] overflow-hidden`}>
+      <section className={`${showConversation ? 'flex' : 'hidden lg:flex'} lg:col-span-8 ${cardClass} flex-col min-w-0 h-[72dvh] min-h-[360px] lg:h-[620px] lg:max-h-[78dvh] overflow-hidden`}>
+        <button type="button" className="workspace-tab self-start lg:hidden!" onClick={() => setShowConversation(false)}>
+          <ArrowLeft size={16} aria-hidden="true" /> Back to messages
+        </button>
         <div className={`px-4 sm:px-5 py-3.5 border-b ${borderClass} flex items-center justify-between gap-3`}>
           <div className="min-w-0">
             <h3 className={`text-base sm:text-lg font-semibold flex items-center gap-2 ${textPrimary}`}>

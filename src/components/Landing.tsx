@@ -189,11 +189,11 @@ const COMMUNITY = [
 
 export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: () => void }) => {
   const dark = useSystemDark();
-  const wrap = 'max-w-6xl mx-auto px-5 sm:px-8 lg:px-12';
+  const wrap = 'workspace-content';
   const primaryAction =
-    'inline-flex items-center justify-center px-6 min-h-12 rounded-full bg-[var(--ink-primary)] text-[var(--surface-elevated)] text-base font-semibold cursor-pointer hover:opacity-90';
+    'hub-action';
   const secondaryAction =
-    'inline-flex items-center justify-center min-h-12 px-6 rounded-full border border-[var(--ink-primary)]/20 bg-[var(--surface-elevated)]/75 text-[var(--ink-primary)] text-base font-medium cursor-pointer hover:bg-[var(--surface-elevated)]';
+    'hub-action hub-action-secondary';
 
   return (
     <div className={`hub-root ${dark ? 'dark' : ''} app-backdrop min-h-screen`}>
@@ -225,50 +225,45 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
       <main id="hero">
         {/* Hero */}
         <section className={`${wrap} pt-8 sm:pt-12 pb-12 sm:pb-16`}>
-          <div className="product-banner px-6 py-8 sm:px-10 sm:py-12 lg:px-14 lg:py-14 grid gap-10 lg:grid-cols-12 lg:items-center">
+          <div className="grid gap-7 lg:grid-cols-12 lg:items-center lg:gap-12">
             <div className="relative lg:col-span-7">
-              <span className="inline-flex rounded-full bg-[var(--surface-elevated)]/75 px-3 py-1.5 text-sm font-semibold text-[var(--ink-secondary)]">Your learning, finally visible</span>
+              <span className="inline-flex rounded-full bg-[var(--surface-elevated)]/75 px-3 py-1.5 text-sm font-semibold text-[var(--ink-secondary)]">The developer learning workspace</span>
               <h1 className="mt-5 !font-display !text-[clamp(2.25rem,1.5rem_+_3.8vw,4.25rem)] !leading-[1.02] !tracking-[-0.04em] font-semibold text-[var(--ink-primary)]">
-                Keep the course. Make the progress yours.
+                Become the developer who can build independently.
               </h1>
               <p className="mt-6 text-lg sm:text-xl leading-relaxed text-[var(--ink-secondary)] max-w-[42ch]">
-                Dev Hub helps you track external courses, save code evidence, check what you understood and stay consistent—with an AI mentor and community when you need support.
+                Keep the course you already use. Track your practice, get feedback on your code, and build alongside other developers.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={onJoin} className={primaryAction}>
-                  Start tracking free
+                  Get started
                 </button>
-                <button type="button" onClick={onSignIn} className={secondaryAction}>
-                  Sign in
-                </button>
+                <a href="#how" className={secondaryAction}>See how it works</a>
               </div>
             </div>
-            <div className="relative lg:col-span-5 rounded-[26px] bg-[var(--surface-elevated)]/88 p-5 sm:p-6 shadow-[var(--shadow-md)] border border-[var(--ink-primary)]/5">
+            <div className="workspace-hero relative lg:col-span-5">
               <div className="flex items-start justify-between gap-4">
-                <div><p className="text-sm font-medium text-[var(--ink-muted)]">Current course</p><h2 className="mt-1 !text-xl">Frontend foundations</h2></div>
-                <span className="rounded-full pastel-aqua px-3 py-1 text-sm font-bold">68%</span>
+                <div><p className="workspace-eyebrow">My Learning / Today</p><h2 className="mt-1 !text-xl">Frontend foundations</h2></div>
+                <span className="rounded-full bg-[var(--accent-50)] px-3 py-1 text-sm font-bold text-[var(--accent-700)]">68%</span>
               </div>
-              <div className="mt-5 h-2 rounded-full bg-[var(--border-hairline)] overflow-hidden"><span className="block h-full w-[68%] rounded-full bg-[var(--ink-primary)]" /></div>
+              <div className="mt-5 h-2 rounded-full bg-[var(--border-hairline)] overflow-hidden"><span className="block h-full w-[68%] rounded-full bg-[var(--accent-600)]" /></div>
               <div className="mt-6 grid grid-cols-3 gap-2">
-                {[{ icon: TimerReset, value: '42m', label: 'studied' }, { icon: Code2, value: '2', label: 'code saves' }, { icon: Check, value: '4/5', label: 'today' }].map(({ icon: Icon, value, label }, index) => (
-                  <div key={label} className={`rounded-2xl p-3 ${index === 0 ? 'pastel-aqua' : index === 1 ? 'pastel-pink' : 'pastel-lilac'}`}>
-                    <Icon className="w-4 h-4" aria-hidden="true" /><p className="mt-3 font-display text-xl font-bold">{value}</p><p className="text-xs text-[var(--ink-secondary)]">{label}</p>
+                {[{ icon: TimerReset, value: '42m', label: 'studied' }, { icon: Code2, value: '2', label: 'code saves' }, { icon: Check, value: '4/5', label: 'today' }].map(({ icon: Icon, value, label }) => (
+                  <div key={label} className="rounded-[var(--radius-sm)] border border-white/15 p-3">
+                    <Icon className="w-4 h-4" aria-hidden="true" /><p className="mt-3 font-display text-xl font-bold">{value}</p><p className="hero-support text-xs">{label}</p>
                   </div>
                 ))}
               </div>
-              <p className="mt-5 text-sm text-[var(--ink-secondary)]">Next: log what you practised, then take a 3-minute check-in quiz.</p>
+              <p className="mt-5 hero-support text-sm">Next: log what you practised, then take a 3-minute check-in quiz.</p>
             </div>
           </div>
 
-          <div className="mt-16 sm:mt-20">
-            <h2 className="text-xl sm:text-2xl mb-8 sm:mb-4 max-w-[30ch]">A simple rhythm that keeps your learning moving</h2>
-            <Trail />
-          </div>
+          <details className="workspace-reveal soft-card mt-8 p-5"><summary>More about the learning steps</summary><div className="mt-5"><Trail /></div></details>
         </section>
 
         {/* How it works */}
         <section id="how">
-          <div className={`${wrap} py-20 sm:py-28 grid gap-12 lg:grid-cols-12`}>
+          <div className={`${wrap} py-8 sm:py-12 grid gap-12 lg:grid-cols-12`}>
             <div className="lg:col-span-5">
               <div className="lg:sticky lg:top-28 space-y-5">
                 <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">One calm loop for the course you already use</h2>
@@ -290,7 +285,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
 
         {/* AI mentor */}
         <section id="mentor">
-          <div className={`${wrap} py-20 sm:py-28 grid gap-12 lg:grid-cols-2 lg:gap-16 items-center`}>
+          <div className={`${wrap} py-8 sm:py-12 grid gap-12 lg:grid-cols-2 lg:gap-16 items-center`}>
             <div className="space-y-5">
               <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">An AI mentor that makes you do the thinking</h2>
               <p className="text-lg text-[var(--ink-secondary)] leading-relaxed max-w-[46ch]">
@@ -306,7 +301,7 @@ export const Landing = ({ onSignIn, onJoin }: { onSignIn: () => void; onJoin: ()
 
         {/* Community */}
         <section id="community">
-          <div className={`${wrap} py-20 sm:py-28`}>
+          <div className={`${wrap} py-8 sm:py-12`}>
             <div className="max-w-2xl space-y-5">
               <h2 className="!text-[clamp(1.75rem,1.3rem_+_1.8vw,2.5rem)] !leading-[1.1]">Learn with people, not alone</h2>
               <p className="text-lg text-[var(--ink-secondary)] leading-relaxed">

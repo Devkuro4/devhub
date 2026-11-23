@@ -233,10 +233,10 @@ export const WelcomeExperience: React.FC<{
             </button>
           </div>
           <h1 id="welcome-headline" className="font-display text-2xl sm:text-3xl font-bold leading-tight">
-            Your learning now has a home.
+            Welcome to Dev Hub
           </h1>
           <p className="text-sm sm:text-base text-[var(--ink-secondary)] leading-relaxed max-w-[58ch]">
-            You bring the course. Dev Hub helps you turn the work into a steady rhythm, visible progress and a story you can be proud of.
+            Track your course, see your daily progress, and get unstuck with peers or the AI Mentor.
           </p>
         </div>
 
@@ -259,7 +259,7 @@ export const WelcomeExperience: React.FC<{
             <p className={`text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>Three things to remember</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {DEV_HUB_OFFERINGS.map(({ icon: Icon, label }, index) => (
-                <div key={label} className={`min-h-28 flex flex-col gap-3 px-4 py-4 rounded-2xl ${index === 0 ? 'pastel-yellow' : index === 1 ? 'pastel-pink' : 'pastel-lilac'}`}>
+                <div key={label} className={`flex items-center gap-3 px-4 py-4 rounded-2xl ${index === 0 ? 'pastel-yellow' : index === 1 ? 'pastel-pink' : 'pastel-lilac'}`}>
                   <Icon className="w-4 h-4 text-[var(--accent-600)] shrink-0" aria-hidden="true" />
                   <span className={`text-sm font-medium ${textPrimary}`}>{label}</span>
                 </div>
@@ -270,14 +270,14 @@ export const WelcomeExperience: React.FC<{
           {/* Actions */}
           <div className={`pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t ${borderClass}`}>
             <p className={`text-xs ${textSecondary}`}>
-              Four short stops. Replay it anytime from Help.
+              Replay the tutorial anytime from Help.
             </p>
             <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
               <button type="button" onClick={onExploreOwn} className={`${btnSecondary} min-h-[44px] justify-center`}>
-                Start with my dashboard
+                Skip for now
               </button>
               <button type="button" onClick={onStartTour} className={`${btnPrimary} min-h-[44px] justify-center`}>
-                Show me the essentials
+                Show me around
               </button>
             </div>
           </div>
